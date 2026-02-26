@@ -1,0 +1,14 @@
+{
+  "name": "autoscape-web",
+  "private": true,
+  "version": "1.0.0",
+  "scripts": {
+    "dev": "concurrently \"npm --prefix server run dev\" \"npm --prefix client run dev\"",
+    "build": "npm --prefix server run build && npm --prefix client run build",
+    "test": "npm --prefix client run test",
+    "lint": "npm --prefix client run lint && npm --prefix server run lint"
+  },
+  "devDependencies": {
+    "concurrently": "^9.2.0"
+  }
+}
