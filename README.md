@@ -1,95 +1,141 @@
 # Autoscape Web App
 
-Modern React + Node.js website for **Autoscape**, an autonomous landscaping brand, including a full **Instant Quote** experience with map-based polygon drawing and geodesic measurements.
+Modern React + Node.js website for **Autoscape**, focused on autonomous landscaping with an end-to-end **Instant Quote** flow.
+
+## Documentation Map
+- Project context: [`project_context.md`](./project_context.md)
+- Agent/project guidelines: [`AGENTS.md`](./AGENTS.md)
+- Docs index: [`docs/README.md`](./docs/README.md)
+- Architecture: [`docs/architecture.md`](./docs/architecture.md)
+- Feature flow: [`docs/feature_flow.md`](./docs/feature_flow.md)
+- Design decisions: [`docs/design.md`](./docs/design.md)
+- Coding standards: [`docs/coding_standards.md`](./docs/coding_standards.md)
 
 ## Stack
-
 - Frontend: React + Vite + TypeScript + Tailwind CSS + Mapbox GL + Turf.js
-- Backend: Node.js + Express + TypeScript + Zod + express-rate-limit
-- Data storage: in-memory (easy to replace with SQLite/Postgres later)
+- Backend: Node.js + TypeScript + Zod (Express route scaffold included)
+- Storage: in-memory (`Map`) for quotes/contacts (no database yet)
 
-## Project Structure
+## Repo Structure
+- `client/` - UI, pages, map drawing, quote flow
+- `server/` - API endpoints, validation, geometry checks, in-memory storage
+- `docs/` - architecture, flow, design, standards
+- `scripts/spa_server.py` - static SPA server with history fallback
 
-- `/client` - website UI and Instant Quote flow
-- `/server` - API for quotes and contact submissions
-
-## Setup
-
-1. Install dependencies from the repo root:
-
+## Fresh Terminal Run Commands
+1. Install dependencies:
 ```bash
 npm install
 ```
 
 2. Create env files:
-
 ```bash
 cp client/.env.example client/.env
 cp server/.env.example server/.env
 ```
 
-3. Edit `client/.env`:
+3. Configure env values:
 
+`client/.env`
 ```bash
 VITE_API_BASE_URL=http://localhost:4000
 VITE_MAPBOX_TOKEN=pk.your_mapbox_public_token
 ```
 
-4. Edit `server/.env`:
-
+`server/.env`
 ```bash
 PORT=4000
 CLIENT_ORIGIN=http://localhost:5173
 ```
 
-5. Start both apps:
-
+4. Start both apps:
 ```bash
 npm run dev
 ```
 
+5. Open:
 - Frontend: `http://localhost:5173`
 - Backend: `http://localhost:4000`
+- Health: `http://localhost:4000/api/health`
+
+## Implemented Features
+
+### Marketing Site
+- Premium black/white/green design system (`#329F5B` accent)
+- Responsive pages: Home, Services, About, Contact
+- Placeholder copy and themed placeholder visuals
+- Reusable UI primitives (buttons, cards, badges, section titles, stats bar)
+
+### Instant Quote (Core)
+- Address autocomplete + geocoding (Mapbox API)
+- Map recentering on selected address
+- Polygon drawing by map clicks
+- Polygon editing with draggable vertices
+- Drawing controls:
+  - Start/Stop drawing
+  - Undo last point
+  - Clear polygon
+  - Edit mode toggle
+- Real-time stats:
+  - Area
+  - Perimeter
+  - Vertex count
+- Unit toggle:
+  - area: `m²` / `ft²`
+  - perimeter: `m` / `ft`
+- Self-intersection warning and submit blocking
+- Deterministic quote summary and total
+- Quote submission and confirmation page with quote ID
+
+### Contact
+- Contact form (`name`, `email`, `message`)
+- POST submission to backend
+- Response handling with placeholder confirmation ID
 
 ## API Endpoints
-
+- `GET /api/health`
 - `POST /api/quote`
-  - Validates payload and polygon geometry
-  - Rejects self-intersections and invalid rings
-  - Recomputes area + perimeter server-side
-  - Returns `{ quoteId }`
+  - validates payload + polygon geometry
+  - rejects invalid/self-intersecting polygons
+  - recomputes geometry server-side
+  - enforces metric drift tolerance (3%)
+  - stores quote and returns `{ quoteId }`
 - `GET /api/quote/:id`
-  - Returns stored quote by ID
+  - returns stored quote by ID
 - `POST /api/contact`
-  - Validates/stores contact submissions
+  - validates and stores contact payload
 
-## How Accuracy Is Ensured
+## Measurement Accuracy Details
+Accuracy is geodesic-oriented and avoids naive planar lat/lng calculations:
+- Area: `@turf/area`
+- Self-intersection detection: `@turf/kinks`
+- Perimeter: Haversine segment sum over Earth radius (`6,371,008.8m`)
 
-The app uses **geodesic/spherical calculations** via Turf.js (not planar lat/lng math):
+Backend re-measures and validates submitted metrics before accepting quotes.
 
-- Area: `turf.area(polygon)` (square meters)
-- Perimeter: `turf.length(lineString, { units: 'kilometers' }) * 1000` (meters)
+## Pricing Logic
+`quoteTotal = baseFee + (areaM2 * areaRate) + (perimeterM * perimeterRate)`
 
-Both frontend and backend compute metrics geodesically. The backend validates polygon geometry and compares client-submitted metrics against server measurements.
-
-## Instant Quote Flow
-
-1. Address autocomplete + geocoding (Mapbox Geocoding API)
-2. Map centered on selected address
-3. Polygon drawing by map clicks
-4. Editing via draggable vertex handles
-5. Controls: start/stop drawing, undo last point, clear polygon, edit mode
-6. Real-time stats bar: area, perimeter, vertex count
-7. Unit toggle: metric/imperial (`m²`/`ft²`, `m`/`ft`)
-8. Deterministic pricing formula and quote submission
-9. Confirmation state with returned quote ID
+- Base fee: `49`
+- Area rate: `0.085` / m²
+- Perimeter rate: `0.38` / m
 
 ## Tests
-
-Basic utility tests are included in `client/src/lib/*.test.ts`.
+Frontend utility tests are included for:
+- geometry helpers (`closeRing`, unit conversions)
+- quote calculations (plan selection, deterministic totals)
 
 Run tests:
+```bash
+npm test
+```
+
+## Alternative Static SPA Run (History-Fallback)
+If you want to serve the built frontend with hard-refresh-safe routing:
 
 ```bash
-npm run test -w client
+npm --prefix client run build
+python3 scripts/spa_server.py --host 127.0.0.1 --port 5173 --dir client/dist
 ```
+
+This serves `client/dist` and rewrites unknown non-asset routes to `index.html`.

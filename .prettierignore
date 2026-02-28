@@ -1,0 +1,9 @@
+node_modules
+client/node_modules
+server/node_modules
+client/dist
+server/dist
+coverage
+client/tsconfig.tsbuildinfo
+server/dev-server.mjs
+server/dev-server.cjs

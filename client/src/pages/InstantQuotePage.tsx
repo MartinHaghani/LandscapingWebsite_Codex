@@ -166,10 +166,10 @@ export const InstantQuotePage = () => {
         description="Step A: Search your address. Step B: Draw your service boundary. Step C: Request a deterministic instant quote."
       />
 
-      <div className="mt-8 grid gap-6">
-        <Card className="bg-black/65">
+      <div className="relative isolate z-50 mt-8 grid gap-6">
+        <Card className="relative z-20 overflow-visible bg-black/65">
           <form onSubmit={handleAddressSubmit} className="flex flex-col gap-3 md:flex-row md:items-end">
-            <div className="relative flex-1">
+            <div className="relative z-30 flex-1">
               <label htmlFor="address" className="mb-2 block text-sm text-white/80">
                 Enter your address
               </label>
@@ -187,7 +187,7 @@ export const InstantQuotePage = () => {
                 <p className="absolute -bottom-6 left-0 text-xs text-white/60">Searching addresses...</p>
               ) : null}
               {suggestions.length > 0 ? (
-                <div className="absolute z-20 mt-2 w-full overflow-hidden rounded-xl border border-white/20 bg-black/95">
+                <div className="absolute left-0 top-full z-[9999] mt-2 w-full overflow-hidden rounded-xl border border-white/20 bg-black/95 shadow-soft">
                   {suggestions.map((suggestion) => (
                     <button
                       key={suggestion.id}
@@ -208,13 +208,15 @@ export const InstantQuotePage = () => {
           </form>
         </Card>
 
-        <StatsBar
-          items={[
-            { label: 'Area', value: areaValue },
-            { label: 'Perimeter', value: perimeterValue },
-            { label: 'Vertices', value: String(metrics.vertexCount) }
-          ]}
-        />
+        <div className="relative z-0">
+          <StatsBar
+            items={[
+              { label: 'Area', value: areaValue },
+              { label: 'Perimeter', value: perimeterValue },
+              { label: 'Vertices', value: String(metrics.vertexCount) }
+            ]}
+          />
+        </div>
       </div>
 
       {!MAPBOX_TOKEN ? (

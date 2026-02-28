@@ -18,7 +18,7 @@ const POLYGON_SOURCE_ID = 'quote-polygon-source';
 const PATH_SOURCE_ID = 'quote-path-source';
 const POINT_SOURCE_ID = 'quote-points-source';
 const CENTER_SOURCE_ID = 'quote-center-source';
-const MAP_STYLE = 'mapbox://styles/mapbox/dark-v11';
+const MAP_STYLE = 'mapbox://styles/mapbox/satellite-v9';
 
 export const QuoteMap = ({
   token,
@@ -71,11 +71,22 @@ export const QuoteMap = ({
       style: MAP_STYLE,
       center,
       zoom: 16,
-      pitch: 30,
+      pitch: 0,
+      bearing: 0,
+      maxPitch: 0,
       antialias: true
     });
 
-    map.addControl(new mapboxgl.NavigationControl({ visualizePitch: true }), 'top-right');
+    map.dragRotate.disable();
+    map.touchZoomRotate.disableRotation();
+
+    map.addControl(
+      new mapboxgl.NavigationControl({
+        showCompass: false,
+        visualizePitch: false
+      }),
+      'top-right'
+    );
 
     map.on('load', () => {
       const polygonFeatureCollection: FeatureCollection<Polygon> = {

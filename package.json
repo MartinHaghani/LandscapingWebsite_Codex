@@ -6,9 +6,20 @@
     "dev": "concurrently \"npm --prefix server run dev\" \"npm --prefix client run dev\"",
     "build": "npm --prefix server run build && npm --prefix client run build",
     "test": "npm --prefix client run test",
-    "lint": "npm --prefix client run lint && npm --prefix server run lint"
+    "lint": "eslint \"client/src/**/*.{ts,tsx}\" \"server/src/**/*.ts\" --max-warnings=0 && npm --prefix client run lint && npm --prefix server run lint",
+    "lint:eslint": "eslint \"client/src/**/*.{ts,tsx}\" \"server/src/**/*.ts\" --max-warnings=0",
+    "lint:types": "npm --prefix client run lint && npm --prefix server run lint",
+    "format": "prettier . --write",
+    "format:check": "prettier . --check",
+    "docs:update": "node tools/update-docs-from-commits.mjs"
   },
   "devDependencies": {
-    "concurrently": "^9.2.0"
+    "@typescript-eslint/eslint-plugin": "^8.56.1",
+    "@typescript-eslint/parser": "^8.56.1",
+    "concurrently": "^9.2.0",
+    "eslint": "^8.57.1",
+    "eslint-plugin-react-hooks": "^4.6.2",
+    "eslint-plugin-react-refresh": "^0.4.26",
+    "prettier": "^3.8.1"
   }
 }
