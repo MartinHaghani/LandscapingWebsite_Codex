@@ -6,3 +6,4 @@
 - [`design.md`](./design.md): design decisions and rationale (accuracy, pricing, storage, validation model).
 - [`coding_standards.md`](./coding_standards.md): TypeScript, linting, formatting, test, and doc-update expectations.
 - [`changelog.md`](./changelog.md): commit history snapshot generated from git log.
+- [`troubleshooting.md`](./troubleshooting.md): runbook for local port drift, stale frontend servers, and verification steps.

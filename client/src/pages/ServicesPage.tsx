@@ -1,6 +1,13 @@
+import { lazy, Suspense } from 'react';
 import { Card } from '../components/ui/Card';
 import { PlaceholderImage } from '../components/ui/PlaceholderImage';
 import { SectionTitle } from '../components/ui/SectionTitle';
+
+const LazyServiceAreaSection = lazy(() =>
+  import('../components/service/ServiceAreaSection').then((module) => ({
+    default: module.ServiceAreaSection
+  }))
+);
 
 const serviceCards = [
   {
@@ -10,6 +17,7 @@ const serviceCards = [
   },
   {
     title: 'Smart Edging',
+    imageSrc: '/images/services/smart-edging.jpg',
     description:
       'Placeholder: perimeter trim passes executed after autonomous routes for sharp, clean property lines.'
   },
@@ -20,6 +28,7 @@ const serviceCards = [
   },
   {
     title: 'Seasonal Maintenance',
+    imageSrc: '/images/services/seasonal-maintenance.jpg',
     description:
       'Placeholder: adaptive height schedules and route revisions for spring acceleration and summer heat stress.'
   },
@@ -43,13 +52,32 @@ export const ServicesPage = () => (
       description="Placeholder service detail copy that matches Autoscape's premium and technical voice."
     />
 
+    <Suspense
+      fallback={
+        <Card className="mt-14 bg-black/55">
+          <p className="text-sm text-white/70">Loading service area...</p>
+        </Card>
+      }
+    >
+      <LazyServiceAreaSection />
+    </Suspense>
+
     <div className="mt-10 grid gap-6 md:grid-cols-2 xl:grid-cols-3">
       {serviceCards.map((service) => (
         <Card key={service.title}>
-          <PlaceholderImage
-            label={`Placeholder: ${service.title.toLowerCase()} visual`}
-            heightClassName="h-44"
-          />
+          {service.imageSrc ? (
+            <img
+              src={service.imageSrc}
+              alt={service.title}
+              className="h-44 w-full rounded-2xl border border-white/20 object-cover"
+              loading="lazy"
+            />
+          ) : (
+            <PlaceholderImage
+              label={`Placeholder: ${service.title.toLowerCase()} visual`}
+              heightClassName="h-44"
+            />
+          )}
           <h3 className="mt-5 text-xl font-semibold text-white">{service.title}</h3>
           <p className="mt-3 text-sm text-white/70">{service.description}</p>
         </Card>

@@ -4,7 +4,10 @@
   "version": "1.0.0",
   "scripts": {
     "dev": "concurrently \"npm --prefix server run dev\" \"npm --prefix client run dev\"",
+    "dev:all": "concurrently \"npm --prefix server run dev\" \"npm --prefix client run dev\" \"npm --prefix admin run dev\"",
+    "dev:admin": "npm --prefix admin run dev",
     "build": "npm --prefix server run build && npm --prefix client run build",
+    "build:all": "npm --prefix server run build && npm --prefix client run build && npm --prefix admin run build",
     "test": "npm --prefix client run test",
     "lint": "eslint \"client/src/**/*.{ts,tsx}\" \"server/src/**/*.ts\" --max-warnings=0 && npm --prefix client run lint && npm --prefix server run lint",
     "lint:eslint": "eslint \"client/src/**/*.{ts,tsx}\" \"server/src/**/*.ts\" --max-warnings=0",

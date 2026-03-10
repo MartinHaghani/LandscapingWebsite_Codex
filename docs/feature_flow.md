@@ -1,88 +1,79 @@
 # Feature Flow
 
-## Instant Quote: End-to-End
+## Services: Coverage-First Entry
+1. User opens `/services`.
+2. Page loads `GET /api/service-area` and renders approximate coverage overlay.
+3. User clicks `Check my address` CTA to start Instant Quote.
 
-### Step A: Address Entry
-1. User types an address in the Instant Quote input.
-2. Frontend debounces and calls Mapbox Geocoding API.
-3. Suggestion click sets:
-   - `addressInput`
-   - `selectedAddress`
-   - map center (`lng/lat`)
-4. “Center Map” submit button can also select first suggestion fallback.
+## Instant Quote: Draft + Finalize
 
-### Step B: Boundary Mapping
-1. User enables drawing mode.
-2. Each map click appends a polygon vertex.
-3. User can:
-   - stop drawing,
-   - undo last point,
-   - clear polygon,
-   - enter edit mode and drag vertices.
-4. Polygon ring is auto-closed for computations.
+### Step 1: Address + Coverage Gate
+1. User enters/selects address (Canada/US suggestions only).
+2. Client resolves selection to `lat/lng`.
+3. Client calls `POST /api/service-area/check`.
+4. Gate outcomes:
+- in area: proceed to map step
+- out of area: redirect `/service-unavailable`
+- check failure: redirect `/service-check-error`
 
-### Step C: Live Measurement + Quote Summary
-With each vertex add/edit:
-- Area updates in real time.
-- Perimeter updates in real time.
-- Vertex count updates in real time.
-- Self-intersection state is recalculated.
-- Recommended plan and quote total are recalculated.
+### Step 2: Geometry Mapping
+1. User draws service polygons and optional obstacles.
+2. User selects cadence (`Weekly` or `Bi-weekly`).
+3. Client computes effective geometry, per-session pricing, and seasonal range.
+4. Client submits idempotent draft:
+- `POST /api/quote/draft`
+- header: `Idempotency-Key`
+- payload includes `serviceFrequency`
+5. Server validates geometry and stores draft quote + v1 version.
+6. Client routes to `/quote-contact/:quoteId`.
 
-Display modes:
-- Metric: `m²`, `m`
-- Imperial: `ft²`, `ft`
+### Contact Finalize (Required)
+1. User submits name/email/phone (address optional, notes optional).
+2. Client calls idempotent finalize endpoint:
+- `POST /api/quote/:quoteId/contact`
+- header: `Idempotency-Key`
+3. Server marks quote `submitted`, `contact_pending=false`, writes lead contact event.
+4. Client routes to `/quote-confirmation/:quoteId`.
 
-Conversion constants:
-- `1 m² = 10.7639 ft²`
-- `1 m = 3.28084 ft`
+## Out-of-Area Expansion Capture
+1. `/service-unavailable` loads map with:
+- service area overlay
+- entered-address marker
+2. Page auto-sends idempotent request:
+- `POST /api/service-area/request`
+- source: `out_of_area_page`
+- `isInServiceAreaAtCapture=false`
+3. User options:
+- retry address (`/instant-quote`)
+- request expansion (`/service-area-requested`)
 
-### Step D: Submission
-Submit is enabled only when:
-- address selected,
-- at least 3 vertices,
-- polygon not self-intersecting,
-- request not already in flight.
+## Contact Form
+1. User submits contact form (name/email/phone/message required, address optional).
+2. Client sends idempotent `POST /api/contact`.
+3. Server writes/updates lead + contact event.
 
-On submit:
-1. Frontend posts quote payload to `POST /api/quote`.
-2. Backend validates payload + polygon geometry.
-3. Backend remeasures metrics and checks drift tolerance.
-4. Backend stores quote and returns `{ quoteId }`.
-5. Frontend navigates to `/quote-confirmation/:quoteId`.
+## Admin Operations Flow
 
-## Contact Flow
-1. User fills `name`, `email`, `message`.
-2. Frontend sends `POST /api/contact`.
-3. Backend validates payload and stores in memory.
-4. Frontend shows success/error status.
+### Sign-In Session
+1. Admin app opens at `admin/`.
+2. User enters role/user ID/token (local header mode or static token mode).
+3. App verifies access via `GET /api/admin/health`.
 
-## Backend Quote Validation Rules
-- Ring must represent at least 3 distinct points.
-- Ring is normalized and closed if needed.
-- Self-intersecting polygons are rejected.
-- `areaM2` and `perimeterM` are recomputed server-side.
-- Client-submitted metrics must remain within 3% of server measurement.
+### Quote Inbox
+1. Load `GET /api/admin/quotes` (cursor pagination + search/filter/sort params).
+2. Admin actions:
+- move `submitted -> in_review`
+- verify `in_review -> verified`
+- revise per-session pricing in `in_review` (append quote version, seasonal range recomputed)
+- add internal note
 
-## Pricing Logic
-Formula:
+### Expansion + CRM Views
+- `GET /api/admin/service-area-requests` (list)
+- `GET /api/admin/service-area-requests/map` (heatmap + cluster point payload)
+- `GET /api/admin/leads`
+- `GET /api/admin/contacts`
+- `GET /api/admin/audit-logs`
 
-`quoteTotal = baseFee + areaM2 * areaRate + perimeterM * perimeterRate`
-
-Coefficients:
-- `baseFee = 49`
-- `areaRate = 0.085`
-- `perimeterRate = 0.38`
-
-Plan recommendation thresholds:
-- `< 450 m²`: Starter Autonomy Plan
-- `< 1200 m²`: Precision Weekly Plan
-- otherwise: Estate Coverage Plan
-
-## Error/Edge Case Handling
-- Missing map token => quote map disabled with inline message.
-- Address not found => error message.
-- Self-intersection => warning + submit disabled.
-- Too few points => submit disabled.
-- Invalid/too-large JSON => backend 400/413.
-- Rate limit exceeded => backend 429.
+### Attribution + Export
+- `GET /api/admin/attribution/summary` (launch-cutoff aware)
+- `GET /api/admin/exports/quotes.csv` (masked/full based on role)

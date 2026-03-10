@@ -1,92 +1,135 @@
 # Design Decisions
 
-## 1) Geodesic Measurement First
+## 1) Coverage-First Public UX
 Decision:
-- Use geodesic-friendly calculations for map-drawn polygons.
-
-Why:
-- Coordinates are latitude/longitude; planar formulas introduce distortion.
-- Quote trust depends on measurement credibility.
+- Lead with serviceability clarity before full quote workflow.
 
 Implementation:
-- Area: `@turf/area`.
-- Self-intersection detection: `@turf/kinks`.
-- Perimeter: Haversine segment sum (`EARTH_RADIUS_M = 6,371,008.8`).
+- Service Area section at top of `/services`
+- dark basemap + green `#329F5B` coverage overlay
+- primary CTA to `/instant-quote`
 
-## 2) Server Re-Measurement And Drift Guard
+## 2) Privacy Over Precision for Coverage Visualization
 Decision:
-- Never trust client-submitted metrics as final.
-
-Why:
-- Prevent accidental or intentional metric mismatch.
-- Keep quote integrity consistent across clients.
+- Displayed service area is approximate by design.
 
 Implementation:
-- Server recalculates area/perimeter from submitted ring.
-- Reject submission when drift exceeds `3%`.
+- merged station buffers
+- simplification + jitter + coordinate quantization
+- no station markers/IDs/centers in client payloads
 
-## 3) Deterministic Pricing Model
+## 3) Two-Phase Quote Submission
 Decision:
-- Keep pricing formula fixed and transparent.
-
-Why:
-- Predictable outputs simplify QA and regression testing.
-- Easy to reason about in support/debug scenarios.
+- Separate geometry draft from required contact finalization.
 
 Implementation:
-- `49 + areaM2*0.085 + perimeterM*0.38`.
-- Simple threshold-based plan recommendation by area.
+- `POST /api/quote/draft` from mapping step
+- dedicated `/quote-contact/:quoteId` page
+- `POST /api/quote/:quoteId/contact` finalizes submission
+- confirmation shown after finalize
 
-## 4) In-Memory Storage (For Now)
+## 4) Idempotency by Default on Retry-Prone Writes
 Decision:
-- Store quotes/contacts in in-memory maps.
+- Protect against duplicate mobile retries/back-button resubmits.
 
-Why:
-- Fast iteration during product prototyping.
-- Minimal operational overhead.
+Implementation:
+- `Idempotency-Key` required for:
+  - quote draft
+  - quote contact finalize
+  - contact submit
+  - service-area request
+- same payload replays exact stored response
+- key reuse with different payload returns `409`
 
-Trade-off:
-- Data is lost on server restart.
-
-Planned evolution:
-- Swap store implementation with SQLite/Postgres-backed persistence while preserving API contracts.
-
-## 5) Strong Input Validation
+## 5) Durable Spatial Data Model
 Decision:
-- Use Zod schema validation at API boundary.
+- Use PostGIS-native spatial columns for quote/request/base-station coordinates.
 
-Why:
-- Centralized type + constraint enforcement.
-- Clean, predictable error responses for invalid payloads.
+Implementation:
+- quote polygons in `geometry(MultiPolygon,4326)`
+- points in `geography(Point,4326)`
+- spatial GIST indexes for query performance
 
-## 6) Rate Limiting At API Layer
+## 6) Lead vs Contact vs Quote Separation
 Decision:
-- Apply both global API and write-path limits.
+- Keep people, communications, and quote transactions distinct.
 
-Why:
-- Reduce abuse and accidental rapid resubmissions.
-- Protect small in-memory service from request bursts.
+Implementation:
+- `leads` = identity container
+- `lead_contacts` = communication events (`contact_form`, `quote_finalize`)
+- `quotes` = transactional object + workflow state
 
-## 7) UX-Controlled Polygon Editing
+## 7) Immutable Revision History
 Decision:
-- Separate drawing mode and edit mode.
+- Preserve full quote timeline and prevent in-place revision loss.
 
-Why:
-- Prevent accidental point adds while dragging/editing.
-- Make map interactions explicit and easier to understand.
+Implementation:
+- append-only `quote_versions`
+- unique `(quote_id, version_number)`
+- revisions keep internal status in `in_review`
 
-## 8) Brand System Choice
+## 8) Option-A Quote Workflow
 Decision:
-- Black/white base with green accent (`#329F5B`), large typography, soft borders/shadows.
+- enforce strict state transitions and keep revision semantics explicit.
 
-Why:
-- Align with “premium, modern, tech-forward landscaping” positioning.
-- Keep map and quote interactions visually prominent.
+Transitions:
+- `draft -> submitted -> in_review -> verified/rejected`
+- no backward status moves
+- revision updates `customer_status` while remaining `in_review`
 
-## 9) Static SPA Fallback Server
+## 9) Event-Oriented Audit Logging
 Decision:
-- Include `scripts/spa_server.py` for built-client route fallback.
+- prefer compact event records and avoid default full-PII snapshots.
 
-Why:
-- Prevent 404 on hard refresh for client-side routes (e.g., `/instant-quote`).
-- Useful for stable demo/testing when dev server behavior is inconsistent.
+Implementation:
+- `changed_fields` + redacted before/after by default
+- full snapshots reserved for high-risk events (e.g., revisions)
+- correlation metadata (`request_id`, `correlation_id`, `ip_hash`, `user_agent`)
+
+## 10) Role-Based PII and Export Controls
+Decision:
+- default least-privilege for marketing access.
+
+Implementation:
+- roles: `OWNER`, `ADMIN`, `REVIEWER`, `MARKETING`
+- MARKETING sees masked PII in API and CSV exports
+- full PII export restricted to OWNER/ADMIN/REVIEWER
+
+## 11) Launch-Cutoff Analytics Guard
+Decision:
+- keep analytics coherent at rollout boundaries.
+
+Implementation:
+- `SYSTEM_LAUNCH_AT` cutoff applied to attribution summary queries
+
+## 12) Session-Range Pricing Model
+Decision:
+- expose quote value in two forms: per-session and seasonal planning range.
+
+Implementation:
+- cadence selector in public quote flow: `weekly` or `biweekly`
+- session windows:
+  - weekly: `26-30`
+  - bi-weekly: `13-15`
+- persistence fields on quotes and quote_versions:
+  - `service_frequency`
+  - `per_session_total`
+  - `sessions_min`, `sessions_max`
+  - `seasonal_total_min`, `seasonal_total_max`
+- `quoteTotal` kept as compatibility alias for per-session value
+
+## 13) Admin Usability-First Redesign
+Decision:
+- move from tab-strip utility layout to operations dashboard shell.
+
+Implementation:
+- persistent sidebar navigation + top utility bar
+- auto light/dark theme with manual override
+- unified toolbar pattern on all tabs:
+  - search
+  - tab-specific filters
+  - sort field/direction
+- requests tab combines:
+  - map module (heatmap + clustered points toggles)
+  - hotspot list
+  - request table

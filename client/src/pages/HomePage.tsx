@@ -50,17 +50,19 @@ export const HomePage = () => (
     <section className="relative overflow-hidden border-b border-white/10 bg-mesh">
       <div className="mx-auto grid w-full max-w-7xl gap-10 px-4 py-20 md:grid-cols-[1.1fr_0.9fr] md:px-8 md:py-28">
         <div className="fade-up">
-          <p className="text-xs uppercase tracking-[0.2em] text-brand">Autonomous Lawn Systems</p>
           <h1 className="mt-5 font-display text-4xl font-bold leading-tight text-white md:text-6xl">
-            Autonomous lawn care, perfected.
+            Autonomous Landscaping
           </h1>
           <p className="mt-6 max-w-xl text-base text-white/72 md:text-lg">
-            Placeholder copy: Autoscape pairs robotics and precision route intelligence to deliver consistent, premium landscaping outcomes.
+            Precise Cuts. Lower Costs.
           </p>
-          <div className="mt-8 flex flex-wrap items-center gap-4">
-            <Link to="/instant-quote">
-              <Button>Get Instant Quote</Button>
-            </Link>
+          <div className="mt-8 flex flex-wrap items-start gap-4">
+            <div className="flex flex-col items-start">
+              <Link to="/instant-quote">
+                <Button>Get Instant Quote</Button>
+              </Link>
+              <p className="mt-2 text-xs text-white/62">No sign-up required.</p>
+            </div>
             <Link to="/contact">
               <Button variant="secondary">Contact</Button>
             </Link>
@@ -68,7 +70,12 @@ export const HomePage = () => (
         </div>
 
         <div className="fade-up [animation-delay:120ms]">
-          <PlaceholderImage label="Placeholder: Autonomous mower fleet in structured stripes" heightClassName="h-[340px]" />
+          <img
+            src="/images/home/autonomous-mower-fleet.png"
+            alt="Autonomous mower fleet in structured stripes"
+            className="h-[340px] w-full rounded-2xl border border-white/20 object-cover"
+            loading="lazy"
+          />
         </div>
       </div>
     </section>

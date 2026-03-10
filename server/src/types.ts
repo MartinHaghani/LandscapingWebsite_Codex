@@ -1,4 +1,15 @@
 export type Coordinates = [number, number];
+export type PolygonGeometry = {
+  type: 'Polygon';
+  coordinates: Coordinates[][];
+};
+
+export type MultiPolygonGeometry = {
+  type: 'MultiPolygon';
+  coordinates: Coordinates[][][];
+};
+
+export type QuoteGeometry = PolygonGeometry | MultiPolygonGeometry;
 
 export interface QuoteRecord {
   id: string;
@@ -8,10 +19,7 @@ export interface QuoteRecord {
     lat: number;
     lng: number;
   };
-  polygon: {
-    type: 'Polygon';
-    coordinates: Coordinates[][];
-  };
+  polygon: QuoteGeometry;
   metrics: {
     areaM2: number;
     perimeterM: number;

@@ -1,11 +1,13 @@
 import area from '@turf/area';
 import booleanClockwise from '@turf/boolean-clockwise';
-import { lineString, polygon } from '@turf/helpers';
+import { featureCollection, lineString, polygon } from '@turf/helpers';
 import kinks from '@turf/kinks';
-import type { Coordinates } from '../types.js';
+import union from '@turf/union';
+import type { Feature, MultiPolygon, Polygon } from 'geojson';
+import type { Coordinates, QuoteGeometry } from '../types.js';
 
-export interface PolygonValidationResult {
-  normalizedRing: Coordinates[];
+export interface GeometryValidationResult {
+  normalizedGeometry: QuoteGeometry;
   areaM2: number;
   perimeterM: number;
   selfIntersecting: boolean;
@@ -42,14 +44,22 @@ const computePerimeterM = (ring: Coordinates[]) => {
   return total;
 };
 
+const closeRing = (ring: Coordinates[]): Coordinates[] => {
+  if (ring.length === 0) {
+    return [];
+  }
+
+  return hasSamePoint(ring[0], ring[ring.length - 1]) ? [...ring] : [...ring, ring[0]];
+};
+
+const normalizeHoleRing = (ring: Coordinates[]) => closeRing(ring);
+
 export const normalizeRing = (ring: Coordinates[]): Coordinates[] => {
   if (ring.length < 3) {
     return ring;
   }
 
-  const closed = hasSamePoint(ring[0], ring[ring.length - 1])
-    ? [...ring]
-    : [...ring, ring[0]];
+  const closed = closeRing(ring);
 
   if (closed.length >= MIN_CLOSED_RING_POINTS && booleanClockwise(lineString(closed))) {
     return [...closed].reverse();
@@ -58,31 +68,115 @@ export const normalizeRing = (ring: Coordinates[]): Coordinates[] => {
   return closed;
 };
 
-export const validateAndMeasurePolygon = (ring: Coordinates[]): PolygonValidationResult => {
-  const normalizedRing = normalizeRing(ring);
+const hasThreeDistinctPoints = (ring: Coordinates[]) => {
+  const distinct = new Set(ring.slice(0, -1).map((point) => point.join(',')));
+  return distinct.size >= 3;
+};
 
-  if (normalizedRing.length < MIN_CLOSED_RING_POINTS) {
+const geometryToPolygonRings = (geometry: QuoteGeometry): Coordinates[][][] =>
+  geometry.type === 'Polygon' ? [geometry.coordinates] : geometry.coordinates;
+
+const toQuoteGeometry = (geometry: Polygon | MultiPolygon): QuoteGeometry =>
+  geometry.type === 'Polygon'
+    ? {
+        type: 'Polygon',
+        coordinates: geometry.coordinates as Coordinates[][]
+      }
+    : {
+        type: 'MultiPolygon',
+        coordinates: geometry.coordinates as Coordinates[][][]
+      };
+
+const normalizePolygonRings = (rings: Coordinates[][]) => {
+  if (rings.length === 0) {
+    throw new Error('Polygon must include at least one linear ring.');
+  }
+
+  const normalizedExterior = normalizeRing(rings[0]);
+  if (normalizedExterior.length < MIN_CLOSED_RING_POINTS || !hasThreeDistinctPoints(normalizedExterior)) {
     throw new Error('Polygon must include at least 3 distinct points.');
   }
 
-  const distinctPoints = new Set(normalizedRing.slice(0, -1).map((point) => point.join(',')));
-  if (distinctPoints.size < 3) {
-    throw new Error('Polygon must include at least 3 distinct points.');
+  const normalizedHoles = rings.slice(1).map((ring) => {
+    const normalizedHole = normalizeHoleRing(ring);
+    if (normalizedHole.length < MIN_CLOSED_RING_POINTS || !hasThreeDistinctPoints(normalizedHole)) {
+      throw new Error('Polygon hole must include at least 3 distinct points.');
+    }
+
+    return normalizedHole;
+  });
+
+  const normalizedRings = [normalizedExterior, ...normalizedHoles];
+  const polygonFeature = polygon(normalizedRings);
+  const selfIntersecting = kinks(polygonFeature).features.length > 0;
+
+  return {
+    rings: normalizedRings,
+    selfIntersecting
+  };
+};
+
+const geometryPerimeterM = (geometry: Polygon | MultiPolygon) => {
+  const sumPolygonPerimeter = (rings: Coordinates[][]) =>
+    rings.reduce((total, ring) => total + computePerimeterM(ring), 0);
+
+  if (geometry.type === 'Polygon') {
+    return sumPolygonPerimeter(geometry.coordinates as Coordinates[][]);
   }
 
-  const polygonFeature = polygon([normalizedRing]);
-  const kinksResult = kinks(polygonFeature);
-  const selfIntersecting = kinksResult.features.length > 0;
+  return geometry.coordinates.reduce(
+    (total, polygonCoordinates) => total + sumPolygonPerimeter(polygonCoordinates as Coordinates[][]),
+    0
+  );
+};
 
-  const areaM2 = area(polygonFeature);
-  const perimeterM = computePerimeterM(normalizedRing);
+const mergePolygons = (polygons: Coordinates[][][]) => {
+  const features = polygons.map((rings) => polygon(rings));
+
+  let merged: Feature<Polygon | MultiPolygon> = features[0];
+
+  for (let index = 1; index < features.length; index += 1) {
+    const next = union(featureCollection([merged, features[index]]));
+    if (!next) {
+      throw new Error('Geometry union failed.');
+    }
+
+    merged = next;
+  }
+
+  return merged;
+};
+
+export const validateAndMeasureGeometry = (geometry: QuoteGeometry): GeometryValidationResult => {
+  const sourcePolygons = geometryToPolygonRings(geometry);
+
+  if (sourcePolygons.length === 0) {
+    throw new Error('At least one polygon is required.');
+  }
+
+  const normalizedPolygons: Coordinates[][][] = [];
+  let selfIntersecting = false;
+
+  for (const polygonRings of sourcePolygons) {
+    const normalized = normalizePolygonRings(polygonRings);
+    normalizedPolygons.push(normalized.rings);
+
+    if (normalized.selfIntersecting) {
+      selfIntersecting = true;
+    }
+  }
+
+  const merged = mergePolygons(normalizedPolygons);
+  const areaM2 = area(merged);
 
   if (!Number.isFinite(areaM2) || areaM2 <= 0) {
     throw new Error('Polygon area is invalid.');
   }
 
+  const perimeterM = geometryPerimeterM(merged.geometry as Polygon | MultiPolygon);
+
   return {
-    normalizedRing,
+    normalizedGeometry: toQuoteGeometry(merged.geometry as Polygon | MultiPolygon),
     areaM2,
     perimeterM,
     selfIntersecting

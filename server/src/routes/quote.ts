@@ -2,7 +2,7 @@ import { Router } from 'express';
 import { nanoid } from 'nanoid';
 import { quotePayloadSchema } from '../lib/schemas.js';
 import { store } from '../lib/store.js';
-import { validateAndMeasurePolygon } from '../lib/geometry.js';
+import { validateAndMeasureGeometry } from '../lib/geometry.js';
 
 const METRIC_DRIFT_TOLERANCE = 0.03;
 
@@ -18,11 +18,10 @@ quoteRouter.post('/', (req, res) => {
   }
 
   const payload = parsed.data;
-  const ring = payload.polygon.coordinates[0];
 
   let measured;
   try {
-    measured = validateAndMeasurePolygon(ring as [number, number][]);
+    measured = validateAndMeasureGeometry(payload.polygon);
   } catch (error) {
     return res.status(400).json({
       error: error instanceof Error ? error.message : 'Invalid polygon geometry.'
@@ -51,10 +50,7 @@ quoteRouter.post('/', (req, res) => {
     createdAt: new Date().toISOString(),
     address: payload.address,
     location: payload.location,
-    polygon: {
-      type: 'Polygon',
-      coordinates: [measured.normalizedRing]
-    },
+    polygon: measured.normalizedGeometry,
     metrics: {
       areaM2: measured.areaM2,
       perimeterM: measured.perimeterM

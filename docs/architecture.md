@@ -1,96 +1,149 @@
 # Architecture
 
 ## 1) System Overview
-Autoscape is a client/server application:
-- `client/`: React SPA for marketing pages + Instant Quote UX.
-- `server/`: Node API for quote/contact validation and storage.
+Autoscape is a three-surface monorepo:
+- `client/` public SPA (marketing, services, instant quote)
+- `server/` Node API (public + admin endpoints)
+- `admin/` internal operations SPA
 
-Primary path:
-1. User selects address and draws polygon in frontend.
-2. Frontend computes live metrics and quote estimate.
-3. Frontend submits quote payload to backend.
-4. Backend validates geometry, remeasures, stores quote, returns `quoteId`.
+Primary domains:
+1. Quote capture and verification workflow
+2. Service-area display/check/request workflow
+3. Admin operations and attribution analytics
 
-## 2) Frontend Components
-Key modules:
-- Routing: `client/src/App.tsx`
-- Quote page: `client/src/pages/InstantQuotePage.tsx`
-- Map interactions: `client/src/components/quote/QuoteMap.tsx`
-- Geometry helpers: `client/src/lib/geometry.ts`
-- Pricing helpers: `client/src/lib/quote.ts`
-- API client: `client/src/lib/api.ts`
+## 2) Runtime and Entry Points
+- API runtime: `server/src/index.ts` -> `server/src/server.ts`
+- Public app routes: `client/src/App.tsx`
+- Admin app routes/state: `admin/src/App.tsx`
 
-Map subsystem:
-- Provider: Mapbox GL.
-- Address search: Mapbox Geocoding HTTP API.
-- Polygon rendering + vertex overlays: GeoJSON sources/layers + draggable `Marker`s.
+## 3) Persistence Layer
+- ORM: Prisma (`server/prisma/schema.prisma`)
+- DB: PostgreSQL + PostGIS
+- Migrations:
+  - `server/prisma/migrations/20260304120000_admin_platform_v1/migration.sql`
+  - `server/prisma/migrations/20260305103000_quote_session_ranges/migration.sql`
 
-## 3) Backend Components
-Key modules:
-- Runtime entrypoint: `server/src/index.ts`
-- Schemas: `server/src/lib/schemas.ts`
-- Geometry validation: `server/src/lib/geometry.ts`
-- Storage: `server/src/lib/store.ts`
+Canonical tables:
+- `leads`
+- `lead_contacts`
+- `quotes`
+- `quote_versions` (append-only history)
+- `quote_notes`
+- `service_area_requests`
+- `attribution_touches`
+- `audit_logs`
+- `base_stations`
+- `idempotency_records`
 
-Route behavior (runtime):
-- `GET /api/health`
-- `POST /api/quote`
-- `GET /api/quote/:id`
-- `POST /api/contact`
+Spatial storage:
+- quote geometry: `geometry(MultiPolygon,4326)`
+- address and request points: `geography(Point,4326)`
+- base station points: `geography(Point,4326)`
 
-Note:
-- Express route modules exist in `server/src/app.ts` and `server/src/routes/*`, but current runtime server is the custom Node HTTP implementation in `server/src/index.ts`.
+## 4) Public API Shape
+### Quote
+- `POST /api/quote/draft` (idempotent)
+- `POST /api/quote/:quoteId/contact` (idempotent)
+- `GET /api/quote/:quoteId`
 
-## 4) Data Contracts
-Quote submission contract:
-- `address`
-- `location { lat, lng }`
-- `polygon { type: 'Polygon', coordinates }`
-- `metrics { areaM2, perimeterM }`
-- `plan`
-- `quoteTotal`
+Quote pricing contract:
+- `quoteTotal` remains compatibility alias for per-session total
+- canonical fields: `serviceFrequency`, `perSessionTotal`, `sessionsMin`, `sessionsMax`, `seasonalTotalMin`, `seasonalTotalMax`
 
-Contact contract:
-- `name`
-- `email`
-- `message`
+### Contact
+- `POST /api/contact` (idempotent)
 
-Validation:
-- Zod schemas enforce types and bounds.
-- Polygon coordinates validated for longitude/latitude ranges.
+### Service Area
+- `GET /api/service-area` (ETag + cache)
+- `POST /api/service-area/check`
+- `POST /api/service-area/request` (idempotent)
 
-## 5) Geometry + Integrity Pipeline
-Client-side:
-- closes ring if needed,
-- computes area and perimeter,
-- detects self-intersection for UX feedback.
+Idempotency behavior:
+- request hash stored by `(scope, idempotency_key)`
+- same key + same payload => exact stored response replay
+- same key + different payload => `409 Conflict`
 
-Server-side:
-- normalizes/validates ring,
-- rejects <3 distinct points,
-- rejects invalid area,
-- checks self-intersection,
-- recomputes area/perimeter,
-- rejects payload if client/server metric drift exceeds 3%.
+## 5) Admin API Shape
+All admin endpoints are under `/api/admin/*` and return cursor pagination payloads:
+- `GET /api/admin/health`
+- `GET /api/admin/quotes`
+- `PATCH /api/admin/quotes/:id/status`
+- `POST /api/admin/quotes/:id/revise`
+- `POST /api/admin/quotes/:id/notes`
+- `GET /api/admin/service-area-requests`
+- `GET /api/admin/service-area-requests/map`
+- `GET /api/admin/leads`
+- `GET /api/admin/contacts`
+- `GET /api/admin/audit-logs`
+- `GET /api/admin/attribution/summary`
+- `GET /api/admin/exports/quotes.csv`
 
-## 6) Storage Model
-- In-memory `Map` objects for quotes and contacts.
-- Fast for development and demos.
-- Non-persistent across process restarts.
-- Storage access isolated for future DB replacement.
+Response envelope for list endpoints:
+```json
+{
+  "items": [],
+  "nextCursor": "...",
+  "meta": {
+    "generatedAt": "...",
+    "rowCount": 25,
+    "filters": {}
+  }
+}
+```
 
-## 7) Security/Robustness Controls
-- Global + write-specific rate limits.
-- Payload size cap (`1mb`) and invalid JSON handling.
-- CORS allowlist from environment (`CLIENT_ORIGIN`, plus local defaults).
-- Server-side metric recomputation to prevent client tampering.
+Admin list query model:
+- all list endpoints accept `q`, `sortBy`, `sortDir`, `limit`, `cursor`
+- each endpoint supports additional tab-specific filters (status, cadence, source, channel, actor role, etc.)
 
-## 8) Runtime/Serving Modes
-### Development mode
-- `npm run dev` from repo root starts:
-  - backend (`npm --prefix server run dev`)
-  - frontend (`npm --prefix client run dev`)
+## 6) Quote State Machine
+Internal `status`:
+- `draft`
+- `submitted`
+- `in_review`
+- `verified`
+- `rejected`
 
-### Built static SPA mode
-- `scripts/spa_server.py` serves `client/dist` with history fallback.
-- Supports hard refresh on routes like `/instant-quote`.
+Allowed transitions:
+- `draft -> submitted`
+- `submitted -> in_review`
+- `in_review -> verified`
+- `in_review -> rejected`
+
+Revisions:
+- Do not move status backward.
+- Keep quote in `in_review`.
+- Append immutable `quote_versions` row.
+- Update `customer_status` to `updated`.
+- Revise endpoint treats per-session total as canonical and recomputes seasonal range fields.
+
+## 7) Attribution Rules
+- One `first_touch` per lead.
+- One active `last_touch` per lead.
+- One `submit_snapshot` per submitted quote.
+- Reporting defaults:
+  - acquisition: `first_touch`
+  - conversion: `submit_snapshot`
+
+## 8) Security and PII Controls
+RBAC roles:
+- `OWNER`, `ADMIN`, `REVIEWER`, `MARKETING`
+
+Capabilities:
+- `VIEW_PII_FULL`: OWNER/ADMIN/REVIEWER
+- `VIEW_ATTRIBUTION`: all admin roles
+- `EXPORT_PII_FULL`: OWNER/ADMIN/REVIEWER
+- `EXPORT_MARKETING_SAFE`: all admin roles
+
+PII masking:
+- MARKETING responses mask name/email/phone
+- CSV export for MARKETING is masked by default
+
+## 9) Service-Area Privacy Hardening
+Service-area geometry pipeline:
+1. geodesic 10km station buffers (server only)
+2. merged union geometry
+3. simplification + deterministic jitter + 3-decimal quantization
+4. no station IDs/coordinates/markers in response
+
+## 10) Launch Cutoff
+`SYSTEM_LAUNCH_AT` is applied on analytics-style queries (e.g. attribution summary) to avoid pre-launch noise.

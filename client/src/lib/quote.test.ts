@@ -1,16 +1,22 @@
 import { describe, expect, it } from 'vitest';
-import { getQuoteTotal, getRecommendedPlan } from './quote';
+import { getSeasonalTotalRange } from './quote';
 
-describe('quote utilities', () => {
-  it('selects a starter plan for smaller areas', () => {
-    expect(getRecommendedPlan(320)).toBe('Starter Autonomy Plan');
+describe('seasonal pricing range', () => {
+  it('uses weekly session window 26-30', () => {
+    const totals = getSeasonalTotalRange(145.25, 'weekly');
+
+    expect(totals.sessionsMin).toBe(26);
+    expect(totals.sessionsMax).toBe(30);
+    expect(totals.seasonalTotalMin).toBe(3776.5);
+    expect(totals.seasonalTotalMax).toBe(4357.5);
   });
 
-  it('selects a precision weekly plan for medium areas', () => {
-    expect(getRecommendedPlan(900)).toBe('Precision Weekly Plan');
-  });
+  it('uses biweekly session window 13-15', () => {
+    const totals = getSeasonalTotalRange(145.25, 'biweekly');
 
-  it('computes a deterministic quote total', () => {
-    expect(getQuoteTotal({ areaM2: 500, perimeterM: 100 })).toBe(129.5);
+    expect(totals.sessionsMin).toBe(13);
+    expect(totals.sessionsMax).toBe(15);
+    expect(totals.seasonalTotalMin).toBe(1888.25);
+    expect(totals.seasonalTotalMax).toBe(2178.75);
   });
 });

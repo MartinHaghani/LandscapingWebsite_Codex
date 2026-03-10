@@ -12,9 +12,11 @@
   },
   "dependencies": {
     "@turf/area": "^7.2.0",
+    "@turf/difference": "^7.3.4",
     "@turf/helpers": "^7.2.0",
     "@turf/kinks": "^7.2.0",
     "@turf/length": "^7.2.0",
+    "@turf/union": "^7.2.0",
     "clsx": "^2.1.1",
     "mapbox-gl": "^3.7.0",
     "react": "^18.3.1",
@@ -30,7 +32,7 @@
     "autoprefixer": "^10.4.20",
     "postcss": "^8.4.47",
     "tailwindcss": "^3.4.13",
-    "typescript": "^5.6.2",
+    "typescript": "5.6.2",
     "vite": "^5.4.21",
     "vitest": "^2.1.3"
   }

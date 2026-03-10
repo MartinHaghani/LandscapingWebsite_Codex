@@ -14,7 +14,16 @@ interface QuoteResult {
     perimeterM: number;
   };
   plan: string;
+  serviceFrequency: 'weekly' | 'biweekly';
+  sessionsMin: number;
+  sessionsMax: number;
+  perSessionTotal: number;
+  seasonalTotalMin: number;
+  seasonalTotalMax: number;
   quoteTotal: number;
+  status: string;
+  contactPending: boolean;
+  submittedAt: string | null;
 }
 
 export const QuoteConfirmationPage = () => {
@@ -65,8 +74,18 @@ export const QuoteConfirmationPage = () => {
             <p>Plan: {quote.plan}</p>
             <p>Area: {formatNumber(quote.metrics.areaM2)} m²</p>
             <p>Perimeter: {formatNumber(quote.metrics.perimeterM)} m</p>
-            <p>Estimated Total: ${quote.quoteTotal.toFixed(2)}</p>
-            <p>Submitted: {new Date(quote.createdAt).toLocaleString()}</p>
+            <p>
+              Cadence: {quote.serviceFrequency === 'weekly' ? 'Weekly' : 'Bi-weekly'} ({quote.sessionsMin}-{quote.sessionsMax}{' '}
+              sessions)
+            </p>
+            <p>Per-session estimate: ${quote.perSessionTotal.toFixed(2)}</p>
+            <p>
+              Seasonal estimate: ${quote.seasonalTotalMin.toFixed(2)} - ${quote.seasonalTotalMax.toFixed(2)}
+            </p>
+            <p>Status: {quote.status}</p>
+            <p>Contact finalized: {quote.contactPending ? 'No' : 'Yes'}</p>
+            <p>Draft created: {new Date(quote.createdAt).toLocaleString()}</p>
+            {quote.submittedAt ? <p>Submitted: {new Date(quote.submittedAt).toLocaleString()}</p> : null}
           </div>
         ) : null}
 

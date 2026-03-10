@@ -39,6 +39,13 @@ class SpaFallbackHandler(SimpleHTTPRequestHandler):
         self.path = "/index.html"
         return super().do_HEAD() if head_only else super().do_GET()
 
+    def end_headers(self):
+        # Prevent stale asset/html mixes when iterating quickly on local bundles.
+        self.send_header("Cache-Control", "no-store, max-age=0")
+        self.send_header("Pragma", "no-cache")
+        self.send_header("Expires", "0")
+        super().end_headers()
+
 
 def parse_args():
     parser = argparse.ArgumentParser(description="Serve static SPA assets with history fallback.")
