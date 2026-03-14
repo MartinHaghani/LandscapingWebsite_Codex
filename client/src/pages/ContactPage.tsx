@@ -5,6 +5,9 @@ import { Button } from '../components/ui/Button';
 import { api, ApiError, createIdempotencyKey } from '../lib/api';
 import { getAttributionSnapshot } from '../lib/attribution';
 
+const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+const phonePattern = /^[0-9+().\-\s]{7,40}$/;
+
 const emptyForm = {
   name: '',
   email: '',
@@ -21,8 +24,8 @@ export const ContactPage = () => {
   const canSubmit = useMemo(
     () =>
       form.name.trim().length > 1 &&
-      form.email.includes('@') &&
-      form.phone.trim().length >= 7 &&
+      emailPattern.test(form.email.trim()) &&
+      phonePattern.test(form.phone.trim()) &&
       form.message.trim().length > 7,
     [form]
   );
@@ -33,14 +36,17 @@ export const ContactPage = () => {
     setResult(null);
 
     try {
-      const response = await api.submitContact({
-        name: form.name.trim(),
-        email: form.email.trim(),
-        phone: form.phone.trim(),
-        addressText: form.address.trim() || undefined,
-        message: form.message.trim(),
-        attribution: getAttributionSnapshot()
-      }, createIdempotencyKey());
+      const response = await api.submitContact(
+        {
+          name: form.name.trim(),
+          email: form.email.trim(),
+          phone: form.phone.trim(),
+          addressText: form.address.trim() || undefined,
+          message: form.message.trim(),
+          attribution: getAttributionSnapshot()
+        },
+        createIdempotencyKey()
+      );
       setResult({
         type: 'success',
         message: `Message received. Confirmation ID: ${response.id}`
@@ -61,13 +67,26 @@ export const ContactPage = () => {
       <SectionTitle
         badge="Contact"
         title="Send us a message"
+        description="Need help with service coverage, quote setup, or account follow-up? Our team will respond promptly."
       />
 
       <div className="mt-10 grid gap-8 lg:grid-cols-[0.95fr_1.05fr]">
         <Card className="bg-black/45">
           <h3 className="text-xl font-semibold text-white">Autoscape HQ</h3>
-          <p className="mt-3 text-sm text-white/70">Phone: +1 4168482841</p>
-          <p className="mt-2 text-sm text-white/70">Email: contact@autoscape.ca</p>
+          <p className="mt-3 text-sm text-white/70">Service region: Greater Toronto Area</p>
+          <p className="mt-2 text-sm text-white/70">
+            Phone:{' '}
+            <a href="tel:+14168482841" className="transition-colors hover:text-brand">
+              +1 (416) 848-2841
+            </a>
+          </p>
+          <p className="mt-2 text-sm text-white/70">
+            Email:{' '}
+            <a href="mailto:contact@autoscape.ca" className="transition-colors hover:text-brand">
+              contact@autoscape.ca
+            </a>
+          </p>
+          <p className="mt-5 text-xs text-white/55">Mon-Sat 7:00 AM - 7:00 PM</p>
         </Card>
 
         <Card>
@@ -80,9 +99,12 @@ export const ContactPage = () => {
                 id="name"
                 required
                 value={form.name}
-                onChange={(event) => setForm((current) => ({ ...current, name: event.target.value }))}
+                onChange={(event) =>
+                  setForm((current) => ({ ...current, name: event.target.value }))
+                }
+                autoComplete="name"
                 className="w-full rounded-xl border border-white/20 bg-black/50 px-4 py-3 text-white placeholder:text-white/35 focus:border-brand focus:outline-none"
-                placeholder="Placeholder: Jane Doe"
+                placeholder="Jane Doe"
               />
             </div>
 
@@ -95,9 +117,12 @@ export const ContactPage = () => {
                 type="email"
                 required
                 value={form.email}
-                onChange={(event) => setForm((current) => ({ ...current, email: event.target.value }))}
+                onChange={(event) =>
+                  setForm((current) => ({ ...current, email: event.target.value }))
+                }
+                autoComplete="email"
                 className="w-full rounded-xl border border-white/20 bg-black/50 px-4 py-3 text-white placeholder:text-white/35 focus:border-brand focus:outline-none"
-                placeholder="Placeholder: jane@example.com"
+                placeholder="jane@example.com"
               />
             </div>
 
@@ -110,7 +135,10 @@ export const ContactPage = () => {
                 type="tel"
                 required
                 value={form.phone}
-                onChange={(event) => setForm((current) => ({ ...current, phone: event.target.value }))}
+                onChange={(event) =>
+                  setForm((current) => ({ ...current, phone: event.target.value }))
+                }
+                autoComplete="tel"
                 className="w-full rounded-xl border border-white/20 bg-black/50 px-4 py-3 text-white placeholder:text-white/35 focus:border-brand focus:outline-none"
                 placeholder="+1 416 000 0000"
               />
@@ -123,9 +151,12 @@ export const ContactPage = () => {
               <input
                 id="address"
                 value={form.address}
-                onChange={(event) => setForm((current) => ({ ...current, address: event.target.value }))}
+                onChange={(event) =>
+                  setForm((current) => ({ ...current, address: event.target.value }))
+                }
+                autoComplete="street-address"
                 className="w-full rounded-xl border border-white/20 bg-black/50 px-4 py-3 text-white placeholder:text-white/35 focus:border-brand focus:outline-none"
-                placeholder="Enter your property address"
+                placeholder="123 Greenway Blvd, Vaughan, ON"
               />
             </div>
 
@@ -138,22 +169,30 @@ export const ContactPage = () => {
                 rows={5}
                 required
                 value={form.message}
-                onChange={(event) => setForm((current) => ({ ...current, message: event.target.value }))}
+                onChange={(event) =>
+                  setForm((current) => ({ ...current, message: event.target.value }))
+                }
                 className="w-full rounded-xl border border-white/20 bg-black/50 px-4 py-3 text-white placeholder:text-white/35 focus:border-brand focus:outline-none"
-                placeholder="Placeholder: Tell us about your property and service goals."
+                placeholder="Tell us about your property, service goals, or any timeline requirements."
               />
             </div>
 
             {result ? (
-              <p className={result.type === 'success' ? 'text-sm text-brand' : 'text-sm text-red-300'}>{result.message}</p>
+              <p
+                className={
+                  result.type === 'success' ? 'text-sm text-brand' : 'text-sm text-red-300'
+                }
+              >
+                {result.message}
+              </p>
             ) : null}
 
             <Button type="submit" disabled={!canSubmit || loading}>
               {loading ? 'Submitting...' : 'Send message'}
             </Button>
             <p className="text-xs text-white/60">
-              Name, email, phone, and message are required. Address is optional, but it helps us answer your query
-              better.
+              Name, email, phone, and message are required. Address is optional, but it helps us
+              answer your query better.
             </p>
           </form>
         </Card>

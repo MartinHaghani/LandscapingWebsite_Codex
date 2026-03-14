@@ -27,6 +27,12 @@ export interface EditablePolygon {
   points: LngLat[];
 }
 
+export interface QuotePolygonSource {
+  schemaVersion: 1;
+  polygons: EditablePolygon[];
+  activePolygonId: string | null;
+}
+
 export interface PolygonEditorState {
   polygons: EditablePolygon[];
   activePolygonId: string | null;
@@ -59,7 +65,7 @@ export interface QuotePayload {
   baseTotal?: number;
   pricingVersion?: string;
   currency?: string;
-  polygonSource?: unknown;
+  polygonSource?: QuotePolygonSource;
   attribution?: AttributionPayload;
 }
 
@@ -108,8 +114,6 @@ export interface ContactResponse {
 }
 
 export interface QuoteContactPayload {
-  name: string;
-  email: string;
   phone: string;
   addressText?: string;
   message?: string;
@@ -122,6 +126,35 @@ export interface QuoteContactResponse {
   status: string;
   submittedAt: string | null;
   replayed?: boolean;
+}
+
+export interface QuoteClaimResponse {
+  ok: boolean;
+  quoteId: string;
+  claimed: boolean;
+}
+
+export interface AccountQuoteListItem {
+  id: string;
+  createdAt: string;
+  address: string;
+  status: string;
+  contactPending: boolean;
+  serviceFrequency: ServiceFrequency;
+  perSessionTotal: number;
+  seasonalTotalMin: number;
+  seasonalTotalMax: number;
+  submittedAt: string | null;
+}
+
+export interface AccountQuoteListResponse {
+  items: AccountQuoteListItem[];
+  nextCursor: string | null;
+  meta: {
+    generatedAt: string;
+    rowCount: number;
+    filters: Record<string, string | number | null | undefined>;
+  };
 }
 
 export interface AttributionPayload {

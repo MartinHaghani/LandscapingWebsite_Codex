@@ -1,7 +1,9 @@
 import type {
+  AccountQuoteListResponse,
   AttributionPayload,
   ContactPayload,
   ContactResponse,
+  QuoteClaimResponse,
   QuoteContactPayload,
   QuoteContactResponse,
   QuoteLookupResponse,
@@ -23,6 +25,7 @@ class ApiError extends Error {
 
 interface RequestOptions extends RequestInit {
   idempotencyKey?: string;
+  authToken?: string;
 }
 
 export const createIdempotencyKey = () => {
@@ -41,6 +44,10 @@ const request = async <T>(path: string, init?: RequestOptions): Promise<T> => {
 
   if (init?.idempotencyKey) {
     headers.set('Idempotency-Key', init.idempotencyKey);
+  }
+
+  if (init?.authToken) {
+    headers.set('Authorization', `Bearer ${init.authToken}`);
   }
 
   const response = await fetch(`${API_BASE_URL}${path}`, {
@@ -79,6 +86,25 @@ export const api = {
       body: JSON.stringify(payload)
     });
   },
+  claimQuote(quoteId: string, authToken: string) {
+    return request<QuoteClaimResponse>(`/api/quote/${encodeURIComponent(quoteId)}/claim`, {
+      method: 'POST',
+      authToken
+    });
+  },
+  submitClaimedQuoteContact(
+    quoteId: string,
+    payload: QuoteContactPayload,
+    idempotencyKey: string,
+    authToken: string
+  ) {
+    return request<QuoteContactResponse>(`/api/quote/${encodeURIComponent(quoteId)}/contact`, {
+      method: 'POST',
+      idempotencyKey,
+      body: JSON.stringify(payload),
+      authToken
+    });
+  },
   submitContact(payload: ContactPayload, idempotencyKey: string) {
     return request<ContactResponse>('/api/contact', {
       method: 'POST',
@@ -102,8 +128,26 @@ export const api = {
       body: JSON.stringify(payload)
     });
   },
-  getQuote(id: string) {
-    return request<QuoteLookupResponse>(`/api/quote/${id}`);
+  getQuote(id: string, authToken: string) {
+    return request<QuoteLookupResponse>(`/api/quote/${id}`, {
+      authToken
+    });
+  },
+  getAccountQuotes(authToken: string, cursor?: string, limit = 25) {
+    const query = new URLSearchParams();
+    query.set('limit', String(limit));
+    if (cursor) {
+      query.set('cursor', cursor);
+    }
+
+    return request<AccountQuoteListResponse>(`/api/account/quotes?${query.toString()}`, {
+      authToken
+    });
+  },
+  getAccountQuote(quoteId: string, authToken: string) {
+    return request<QuoteLookupResponse>(`/api/account/quotes/${encodeURIComponent(quoteId)}`, {
+      authToken
+    });
   },
   getAttributionFromUrl(location: Pick<Window['location'], 'search' | 'pathname'>): AttributionPayload {
     const params = new URLSearchParams(location.search);

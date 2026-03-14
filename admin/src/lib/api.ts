@@ -1,10 +1,6 @@
 export type AdminRole = 'OWNER' | 'ADMIN' | 'REVIEWER' | 'MARKETING';
 
-export interface AdminSession {
-  role: AdminRole;
-  userId: string;
-  token?: string;
-}
+export type AuthTokenProvider = () => Promise<string | null>;
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? 'http://localhost:4000';
 
@@ -16,17 +12,19 @@ class AdminApiError extends Error {
 
 const request = async <T>(
   path: string,
-  session: AdminSession,
+  getToken: AuthTokenProvider,
   init?: RequestInit
 ): Promise<T> => {
   const headers = new Headers(init?.headers ?? {});
-  headers.set('Content-Type', 'application/json');
-  headers.set('X-Admin-Role', session.role);
-  headers.set('X-Admin-User-Id', session.userId);
-
-  if (session.token && session.token.trim().length > 0) {
-    headers.set('Authorization', `Bearer ${session.token.trim()}`);
+  if (!headers.has('Content-Type')) {
+    headers.set('Content-Type', 'application/json');
   }
+
+  const token = await getToken();
+  if (!token) {
+    throw new AdminApiError('Authentication is required.', 401);
+  }
+  headers.set('Authorization', `Bearer ${token}`);
 
   const response = await fetch(`${API_BASE_URL}${path}`, {
     ...init,
@@ -78,6 +76,79 @@ export interface AdminQuoteItem {
     email: string | null;
     phone: string | null;
   };
+}
+
+export type AdminPolygonKind = 'service' | 'obstacle';
+export type AdminLngLat = [number, number];
+
+export interface AdminPolygonSourcePolygon {
+  id: string;
+  kind: AdminPolygonKind;
+  points: AdminLngLat[];
+}
+
+export interface AdminPolygonSource {
+  schemaVersion: 1;
+  polygons: AdminPolygonSourcePolygon[];
+  activePolygonId: string | null;
+}
+
+export interface AdminQuoteVersionItem {
+  versionNumber: number;
+  actorType: 'client' | 'admin';
+  changeType: string;
+  changedBy: string;
+  changedAt: string;
+  serviceFrequency: 'weekly' | 'biweekly';
+  sessionsMin: number;
+  sessionsMax: number;
+  perSessionTotal: number;
+  seasonalTotalMin: number;
+  seasonalTotalMax: number;
+  finalTotal: number;
+  overrideReason: string | null;
+  areaM2: number;
+  perimeterM: number;
+  recommendedPlan: string;
+  polygonSource: AdminPolygonSource | null;
+  polygonSourceFallback: boolean;
+}
+
+export interface AdminQuoteEditorResponse {
+  quoteId: string;
+  status: string;
+  customerStatus: string;
+  createdAt: string;
+  submittedAt: string | null;
+  verifiedAt: string | null;
+  verifiedBy: string | null;
+  addressText: string;
+  lead: {
+    id: string;
+    name: string | null;
+    email: string | null;
+    phone: string | null;
+  };
+  editable: {
+    serviceFrequency: 'weekly' | 'biweekly';
+    perSessionTotal: number;
+    finalTotal: number;
+    overrideReason: string | null;
+  };
+  calculated: {
+    areaM2: number;
+    perimeterM: number;
+    recommendedPlan: string;
+    baseTotal: number;
+    perSessionTotal: number;
+    sessionsMin: number;
+    sessionsMax: number;
+    seasonalTotalMin: number;
+    seasonalTotalMax: number;
+  };
+  polygonSource: AdminPolygonSource;
+  polygonSourceFallback: boolean;
+  versions: AdminQuoteVersionItem[];
 }
 
 export interface AdminRequestItem {
@@ -232,7 +303,7 @@ const appendParam = (query: URLSearchParams, key: string, value: string | number
 };
 
 export const adminApi = {
-  getHealth(session: AdminSession) {
+  getHealth(getToken: AuthTokenProvider) {
     return request<{
       ok: boolean;
       role: AdminRole;
@@ -242,10 +313,10 @@ export const adminApi = {
         exportPiiFull: boolean;
         exportMarketingSafe: boolean;
       };
-    }>('/api/admin/health', session);
+    }>('/api/admin/health', getToken);
   },
 
-  listQuotes(session: AdminSession, params: QuoteListParams) {
+  listQuotes(getToken: AuthTokenProvider, params: QuoteListParams) {
     const query = new URLSearchParams();
     appendParam(query, 'cursor', params.cursor);
     appendParam(query, 'limit', params.limit);
@@ -260,10 +331,10 @@ export const adminApi = {
     appendParam(query, 'sortBy', params.sortBy);
     appendParam(query, 'sortDir', params.sortDir);
 
-    return request<CursorResponse<AdminQuoteItem>>(`/api/admin/quotes?${query.toString()}`, session);
+    return request<CursorResponse<AdminQuoteItem>>(`/api/admin/quotes?${query.toString()}`, getToken);
   },
 
-  listRequests(session: AdminSession, params: RequestListParams) {
+  listRequests(getToken: AuthTokenProvider, params: RequestListParams) {
     const query = new URLSearchParams();
     appendParam(query, 'cursor', params.cursor);
     appendParam(query, 'limit', params.limit);
@@ -275,11 +346,11 @@ export const adminApi = {
     appendParam(query, 'sortBy', params.sortBy);
     appendParam(query, 'sortDir', params.sortDir);
 
-    return request<CursorResponse<AdminRequestItem>>(`/api/admin/service-area-requests?${query.toString()}`, session);
+    return request<CursorResponse<AdminRequestItem>>(`/api/admin/service-area-requests?${query.toString()}`, getToken);
   },
 
   getRequestMap(
-    session: AdminSession,
+    getToken: AuthTokenProvider,
     params: Omit<RequestListParams, 'cursor' | 'limit' | 'sortBy' | 'sortDir'> & { bbox?: string }
   ) {
     const query = new URLSearchParams();
@@ -290,10 +361,10 @@ export const adminApi = {
     appendParam(query, 'createdTo', params.createdTo);
     appendParam(query, 'bbox', params.bbox);
 
-    return request<AdminRequestMapResponse>(`/api/admin/service-area-requests/map?${query.toString()}`, session);
+    return request<AdminRequestMapResponse>(`/api/admin/service-area-requests/map?${query.toString()}`, getToken);
   },
 
-  listContacts(session: AdminSession, params: ContactListParams) {
+  listContacts(getToken: AuthTokenProvider, params: ContactListParams) {
     const query = new URLSearchParams();
     appendParam(query, 'cursor', params.cursor);
     appendParam(query, 'limit', params.limit);
@@ -304,10 +375,10 @@ export const adminApi = {
     appendParam(query, 'sortBy', params.sortBy);
     appendParam(query, 'sortDir', params.sortDir);
 
-    return request<CursorResponse<AdminContactItem>>(`/api/admin/contacts?${query.toString()}`, session);
+    return request<CursorResponse<AdminContactItem>>(`/api/admin/contacts?${query.toString()}`, getToken);
   },
 
-  listLeads(session: AdminSession, params: LeadListParams) {
+  listLeads(getToken: AuthTokenProvider, params: LeadListParams) {
     const query = new URLSearchParams();
     appendParam(query, 'cursor', params.cursor);
     appendParam(query, 'limit', params.limit);
@@ -318,10 +389,10 @@ export const adminApi = {
     appendParam(query, 'sortBy', params.sortBy);
     appendParam(query, 'sortDir', params.sortDir);
 
-    return request<CursorResponse<AdminLeadItem>>(`/api/admin/leads?${query.toString()}`, session);
+    return request<CursorResponse<AdminLeadItem>>(`/api/admin/leads?${query.toString()}`, getToken);
   },
 
-  listAuditLogs(session: AdminSession, params: AuditListParams) {
+  listAuditLogs(getToken: AuthTokenProvider, params: AuditListParams) {
     const query = new URLSearchParams();
     appendParam(query, 'cursor', params.cursor);
     appendParam(query, 'limit', params.limit);
@@ -333,33 +404,85 @@ export const adminApi = {
     appendParam(query, 'sortBy', params.sortBy);
     appendParam(query, 'sortDir', params.sortDir);
 
-    return request<CursorResponse<AdminAuditItem>>(`/api/admin/audit-logs?${query.toString()}`, session);
+    return request<CursorResponse<AdminAuditItem>>(`/api/admin/audit-logs?${query.toString()}`, getToken);
   },
 
-  getAttributionSummary(session: AdminSession) {
+  getAttributionSummary(getToken: AuthTokenProvider) {
     return request<{
       items: AdminAttributionSummaryRow[];
       generatedAt: string;
       launchAt: string | null;
-    }>('/api/admin/attribution/summary', session);
+    }>('/api/admin/attribution/summary', getToken);
   },
 
-  updateQuoteStatus(session: AdminSession, quoteId: string, status: string) {
-    return request<{ quoteId: string; status: string }>(`/api/admin/quotes/${encodeURIComponent(quoteId)}/status`, session, {
+  updateQuoteStatus(getToken: AuthTokenProvider, quoteId: string, status: string) {
+    return request<{ quoteId: string; status: string }>(`/api/admin/quotes/${encodeURIComponent(quoteId)}/status`, getToken, {
       method: 'PATCH',
       body: JSON.stringify({ status })
     });
   },
 
-  addQuoteNote(session: AdminSession, quoteId: string, note: string) {
-    return request<{ ok: boolean; note: unknown }>(`/api/admin/quotes/${encodeURIComponent(quoteId)}/notes`, session, {
+  getQuoteEditor(getToken: AuthTokenProvider, quoteId: string) {
+    return request<AdminQuoteEditorResponse>(
+      `/api/admin/quotes/${encodeURIComponent(quoteId)}/editor`,
+      getToken
+    );
+  },
+
+  createQuoteVersion(
+    getToken: AuthTokenProvider,
+    quoteId: string,
+    payload: {
+      polygonSource: AdminPolygonSource;
+      serviceFrequency: 'weekly' | 'biweekly';
+      perSessionTotal: number;
+      finalTotal: number;
+      overrideReason?: string;
+    }
+  ) {
+    return request<{
+      quoteId: string;
+      status: string;
+      customerStatus: string;
+      version: number;
+      serviceFrequency: 'weekly' | 'biweekly';
+      perSessionTotal: number;
+      finalTotal: number;
+      sessionsMin: number;
+      sessionsMax: number;
+      seasonalTotalMin: number;
+      seasonalTotalMax: number;
+      areaM2: number;
+      perimeterM: number;
+      recommendedPlan: string;
+    }>(`/api/admin/quotes/${encodeURIComponent(quoteId)}/versions`, getToken, {
+      method: 'POST',
+      body: JSON.stringify(payload)
+    });
+  },
+
+  submitQuoteVersion(getToken: AuthTokenProvider, quoteId: string, versionNumber: number) {
+    return request<{
+      quoteId: string;
+      status: string;
+      customerStatus: string;
+      verifiedAt: string | null;
+      verifiedBy: string | null;
+      selectedVersion: number;
+    }>(`/api/admin/quotes/${encodeURIComponent(quoteId)}/versions/${versionNumber}/submit`, getToken, {
+      method: 'POST'
+    });
+  },
+
+  addQuoteNote(getToken: AuthTokenProvider, quoteId: string, note: string) {
+    return request<{ ok: boolean; note: unknown }>(`/api/admin/quotes/${encodeURIComponent(quoteId)}/notes`, getToken, {
       method: 'POST',
       body: JSON.stringify({ note })
     });
   },
 
   reviseQuote(
-    session: AdminSession,
+    getToken: AuthTokenProvider,
     quoteId: string,
     payload: {
       perSessionTotal?: number;
@@ -370,7 +493,7 @@ export const adminApi = {
   ) {
     return request<{ quoteId: string; status: string; customerStatus: string }>(
       `/api/admin/quotes/${encodeURIComponent(quoteId)}/revise`,
-      session,
+      getToken,
       {
         method: 'POST',
         body: JSON.stringify(payload)
@@ -378,13 +501,14 @@ export const adminApi = {
     );
   },
 
-  async downloadQuotesCsv(session: AdminSession) {
-    const headers = new Headers();
-    headers.set('X-Admin-Role', session.role);
-    headers.set('X-Admin-User-Id', session.userId);
-    if (session.token && session.token.trim().length > 0) {
-      headers.set('Authorization', `Bearer ${session.token.trim()}`);
+  async downloadQuotesCsv(getToken: AuthTokenProvider) {
+    const token = await getToken();
+    if (!token) {
+      throw new AdminApiError('Authentication is required.', 401);
     }
+
+    const headers = new Headers();
+    headers.set('Authorization', `Bearer ${token}`);
 
     const response = await fetch(`${API_BASE_URL}/api/admin/exports/quotes.csv`, {
       headers

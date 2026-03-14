@@ -1,6 +1,5 @@
 import { lazy, Suspense } from 'react';
 import { Card } from '../components/ui/Card';
-import { PlaceholderImage } from '../components/ui/PlaceholderImage';
 import { SectionTitle } from '../components/ui/SectionTitle';
 
 const LazyServiceAreaSection = lazy(() =>
@@ -12,35 +11,36 @@ const LazyServiceAreaSection = lazy(() =>
 const serviceCards = [
   {
     title: 'Autonomous Mowing',
+    imageSrc: '/images/home/autonomous-mower-fleet.png',
     description:
-      'Placeholder: robotic mowing sequences tuned for blade health, growth rate, and visual striping consistency.'
+      'Route-planned recurring mowing designed for consistency, lower noise, and predictable property presentation.'
   },
   {
     title: 'Smart Edging',
     imageSrc: '/images/services/smart-edging.jpg',
     description:
-      'Placeholder: perimeter trim passes executed after autonomous routes for sharp, clean property lines.'
+      'Perimeter detailing around paths, beds, and driveways to preserve clean boundaries and finished curb appeal.'
   },
   {
     title: 'Cleanup & Debris',
     description:
-      'Placeholder: light debris management and clipping control integrated into recurring service cycles.'
+      'Light debris and clipping management built into each visit to maintain a neat and client-ready finish.'
   },
   {
     title: 'Seasonal Maintenance',
     imageSrc: '/images/services/seasonal-maintenance.jpg',
     description:
-      'Placeholder: adaptive height schedules and route revisions for spring acceleration and summer heat stress.'
+      'Season-aware mowing height and route adjustments tuned for spring acceleration and mid-summer stress periods.'
   },
   {
     title: 'Multi-Zone Scheduling',
     description:
-      'Placeholder: independent logic for front yard, backyard, and specialty landscape sections.'
+      'Independent service polygon mapping for front yards, backyards, side lots, and specialty landscaped sections.'
   },
   {
     title: 'Performance Reporting',
     description:
-      'Placeholder: dashboard snapshots for route completion, battery cycles, and maintenance checkpoints.'
+      'Quote metadata and operational records make each request traceable from initial draft through final submission.'
   }
 ];
 
@@ -49,7 +49,7 @@ export const ServicesPage = () => (
     <SectionTitle
       badge="Services"
       title="Autonomous care services for high-standard properties"
-      description="Placeholder service detail copy that matches Autoscape's premium and technical voice."
+      description="Coverage-first intake and deterministic quote logic keep planning transparent before service begins."
     />
 
     <Suspense
@@ -73,10 +73,11 @@ export const ServicesPage = () => (
               loading="lazy"
             />
           ) : (
-            <PlaceholderImage
-              label={`Placeholder: ${service.title.toLowerCase()} visual`}
-              heightClassName="h-44"
-            />
+            <div className="flex h-44 items-center justify-center rounded-2xl border border-white/20 bg-black/45">
+              <span className="text-sm font-semibold uppercase tracking-[0.12em] text-brand">
+                {service.title}
+              </span>
+            </div>
           )}
           <h3 className="mt-5 text-xl font-semibold text-white">{service.title}</h3>
           <p className="mt-3 text-sm text-white/70">{service.description}</p>

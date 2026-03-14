@@ -1,47 +1,49 @@
 import { Link } from 'react-router-dom';
 import { Card } from '../components/ui/Card';
-import { PlaceholderImage } from '../components/ui/PlaceholderImage';
 import { SectionTitle } from '../components/ui/SectionTitle';
 import { Button } from '../components/ui/Button';
+import { StatsBar } from '../components/ui/StatsBar';
 
 const steps = [
   {
-    title: 'Scan & Model',
-    body: 'Placeholder: our routing engine maps your lawn dimensions and builds a repeatable autonomous coverage path.'
+    title: 'Check Coverage',
+    body: 'Enter your address and instantly confirm service eligibility before you spend time drawing your property.'
   },
   {
-    title: 'Deploy Quiet Robotics',
-    body: 'Placeholder: electric autonomous mowers execute consistent, low-noise cuts on your schedule.'
+    title: 'Map Property Boundaries',
+    body: 'Draw service polygons and obstacle zones directly on the map with geodesic-safe measurement.'
   },
   {
-    title: 'Precision Finishing',
-    body: 'Placeholder: edge cleanup and detail trimming happen after each run for a polished finish.'
+    title: 'Get Deterministic Pricing',
+    body: 'Receive a per-session estimate and seasonal range based on verified area, perimeter, and cadence.'
   },
   {
-    title: 'Seasonal Optimization',
-    body: 'Placeholder: growth-rate tuning and route adjustments keep quality high all year.'
+    title: 'Finalize in One Step',
+    body: 'Submit contact details to lock your quote ID and route it to our operations team for final review.'
   }
 ];
 
-const services = [
-  'Autonomous mowing',
-  'Smart edge detailing',
-  'Debris cleanup',
-  'Seasonal maintenance'
+const stats = [
+  { label: 'Quote Time', value: '< 3 minutes' },
+  { label: 'Geometry Validation', value: 'Server re-measured' },
+  { label: 'Season Planning', value: 'Weekly or bi-weekly' }
 ];
 
 const faqs = [
   {
     question: 'How often do autonomous cuts run?',
-    answer: 'Placeholder: frequency is tuned per growth profile, weather trends, and preferred lawn height.'
+    answer:
+      'You can choose weekly or bi-weekly service when generating your quote. We use that cadence to provide per-session and seasonal projections.'
   },
   {
     question: 'What if my yard has multiple zones?',
-    answer: 'Placeholder: zoning is mapped in the setup process and each segment can run on independent schedules.'
+    answer:
+      'Use multiple service polygons for disconnected lawn sections, and add obstacle polygons for pools, planters, and hardscape areas.'
   },
   {
     question: 'Is setup disruptive?',
-    answer: 'Placeholder: installation is fast, quiet, and designed to preserve existing landscaping aesthetics.'
+    answer:
+      'No. Service is planned for low-noise windows, and perimeter finishes are handled with precision detailing to keep your property presentation clean.'
   }
 ];
 
@@ -51,20 +53,23 @@ export const HomePage = () => (
       <div className="mx-auto grid w-full max-w-7xl gap-10 px-4 py-20 md:grid-cols-[1.1fr_0.9fr] md:px-8 md:py-28">
         <div className="fade-up">
           <h1 className="mt-5 font-display text-4xl font-bold leading-tight text-white md:text-6xl">
-            Autonomous Landscaping
+            Precision Lawn Care, Powered by Autonomous Operations
           </h1>
           <p className="mt-6 max-w-xl text-base text-white/72 md:text-lg">
-            Precise Cuts. Lower Costs.
+            Autoscape combines on-map measurement, deterministic quote logic, and quiet electric
+            equipment to deliver consistent curb appeal.
           </p>
           <div className="mt-8 flex flex-wrap items-start gap-4">
             <div className="flex flex-col items-start">
               <Link to="/instant-quote">
                 <Button>Get Instant Quote</Button>
               </Link>
-              <p className="mt-2 text-xs text-white/62">No sign-up required.</p>
+              <p className="mt-2 text-xs text-white/62">
+                No sign-up required. Quote ID generated instantly.
+              </p>
             </div>
             <Link to="/contact">
-              <Button variant="secondary">Contact</Button>
+              <Button variant="secondary">Talk to the Team</Button>
             </Link>
           </div>
         </div>
@@ -78,13 +83,17 @@ export const HomePage = () => (
           />
         </div>
       </div>
+
+      <div className="mx-auto w-full max-w-7xl px-4 pb-12 md:px-8 md:pb-16">
+        <StatsBar items={stats} />
+      </div>
     </section>
 
     <section className="mx-auto w-full max-w-7xl px-4 py-20 md:px-8">
       <SectionTitle
         badge="How It Works"
-        title="From address to optimized route in minutes"
-        description="Placeholder process summary for an easy onboarding flow."
+        title="From address to quote in minutes"
+        description="Built for clarity: check coverage, map your property, and submit a complete request with no back-and-forth."
       />
       <div className="mt-10 grid gap-5 md:grid-cols-2 xl:grid-cols-4">
         {steps.map((step, index) => (
@@ -101,16 +110,25 @@ export const HomePage = () => (
       <div className="mx-auto w-full max-w-7xl px-4 py-20 md:px-8">
         <SectionTitle
           badge="Services"
-          title="Smart maintenance services built around autonomous mowing"
-          description="Placeholder copy for premium service blend."
+          title="Maintenance designed for premium residential properties"
+          description="Autonomous mowing is the foundation, with finishing work and seasonal tuning for consistent quality."
         />
-        <div className="mt-10 grid gap-4 md:grid-cols-2">
-          {services.map((service) => (
-            <Card key={service} className="flex items-center justify-between bg-white/[0.03]">
-              <p className="text-lg font-medium text-white">{service}</p>
-              <span className="rounded-full border border-brand/50 bg-brand/10 px-3 py-1 text-xs text-brand">Included</span>
-            </Card>
-          ))}
+
+        <div className="mt-10 grid gap-6 md:grid-cols-2">
+          <Card className="bg-black/45">
+            <h3 className="text-xl font-semibold text-white">Autonomous Mowing</h3>
+            <p className="mt-3 text-sm text-white/72">
+              Repeatable route execution for uniform cut quality and reduced noise compared to
+              conventional gas-powered schedules.
+            </p>
+          </Card>
+          <Card className="bg-black/45">
+            <h3 className="text-xl font-semibold text-white">Edge + Detail Finishing</h3>
+            <p className="mt-3 text-sm text-white/72">
+              Precision perimeter detailing maintains clean boundaries around driveways, beds, and
+              walkways.
+            </p>
+          </Card>
         </div>
       </div>
     </section>
@@ -118,29 +136,38 @@ export const HomePage = () => (
     <section className="mx-auto w-full max-w-7xl px-4 py-20 md:px-8">
       <SectionTitle
         badge="Why Autoscape"
-        title="Tech-forward, quiet, and relentlessly consistent"
-        description="Placeholder value props designed for a premium brand tone."
+        title="Reliable operations, transparent pricing"
+        description="Every quote and service run follows a clear system so homeowners know exactly what to expect."
       />
       <div className="mt-10 grid gap-5 md:grid-cols-3">
         <Card>
-          <PlaceholderImage label="Placeholder: Smart diagnostics dashboard" heightClassName="h-36" />
-          <h3 className="mt-4 text-lg font-semibold text-white">Predictable Results</h3>
+          <div className="flex h-12 w-12 items-center justify-center rounded-full border border-brand/40 bg-brand/15 text-xl font-semibold text-brand">
+            01
+          </div>
+          <h3 className="mt-4 text-lg font-semibold text-white">Deterministic Quotes</h3>
           <p className="mt-2 text-sm text-white/70">
-            Placeholder: route consistency removes cut variance and maintains a uniform finish.
+            Geometry and pricing are validated server-side to keep quote outcomes consistent and
+            auditable.
           </p>
         </Card>
         <Card>
-          <PlaceholderImage label="Placeholder: Quiet electric platform" heightClassName="h-36" />
-          <h3 className="mt-4 text-lg font-semibold text-white">Quiet Electric Operation</h3>
+          <div className="flex h-12 w-12 items-center justify-center rounded-full border border-brand/40 bg-brand/15 text-xl font-semibold text-brand">
+            02
+          </div>
+          <h3 className="mt-4 text-lg font-semibold text-white">Coverage-First Workflow</h3>
           <p className="mt-2 text-sm text-white/70">
-            Placeholder: low-noise equipment supports early-morning or evening schedules with minimal disruption.
+            Serviceability is checked early, so customers outside coverage get immediate guidance
+            and expansion options.
           </p>
         </Card>
         <Card>
-          <PlaceholderImage label="Placeholder: Precision edge pass" heightClassName="h-36" />
-          <h3 className="mt-4 text-lg font-semibold text-white">Detail Control</h3>
+          <div className="flex h-12 w-12 items-center justify-center rounded-full border border-brand/40 bg-brand/15 text-xl font-semibold text-brand">
+            03
+          </div>
+          <h3 className="mt-4 text-lg font-semibold text-white">Operational Follow-Through</h3>
           <p className="mt-2 text-sm text-white/70">
-            Placeholder: recurring edge cleanup and trim passes keep perimeter lines clean.
+            Quote IDs, contact finalization, and admin workflows keep every request traceable from
+            intake to review.
           </p>
         </Card>
       </div>
@@ -150,16 +177,30 @@ export const HomePage = () => (
       <div className="mx-auto w-full max-w-7xl px-4 py-20 md:px-8">
         <SectionTitle
           badge="Testimonials"
-          title="What early adopters are saying"
-          description="Placeholder customer statements for visual structure."
+          title="What homeowners value most"
+          description="Feedback from pilot customers using autonomous recurring care."
         />
         <div className="mt-10 grid gap-5 md:grid-cols-3">
-          {['Northside Residence', 'Crestline HOA', 'Modern Commerce Park'].map((name) => (
-            <Card key={name} className="bg-white/[0.04]">
-              <p className="text-sm text-white/75">
-                “Placeholder feedback: Autoscape delivers immaculate cuts with a schedule we never have to micromanage.”
-              </p>
-              <p className="mt-4 text-sm font-semibold text-brand">{name}</p>
+          {[
+            {
+              name: 'Northside Residence',
+              quote:
+                'The lawn stays consistent week after week, and the instant quote process was far clearer than traditional estimates.'
+            },
+            {
+              name: 'Crestline HOA',
+              quote:
+                'We needed predictable scheduling and quiet operation. Autoscape delivered both with strong communication.'
+            },
+            {
+              name: 'Modern Commerce Park',
+              quote:
+                'Mapping obstacle zones directly in the quote tool reduced setup back-and-forth and improved first-pass quality.'
+            }
+          ].map((item) => (
+            <Card key={item.name} className="bg-white/[0.04]">
+              <p className="text-sm text-white/75">"{item.quote}"</p>
+              <p className="mt-4 text-sm font-semibold text-brand">{item.name}</p>
             </Card>
           ))}
         </div>
@@ -170,7 +211,7 @@ export const HomePage = () => (
       <SectionTitle
         badge="FAQ"
         title="Common questions"
-        description="Placeholder FAQs while final operations copy is prepared."
+        description="Answers to the questions most customers ask before starting instant quote."
       />
       <div className="mt-10 space-y-4">
         {faqs.map((faq) => (
@@ -180,6 +221,22 @@ export const HomePage = () => (
           </Card>
         ))}
       </div>
+
+      <Card className="mt-12 border-brand/40 bg-brand/10">
+        <h3 className="text-2xl font-semibold text-white">Ready to see your exact quote?</h3>
+        <p className="mt-3 text-sm text-white/75">
+          Start with your address, map your property boundaries, and receive a deterministic
+          estimate in minutes.
+        </p>
+        <div className="mt-6 flex flex-wrap gap-3">
+          <Link to="/instant-quote">
+            <Button>Start Instant Quote</Button>
+          </Link>
+          <Link to="/services">
+            <Button variant="secondary">View Services</Button>
+          </Link>
+        </div>
+      </Card>
     </section>
   </div>
 );

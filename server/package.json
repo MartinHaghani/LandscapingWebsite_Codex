@@ -14,19 +14,22 @@
     "prisma:migrate:deploy": "prisma migrate deploy --schema prisma/schema.prisma"
   },
   "dependencies": {
+    "@clerk/backend": "^1.22.0",
+    "@prisma/client": "^5.22.0",
     "@turf/area": "^7.2.0",
     "@turf/boolean-clockwise": "^7.2.0",
+    "@turf/difference": "^7.3.4",
     "@turf/helpers": "^7.2.0",
     "@turf/kinks": "^7.2.0",
     "@turf/length": "^7.2.0",
-    "@prisma/client": "^5.22.0",
+    "@turf/union": "^7.2.0",
     "cors": "^2.8.5",
     "dotenv": "^16.4.5",
     "express": "^4.21.2",
     "express-rate-limit": "^7.4.1",
+    "jose": "^5.10.0",
     "nanoid": "^5.1.0",
-    "zod": "^3.23.8",
-    "@turf/union": "^7.2.0"
+    "zod": "^3.23.8"
   },
   "devDependencies": {
     "@types/cors": "^2.8.17",

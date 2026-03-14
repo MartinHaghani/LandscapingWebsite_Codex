@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState, type FormEvent } from 'react';
+import { useEffect, useMemo, useRef, useState, type FormEvent, type KeyboardEvent } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { QuoteMap } from '../components/quote/QuoteMap';
 import { Button } from '../components/ui/Button';
@@ -15,8 +15,22 @@ import {
   redoPolygonEdit,
   undoPolygonEdit
 } from '../lib/polygonHistory';
-import { canContinueToMapStep, getCoverageGateDestination, getSubmissionStatus } from '../lib/quoteFlow';
-import { getQuoteTotal, getRecommendedPlan, getSeasonalTotalRange, quotePricing } from '../lib/quote';
+import {
+  canContinueToMapStep,
+  getCoverageGateDestination,
+  getSubmissionStatus
+} from '../lib/quoteFlow';
+import {
+  getQuoteTotal,
+  getRecommendedPlan,
+  getSeasonalTotalRange,
+  quotePricing
+} from '../lib/quote';
+import {
+  clearQuoteDraftState,
+  loadQuoteDraftState,
+  saveQuoteDraftState
+} from '../lib/quoteDraftPersistence';
 import type {
   LngLat,
   MapboxSuggestion,
@@ -60,21 +74,28 @@ export const InstantQuotePage = () => {
   const polygonCounterRef = useRef(0);
   const mapStepRef = useRef<HTMLDivElement | null>(null);
   const attributionRef = useRef(getAttributionSnapshot());
+  const restoredFromStorageRef = useRef(false);
 
   const [addressInput, setAddressInput] = useState('');
   const [selectedAddress, setSelectedAddress] = useState('');
   const [selectedAddressKey, setSelectedAddressKey] = useState<string | null>(null);
   const [suggestions, setSuggestions] = useState<MapboxSuggestion[]>([]);
+  const [highlightedSuggestionIndex, setHighlightedSuggestionIndex] = useState(-1);
   const [loadingSuggestions, setLoadingSuggestions] = useState(false);
   const [center, setCenter] = useState<LngLat>(DEFAULT_CENTER);
   const [currentStep, setCurrentStep] = useState<QuoteStep>('address');
-  const [polygonHistory, setPolygonHistory] = useState(() => createPolygonHistory(EMPTY_EDITOR_STATE));
+  const [polygonHistory, setPolygonHistory] = useState(() =>
+    createPolygonHistory(EMPTY_EDITOR_STATE)
+  );
   const [drawing, setDrawing] = useState(false);
   const [selection, setSelection] = useState<SelectionTarget>({ kind: 'none' });
   const [unitMode, setUnitMode] = useState<UnitMode>('metric');
   const [serviceFrequency, setServiceFrequency] = useState<ServiceFrequency>('weekly');
   const [submitting, setSubmitting] = useState(false);
-  const [statusMessage, setStatusMessage] = useState<{ type: 'error' | 'info'; text: string } | null>(null);
+  const [statusMessage, setStatusMessage] = useState<{
+    type: 'error' | 'info';
+    text: string;
+  } | null>(null);
 
   const editorState = polygonHistory.present;
   const polygons = editorState.polygons;
@@ -121,6 +142,7 @@ export const InstantQuotePage = () => {
 
     if (trimmed.length < 3 || !MAPBOX_TOKEN) {
       setSuggestions([]);
+      setHighlightedSuggestionIndex(-1);
       return;
     }
 
@@ -134,8 +156,12 @@ export const InstantQuotePage = () => {
           types: 'address,place'
         });
         setSuggestions(nextSuggestions);
+        setHighlightedSuggestionIndex((current) =>
+          nextSuggestions.length === 0 ? -1 : Math.min(current, nextSuggestions.length - 1)
+        );
       } catch {
         setSuggestions([]);
+        setHighlightedSuggestionIndex(-1);
       } finally {
         setLoadingSuggestions(false);
       }
@@ -145,12 +171,81 @@ export const InstantQuotePage = () => {
   }, [addressInput]);
 
   useEffect(() => {
+    if (suggestions.length === 0) {
+      setHighlightedSuggestionIndex(-1);
+      return;
+    }
+
+    setHighlightedSuggestionIndex((current) => {
+      if (current < 0) {
+        return current;
+      }
+      return Math.min(current, suggestions.length - 1);
+    });
+  }, [suggestions]);
+
+  useEffect(() => {
     if (currentStep !== 'map') {
       return;
     }
 
     mapStepRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
   }, [currentStep]);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') {
+      restoredFromStorageRef.current = true;
+      return;
+    }
+
+    const restoredState = loadQuoteDraftState(window.localStorage);
+    if (!restoredState) {
+      restoredFromStorageRef.current = true;
+      return;
+    }
+
+    setAddressInput(restoredState.addressInput);
+    setSelectedAddress(restoredState.selectedAddress);
+    setSelectedAddressKey(restoredState.selectedAddressKey);
+    setCenter(restoredState.center);
+    setCurrentStep(restoredState.currentStep);
+    setPolygonHistory(restoredState.polygonHistory);
+    setServiceFrequency(restoredState.serviceFrequency);
+    setUnitMode(restoredState.unitMode);
+    setDrawing(false);
+    setSelection({ kind: 'none' });
+    restoredFromStorageRef.current = true;
+    setStatusMessage({
+      type: 'info',
+      text: 'Restored your saved quote draft.'
+    });
+  }, []);
+
+  useEffect(() => {
+    if (!restoredFromStorageRef.current || typeof window === 'undefined') {
+      return;
+    }
+
+    saveQuoteDraftState(window.localStorage, {
+      addressInput,
+      selectedAddress,
+      selectedAddressKey,
+      center,
+      currentStep,
+      polygonHistory,
+      serviceFrequency,
+      unitMode
+    });
+  }, [
+    addressInput,
+    selectedAddress,
+    selectedAddressKey,
+    center,
+    currentStep,
+    polygonHistory,
+    serviceFrequency,
+    unitMode
+  ]);
 
   const setActivePolygon = (nextPolygonId: string | null) => {
     setPolygonHistory((current) => ({
@@ -177,6 +272,7 @@ export const InstantQuotePage = () => {
     setSelectedAddressKey(nextAddressKey);
     setCenter(suggestion.center);
     setSuggestions([]);
+    setHighlightedSuggestionIndex(-1);
     setStatusMessage(null);
 
     if (isDifferentAddress) {
@@ -285,6 +381,75 @@ export const InstantQuotePage = () => {
     setSelection({ kind: 'none' });
   };
 
+  const handleAddressInputKeyDown = (event: KeyboardEvent<HTMLInputElement>) => {
+    if (suggestions.length === 0) {
+      return;
+    }
+
+    if (event.key === 'ArrowDown') {
+      event.preventDefault();
+      setHighlightedSuggestionIndex((current) => Math.min(current + 1, suggestions.length - 1));
+      return;
+    }
+
+    if (event.key === 'ArrowUp') {
+      event.preventDefault();
+      setHighlightedSuggestionIndex((current) => Math.max(current - 1, -1));
+      return;
+    }
+
+    if (event.key === 'Escape') {
+      event.preventDefault();
+      setSuggestions([]);
+      setHighlightedSuggestionIndex(-1);
+      return;
+    }
+
+    if (
+      event.key === 'Enter' &&
+      highlightedSuggestionIndex >= 0 &&
+      suggestions[highlightedSuggestionIndex]
+    ) {
+      event.preventDefault();
+      selectSuggestion(suggestions[highlightedSuggestionIndex]);
+    }
+  };
+
+  const clearAllGeometry = () => {
+    setPolygonHistory(createPolygonHistory(EMPTY_EDITOR_STATE));
+    setSelection({ kind: 'none' });
+    setDrawing(false);
+    setStatusMessage({
+      type: 'info',
+      text: 'All mapped polygons were cleared.'
+    });
+  };
+
+  const resetQuoteDraft = () => {
+    setAddressInput('');
+    setSelectedAddress('');
+    setSelectedAddressKey(null);
+    setSuggestions([]);
+    setHighlightedSuggestionIndex(-1);
+    setCenter(DEFAULT_CENTER);
+    setCurrentStep('address');
+    setPolygonHistory(createPolygonHistory(EMPTY_EDITOR_STATE));
+    setDrawing(false);
+    setSelection({ kind: 'none' });
+    setUnitMode('metric');
+    setServiceFrequency('weekly');
+    polygonCounterRef.current = 0;
+
+    if (typeof window !== 'undefined') {
+      clearQuoteDraftState(window.localStorage);
+    }
+
+    setStatusMessage({
+      type: 'info',
+      text: 'Saved draft reset. You can start a new quote now.'
+    });
+  };
+
   const applyPolygonPointsEdit = (polygonId: string, nextPoints: LngLat[]) => {
     setPolygonHistory((current) => {
       const nextPolygons = current.present.polygons.map((polygon) =>
@@ -346,7 +511,9 @@ export const InstantQuotePage = () => {
 
     if (selection.kind === 'polygon') {
       setPolygonHistory((current) => {
-        const nextPolygons = current.present.polygons.filter((polygon) => polygon.id !== selection.polygonId);
+        const nextPolygons = current.present.polygons.filter(
+          (polygon) => polygon.id !== selection.polygonId
+        );
         const nextActivePolygonId = nextPolygons.some(
           (polygon) => polygon.id === current.present.activePolygonId
         )
@@ -387,7 +554,10 @@ export const InstantQuotePage = () => {
       return;
     }
 
-    if (selection.kind === 'vertex' && (selection.index < 0 || selection.index >= selectedPolygon.points.length)) {
+    if (
+      selection.kind === 'vertex' &&
+      (selection.index < 0 || selection.index >= selectedPolygon.points.length)
+    ) {
       setSelection({ kind: 'none' });
     }
   }, [polygons, selection]);
@@ -419,10 +589,19 @@ export const InstantQuotePage = () => {
             lat: center[1],
             lng: center[0]
           },
-        polygon: metrics.geometry,
-        metrics: {
-          areaM2: metrics.areaM2,
-          perimeterM: metrics.perimeterM
+          polygon: metrics.geometry,
+          polygonSource: {
+            schemaVersion: 1,
+            activePolygonId: editorState.activePolygonId,
+            polygons: editorState.polygons.map((polygonState) => ({
+              id: polygonState.id,
+              kind: polygonState.kind,
+              points: polygonState.points
+            }))
+          },
+          metrics: {
+            areaM2: metrics.areaM2,
+            perimeterM: metrics.perimeterM
           },
           plan: recommendedPlan,
           quoteTotal,
@@ -434,6 +613,10 @@ export const InstantQuotePage = () => {
         },
         createIdempotencyKey()
       );
+
+      if (typeof window !== 'undefined') {
+        clearQuoteDraftState(window.localStorage);
+      }
 
       navigate(response.nextStepUrl ?? `/quote-contact/${response.quoteId}`);
     } catch (error) {
@@ -447,16 +630,20 @@ export const InstantQuotePage = () => {
   };
 
   const areaValue =
-    unitMode === 'metric' ? `${formatNumber(metrics.areaM2)} m2` : `${formatNumber(toFt2(metrics.areaM2))} ft2`;
+    unitMode === 'metric'
+      ? `${formatNumber(metrics.areaM2)} m2`
+      : `${formatNumber(toFt2(metrics.areaM2))} ft2`;
   const perimeterValue =
-    unitMode === 'metric' ? `${formatNumber(metrics.perimeterM)} m` : `${formatNumber(toFt(metrics.perimeterM))} ft`;
+    unitMode === 'metric'
+      ? `${formatNumber(metrics.perimeterM)} m`
+      : `${formatNumber(toFt(metrics.perimeterM))} ft`;
 
   return (
     <div className="mx-auto w-full max-w-[1440px] px-4 py-12 md:px-8 md:py-16">
       <SectionTitle
         badge="Instant Quote"
         title="Map your property and generate a quote instantly"
-        description="No sign-up required."
+        description="No sign-up required to build your draft quote."
       />
 
       <div className="mt-8 grid gap-4 md:grid-cols-2">
@@ -469,7 +656,9 @@ export const InstantQuotePage = () => {
         >
           <p className="text-xs uppercase tracking-[0.14em] text-white/70">Step 1</p>
           <p className="mt-2 text-lg font-semibold text-white">Enter address</p>
-          <p className="mt-1 text-sm text-white/70">Select a property address to lock the map center.</p>
+          <p className="mt-1 text-sm text-white/70">
+            Select a property address to lock the map center.
+          </p>
         </Card>
         <Card
           className={`border transition-all ${
@@ -480,7 +669,9 @@ export const InstantQuotePage = () => {
         >
           <p className="text-xs uppercase tracking-[0.14em] text-white/70">Step 2</p>
           <p className="mt-2 text-lg font-semibold text-white">Map your lawn</p>
-          <p className="mt-1 text-sm text-white/70">Draw service polygons and obstacles, then request your quote.</p>
+          <p className="mt-1 text-sm text-white/70">
+            Draw service polygons and obstacles, then request your quote.
+          </p>
         </Card>
       </div>
 
@@ -499,21 +690,40 @@ export const InstantQuotePage = () => {
                     onChange={(event) => {
                       setAddressInput(event.target.value);
                       setSelectedAddress('');
+                      setSelectedAddressKey(null);
+                      setHighlightedSuggestionIndex(-1);
                     }}
-                    placeholder="Placeholder: 123 Future Lawn Ave, Smart City"
+                    onKeyDown={handleAddressInputKeyDown}
+                    placeholder="123 Greenway Blvd, Vaughan, ON"
                     className="w-full rounded-xl border border-white/20 bg-black/60 px-4 py-3 text-white placeholder:text-white/35 focus:border-brand focus:outline-none"
+                    aria-autocomplete="list"
+                    aria-expanded={suggestions.length > 0}
+                    aria-controls="address-suggestions"
                   />
                   {loadingSuggestions ? (
-                    <p className="absolute -bottom-6 left-0 text-xs text-white/60">Searching addresses...</p>
+                    <p className="absolute -bottom-6 left-0 text-xs text-white/60">
+                      Searching addresses...
+                    </p>
                   ) : null}
                   {suggestions.length > 0 ? (
-                    <div className="absolute left-0 top-full z-[9999] mt-2 w-full overflow-hidden rounded-xl border border-white/20 bg-black/95 shadow-soft">
-                      {suggestions.map((suggestion) => (
+                    <div
+                      id="address-suggestions"
+                      role="listbox"
+                      className="absolute left-0 top-full z-[9999] mt-2 w-full overflow-hidden rounded-xl border border-white/20 bg-black/95 shadow-soft"
+                    >
+                      {suggestions.map((suggestion, index) => (
                         <button
                           key={suggestion.id}
                           type="button"
                           onClick={() => selectSuggestion(suggestion)}
-                          className="block w-full border-b border-white/10 px-4 py-3 text-left text-sm text-white/85 transition-colors last:border-0 hover:bg-white/10"
+                          onMouseEnter={() => setHighlightedSuggestionIndex(index)}
+                          className={`block w-full border-b border-white/10 px-4 py-3 text-left text-sm transition-colors last:border-0 ${
+                            highlightedSuggestionIndex === index
+                              ? 'bg-white/15 text-white'
+                              : 'text-white/85 hover:bg-white/10'
+                          }`}
+                          role="option"
+                          aria-selected={highlightedSuggestionIndex === index}
                         >
                           {suggestion.place_name}
                         </button>
@@ -521,17 +731,35 @@ export const InstantQuotePage = () => {
                     </div>
                   ) : null}
                 </div>
-                <Button type="submit" disabled={!canContinueToMap} className="shrink-0 whitespace-nowrap px-5 py-3">
+                <Button
+                  type="submit"
+                  disabled={!canContinueToMap}
+                  className="shrink-0 whitespace-nowrap px-5 py-3"
+                >
                   Continue to Step 2
                 </Button>
               </div>
             </form>
 
             {statusMessage ? (
-              <p className={statusMessage.type === 'error' ? 'mt-4 text-sm text-red-300' : 'mt-4 text-sm text-white/75'}>
+              <p
+                className={
+                  statusMessage.type === 'error'
+                    ? 'mt-4 text-sm text-red-300'
+                    : 'mt-4 text-sm text-white/75'
+                }
+              >
                 {statusMessage.text}
               </p>
             ) : null}
+
+            <button
+              type="button"
+              onClick={resetQuoteDraft}
+              className="mt-4 inline-flex items-center text-xs font-semibold uppercase tracking-[0.12em] text-white/55 transition-colors hover:text-brand"
+            >
+              Reset Saved Draft
+            </button>
           </Card>
 
           {!MAPBOX_TOKEN ? (
@@ -546,7 +774,9 @@ export const InstantQuotePage = () => {
         <div ref={mapStepRef} className="mt-8 grid gap-6">
           <Card className="flex flex-col gap-4 bg-black/65 md:flex-row md:items-center md:justify-between">
             <div>
-              <p className="text-xs uppercase tracking-[0.14em] text-brand">Step 2: Map your lawn</p>
+              <p className="text-xs uppercase tracking-[0.14em] text-brand">
+                Step 2: Map your lawn
+              </p>
               <p className="mt-2 text-sm text-white/78">Address locked to map center:</p>
               <p className="mt-1 text-base text-white">{selectedAddress}</p>
             </div>
@@ -566,9 +796,9 @@ export const InstantQuotePage = () => {
               <div className="space-y-4">
                 <Card className="bg-black/45">
                   <p className="text-sm text-white/78">
-                    Click to add points around the area you want serviced. Drag any vertex at any time to refine the
-                    boundary, then use on-map tools to add service polygons, add obstacles, undo, redo, or delete
-                    selected geometry.
+                    Click to add points around the area you want serviced. Drag any vertex at any
+                    time to refine the boundary, then use on-map tools to add service polygons, add
+                    obstacles, undo, redo, or delete selected geometry.
                   </p>
 
                   {metrics.selfIntersecting ? (
@@ -644,6 +874,13 @@ export const InstantQuotePage = () => {
                       >
                         Add Obstacle
                       </Button>
+                      <Button
+                        variant="secondary"
+                        onClick={clearAllGeometry}
+                        disabled={polygons.length === 0}
+                      >
+                        Clear All
+                      </Button>
                       <Button variant="secondary" onClick={handleUndo} disabled={!canUndo}>
                         Undo
                       </Button>
@@ -689,7 +926,9 @@ export const InstantQuotePage = () => {
                     type="button"
                     onClick={() => setUnitMode('imperial')}
                     className={`px-4 py-2 text-xs font-semibold uppercase tracking-[0.12em] transition-colors ${
-                      unitMode === 'imperial' ? 'bg-brand text-black' : 'bg-transparent text-white/75'
+                      unitMode === 'imperial'
+                        ? 'bg-brand text-black'
+                        : 'bg-transparent text-white/75'
                     }`}
                   >
                     Imperial
@@ -712,13 +951,17 @@ export const InstantQuotePage = () => {
                 </div>
 
                 <div className="mt-5">
-                  <p className="text-xs uppercase tracking-[0.12em] text-white/65">Service frequency</p>
+                  <p className="text-xs uppercase tracking-[0.12em] text-white/65">
+                    Service frequency
+                  </p>
                   <div className="mt-2 inline-flex overflow-hidden rounded-full border border-white/20">
                     <button
                       type="button"
                       onClick={() => setServiceFrequency('weekly')}
                       className={`px-4 py-2 text-xs font-semibold uppercase tracking-[0.12em] transition-colors ${
-                        serviceFrequency === 'weekly' ? 'bg-brand text-black' : 'bg-transparent text-white/75'
+                        serviceFrequency === 'weekly'
+                          ? 'bg-brand text-black'
+                          : 'bg-transparent text-white/75'
                       }`}
                     >
                       Weekly
@@ -727,7 +970,9 @@ export const InstantQuotePage = () => {
                       type="button"
                       onClick={() => setServiceFrequency('biweekly')}
                       className={`px-4 py-2 text-xs font-semibold uppercase tracking-[0.12em] transition-colors ${
-                        serviceFrequency === 'biweekly' ? 'bg-brand text-black' : 'bg-transparent text-white/75'
+                        serviceFrequency === 'biweekly'
+                          ? 'bg-brand text-black'
+                          : 'bg-transparent text-white/75'
                       }`}
                     >
                       Bi-weekly
@@ -759,14 +1004,37 @@ export const InstantQuotePage = () => {
                 <div className="mt-6 space-y-3 text-sm text-white/72">
                   <p>Address: {selectedAddress}</p>
                   <p>Cadence: {serviceFrequency === 'weekly' ? 'Weekly' : 'Bi-weekly'}</p>
-                  <p>Service polygons: {metrics.validServicePolygonCount} valid / {servicePolygons.length} total</p>
-                  <p>Obstacle polygons: {metrics.validObstaclePolygonCount} valid / {obstaclePolygons.length} total</p>
+                  <p>
+                    Service polygons: {metrics.validServicePolygonCount} valid /{' '}
+                    {servicePolygons.length} total
+                  </p>
+                  <p>
+                    Obstacle polygons: {metrics.validObstaclePolygonCount} valid /{' '}
+                    {obstaclePolygons.length} total
+                  </p>
                   <p>Active polygon: {activePolygonSummary}</p>
                   <p>Submission status: {submissionStatus}</p>
                 </div>
 
+                <p className="mt-4 text-xs text-white/55">
+                  Draft progress is auto-saved in this browser.
+                </p>
+                <button
+                  type="button"
+                  onClick={resetQuoteDraft}
+                  className="mt-2 inline-flex items-center text-xs font-semibold uppercase tracking-[0.12em] text-white/55 transition-colors hover:text-brand"
+                >
+                  Reset Saved Draft
+                </button>
+
                 {statusMessage ? (
-                  <p className={statusMessage.type === 'error' ? 'mt-4 text-sm text-red-300' : 'mt-4 text-sm text-white/75'}>
+                  <p
+                    className={
+                      statusMessage.type === 'error'
+                        ? 'mt-4 text-sm text-red-300'
+                        : 'mt-4 text-sm text-white/75'
+                    }
+                  >
                     {statusMessage.text}
                   </p>
                 ) : null}

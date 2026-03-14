@@ -1,5 +1,4 @@
 import { Card } from '../components/ui/Card';
-import { PlaceholderImage } from '../components/ui/PlaceholderImage';
 import { SectionTitle } from '../components/ui/SectionTitle';
 
 const team = [
@@ -13,27 +12,45 @@ export const AboutPage = () => (
     <SectionTitle
       badge="About"
       title="Built to modernize residential landscaping"
-      description="Placeholder story content for Autoscape's mission and values."
+      description="Autoscape combines autonomous operations and practical field expertise to deliver cleaner, more predictable lawn care."
     />
 
     <div className="mt-10 grid gap-8 md:grid-cols-[1.2fr_0.8fr]">
       <Card className="bg-black/45">
         <h3 className="text-xl font-semibold text-white">Our Story</h3>
         <p className="mt-4 text-sm leading-relaxed text-white/72">
-          Placeholder: Autoscape started as a pilot program to pair autonomous navigation with predictable lawn quality. The mission is to replace inconsistent manual scheduling with data-backed, repeatable maintenance.
+          Autoscape began as a field pilot focused on one question: can residential lawn care be
+          measured and delivered with the same consistency as a modern logistics system?
         </p>
         <p className="mt-4 text-sm leading-relaxed text-white/72">
-          Placeholder: every route is designed around plant health, neighborhood sound standards, and a clean, premium visual finish.
+          Today, our intake flow starts with service coverage, then uses geodesic-safe boundary
+          mapping to generate deterministic quote data. Each request moves into an operations
+          workflow designed for accountability and long-term quality.
         </p>
       </Card>
-      <PlaceholderImage label="Placeholder: Team calibrating autonomous mower" heightClassName="h-full min-h-64" />
+
+      <Card className="flex h-full min-h-64 flex-col justify-between border-brand/35 bg-brand/10">
+        <div>
+          <p className="text-xs font-semibold uppercase tracking-[0.14em] text-brand">
+            Operating Principles
+          </p>
+          <ul className="mt-4 list-disc space-y-3 pl-5 text-sm text-white/80">
+            <li>Geometry correctness before pricing.</li>
+            <li>Low-noise electric operations where possible.</li>
+            <li>Transparent quote IDs and follow-through after submission.</li>
+          </ul>
+        </div>
+        <p className="mt-6 text-xs text-white/60">
+          Serving modern residential properties in the Greater Toronto Area.
+        </p>
+      </Card>
     </div>
 
     <div className="mt-14">
       <SectionTitle
         badge="Team"
         title="Engineers and landscape operators"
-        description="Placeholder profiles for final production bios."
+        description="A blended team of robotics, operations, and field-maintenance specialists."
       />
 
       <div className="mt-8 grid gap-5 md:grid-cols-3">

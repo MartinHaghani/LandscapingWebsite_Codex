@@ -1,3 +1,4 @@
+import { useAuth } from '@clerk/clerk-react';
 import { useEffect, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { Card } from '../components/ui/Card';
@@ -28,13 +29,24 @@ interface QuoteResult {
 
 export const QuoteConfirmationPage = () => {
   const { quoteId } = useParams();
+  const { isLoaded, isSignedIn, getToken } = useAuth();
   const [quote, setQuote] = useState<QuoteResult | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
+    if (!isLoaded) {
+      return;
+    }
+
     if (!quoteId) {
       setError('Missing quote ID.');
+      setLoading(false);
+      return;
+    }
+
+    if (!isSignedIn) {
+      setError('Sign in to view this quote.');
       setLoading(false);
       return;
     }
@@ -44,7 +56,11 @@ export const QuoteConfirmationPage = () => {
       setError(null);
 
       try {
-        const response = await api.getQuote(quoteId);
+        const token = await getToken();
+        if (!token) {
+          throw new ApiError('Authentication is required.', 401);
+        }
+        const response = await api.getQuote(quoteId, token);
         setQuote(response);
       } catch (err) {
         setError(err instanceof ApiError ? err.message : 'Unable to load quote.');
@@ -54,7 +70,7 @@ export const QuoteConfirmationPage = () => {
     };
 
     void load();
-  }, [quoteId]);
+  }, [quoteId, isLoaded, isSignedIn, getToken]);
 
   return (
     <div className="mx-auto flex w-full max-w-4xl flex-col px-4 py-16 md:px-8 md:py-24">

@@ -1,13 +1,12 @@
+import { useAuth, useUser } from '@clerk/clerk-react';
 import { useEffect, useMemo, useState, type FormEvent } from 'react';
-import { Link, Navigate, useNavigate, useParams } from 'react-router-dom';
+import { Link, Navigate, useLocation, useNavigate, useParams } from 'react-router-dom';
 import { Button } from '../components/ui/Button';
 import { Card } from '../components/ui/Card';
 import { api, ApiError, createIdempotencyKey } from '../lib/api';
 import { getAttributionSnapshot } from '../lib/attribution';
 
 const defaultForm = {
-  name: '',
-  email: '',
   phone: '',
   addressText: '',
   message: ''
@@ -15,7 +14,10 @@ const defaultForm = {
 
 export const QuoteContactPage = () => {
   const { quoteId } = useParams();
+  const location = useLocation();
   const navigate = useNavigate();
+  const { isLoaded, isSignedIn, getToken } = useAuth();
+  const { user } = useUser();
   const [form, setForm] = useState(defaultForm);
   const [loadingQuote, setLoadingQuote] = useState(true);
   const [submitting, setSubmitting] = useState(false);
@@ -35,27 +37,33 @@ export const QuoteContactPage = () => {
   const [error, setError] = useState<string | null>(null);
 
   const canSubmit = useMemo(
-    () =>
-      form.name.trim().length >= 2 &&
-      form.email.trim().includes('@') &&
-      form.phone.trim().length >= 7 &&
-      !submitting,
-    [form, submitting]
+    () => form.phone.trim().length >= 7 && !submitting,
+    [form.phone, submitting]
   );
 
   useEffect(() => {
-    if (!quoteId) {
+    if (!quoteId || !isLoaded) {
+      return;
+    }
+
+    if (!isSignedIn) {
+      setLoadingQuote(false);
       return;
     }
 
     let mounted = true;
-
     const loadQuote = async () => {
       setLoadingQuote(true);
       setError(null);
 
       try {
-        const result = await api.getQuote(quoteId);
+        const token = await getToken();
+        if (!token) {
+          throw new ApiError('Authentication is required.', 401);
+        }
+
+        await api.claimQuote(quoteId, token);
+        const result = await api.getQuote(quoteId, token);
         if (!mounted) {
           return;
         }
@@ -96,7 +104,7 @@ export const QuoteContactPage = () => {
     return () => {
       mounted = false;
     };
-  }, [quoteId]);
+  }, [quoteId, isLoaded, isSignedIn, getToken]);
 
   if (!quoteId) {
     return <Navigate to="/instant-quote" replace />;
@@ -113,17 +121,21 @@ export const QuoteContactPage = () => {
     setError(null);
 
     try {
-      await api.submitQuoteContact(
+      const token = await getToken();
+      if (!token) {
+        throw new ApiError('Authentication is required.', 401);
+      }
+
+      await api.submitClaimedQuoteContact(
         quoteId,
         {
-          name: form.name.trim(),
-          email: form.email.trim(),
           phone: form.phone.trim(),
           addressText: form.addressText.trim() || undefined,
           message: form.message.trim() || undefined,
           attribution: getAttributionSnapshot()
         },
-        createIdempotencyKey()
+        createIdempotencyKey(),
+        token
       );
 
       navigate(`/quote-confirmation/${quoteId}`);
@@ -134,6 +146,33 @@ export const QuoteContactPage = () => {
     }
   };
 
+  if (isLoaded && !isSignedIn) {
+    const redirectPath = encodeURIComponent(location.pathname + location.search);
+    return (
+      <div className="mx-auto w-full max-w-4xl px-4 py-16 md:px-8 md:py-20">
+        <Card className="space-y-6 bg-black/70 p-7 md:p-10">
+          <div>
+            <p className="text-xs uppercase tracking-[0.15em] text-brand">Account Required</p>
+            <h1 className="mt-3 text-3xl font-semibold text-white md:text-4xl">
+              Sign in or create an account to finalize your quote
+            </h1>
+            <p className="mt-3 text-sm text-white/75">
+              Your draft quote is saved. Continue after signing in.
+            </p>
+          </div>
+          <div className="flex flex-wrap gap-3">
+            <Link to={`/sign-in?redirect_url=${redirectPath}`}>
+              <Button>Sign In</Button>
+            </Link>
+            <Link to={`/sign-up?redirect_url=${redirectPath}`}>
+              <Button variant="secondary">Create Account</Button>
+            </Link>
+          </div>
+        </Card>
+      </div>
+    );
+  }
+
   return (
     <div className="mx-auto w-full max-w-5xl px-4 py-16 md:px-8 md:py-20">
       <Card className="space-y-6 bg-black/70 p-7 md:p-10">
@@ -141,7 +180,10 @@ export const QuoteContactPage = () => {
           <p className="text-xs uppercase tracking-[0.15em] text-brand">Quote Contact</p>
           <h1 className="mt-3 text-3xl font-semibold text-white md:text-4xl">Finalize your instant quote request</h1>
           <p className="mt-3 text-sm text-white/75">
-            One final step. Add your contact details so our team can verify and manage your quote.
+            One final step. We use your account profile for name and email.
+          </p>
+          <p className="mt-2 text-xs text-white/60">
+            Signed in as {user?.primaryEmailAddress?.emailAddress ?? 'your account'}
           </p>
         </div>
 
@@ -177,37 +219,6 @@ export const QuoteContactPage = () => {
 
         {quote && quote.contactPending ? (
           <form onSubmit={handleSubmit} className="space-y-4">
-            <div className="grid gap-4 md:grid-cols-2">
-              <div>
-                <label htmlFor="quote-name" className="mb-2 block text-sm text-white/80">
-                  Full name
-                </label>
-                <input
-                  id="quote-name"
-                  required
-                  value={form.name}
-                  onChange={(event) => setForm((current) => ({ ...current, name: event.target.value }))}
-                  className="w-full rounded-xl border border-white/20 bg-black/50 px-4 py-3 text-white placeholder:text-white/35 focus:border-brand focus:outline-none"
-                  placeholder="Jane Doe"
-                />
-              </div>
-
-              <div>
-                <label htmlFor="quote-email" className="mb-2 block text-sm text-white/80">
-                  Email
-                </label>
-                <input
-                  id="quote-email"
-                  type="email"
-                  required
-                  value={form.email}
-                  onChange={(event) => setForm((current) => ({ ...current, email: event.target.value }))}
-                  className="w-full rounded-xl border border-white/20 bg-black/50 px-4 py-3 text-white placeholder:text-white/35 focus:border-brand focus:outline-none"
-                  placeholder="jane@example.com"
-                />
-              </div>
-            </div>
-
             <div className="grid gap-4 md:grid-cols-2">
               <div>
                 <label htmlFor="quote-phone" className="mb-2 block text-sm text-white/80">
@@ -258,19 +269,13 @@ export const QuoteContactPage = () => {
                 {submitting ? 'Finalizing...' : 'Finalize Quote Request'}
               </Button>
               <Link to="/instant-quote">
-                <Button variant="secondary" type="button">
-                  Back to Quote Tool
+                <Button type="button" variant="secondary">
+                  Back to quote builder
                 </Button>
               </Link>
             </div>
           </form>
         ) : null}
-
-        {!loadingQuote && !quote && !error ? (
-          <p className="text-sm text-white/70">Quote not found. Please create a new quote draft.</p>
-        ) : null}
-
-        {error && !quote ? <p className="text-sm text-red-300">{error}</p> : null}
       </Card>
     </div>
   );

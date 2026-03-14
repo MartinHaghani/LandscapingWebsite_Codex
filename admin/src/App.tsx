@@ -1,5 +1,8 @@
+import { SignIn, UserButton, useAuth, useUser } from '@clerk/clerk-react';
 import { useEffect, useMemo, useState, type ReactNode } from 'react';
+import { useLocation, useNavigate } from 'react-router-dom';
 import { RequestsMap } from './components/RequestsMap';
+import { QuoteEditorPage } from './pages/QuoteEditorPage';
 import {
   adminApi,
   type AdminAttributionSummaryRow,
@@ -10,15 +13,13 @@ import {
   type AdminRequestItem,
   type AdminRequestMapResponse,
   type AdminRole,
-  type AdminSession,
+  type AuthTokenProvider,
   type AuditListParams,
   type ContactListParams,
   type LeadListParams,
   type QuoteListParams,
   type RequestListParams
 } from './lib/api';
-
-const SESSION_KEY = 'autoscape_admin_session_v1';
 
 type ThemeMode = 'system' | 'light' | 'dark';
 type TabKey = 'quotes' | 'requests' | 'contacts' | 'leads' | 'attribution' | 'audit';
@@ -32,36 +33,6 @@ const tabs: Array<{ key: TabKey; label: string }> = [
   { key: 'audit', label: 'Audit' }
 ];
 
-const readStoredSession = (): AdminSession | null => {
-  if (typeof window === 'undefined') {
-    return null;
-  }
-
-  try {
-    const raw = window.localStorage.getItem(SESSION_KEY);
-    if (!raw) {
-      return null;
-    }
-
-    return JSON.parse(raw) as AdminSession;
-  } catch {
-    return null;
-  }
-};
-
-const storeSession = (session: AdminSession | null) => {
-  if (typeof window === 'undefined') {
-    return;
-  }
-
-  if (!session) {
-    window.localStorage.removeItem(SESSION_KEY);
-    return;
-  }
-
-  window.localStorage.setItem(SESSION_KEY, JSON.stringify(session));
-};
-
 const formatDate = (value: string | null) => (value ? new Date(value).toLocaleString() : 'N/A');
 
 const toCurrency = (value: number) =>
@@ -70,6 +41,38 @@ const toCurrency = (value: number) =>
     currency: 'CAD',
     maximumFractionDigits: 2
   }).format(value);
+
+const quoteStatusLabel = (status: string, customerStatus: string) => {
+  if (status === 'in_review' && customerStatus === 'pending') {
+    return 'In Review (Pending)';
+  }
+
+  if (status === 'verified' && customerStatus === 'awaiting_payment') {
+    return 'Verified (Awaiting Payment)';
+  }
+
+  if (status === 'in_review') {
+    return 'In Review';
+  }
+
+  if (status === 'verified') {
+    return 'Verified';
+  }
+
+  if (status === 'submitted') {
+    return 'Submitted';
+  }
+
+  if (status === 'draft') {
+    return 'Draft';
+  }
+
+  if (status === 'rejected') {
+    return 'Rejected';
+  }
+
+  return status;
+};
 
 const makeCsvDownload = (filename: string, content: string) => {
   const blob = new Blob([content], { type: 'text/csv;charset=utf-8;' });
@@ -152,58 +155,22 @@ const Toolbar = ({
   </section>
 );
 
-const LoginPanel = ({ onLogin }: { onLogin: (session: AdminSession) => void }) => {
-  const [role, setRole] = useState<AdminRole>('OWNER');
-  const [userId, setUserId] = useState('admin-owner');
-  const [token, setToken] = useState(import.meta.env.VITE_ADMIN_API_TOKEN ?? '');
-
-  return (
-    <main className="login-shell">
-      <section className="login-card">
-        <h1>Autoscape Admin</h1>
-        <p>Use your assigned role to access quotes, requests, contacts, leads, and audit trails.</p>
-
-        <label>
-          Role
-          <select value={role} onChange={(event) => setRole(event.target.value as AdminRole)}>
-            <option value="OWNER">OWNER</option>
-            <option value="ADMIN">ADMIN</option>
-            <option value="REVIEWER">REVIEWER</option>
-            <option value="MARKETING">MARKETING</option>
-          </select>
-        </label>
-
-        <label>
-          User ID
-          <input value={userId} onChange={(event) => setUserId(event.target.value)} placeholder="admin-owner" />
-        </label>
-
-        <label>
-          Admin API token (optional in local dev)
-          <input
-            type="password"
-            value={token}
-            onChange={(event) => setToken(event.target.value)}
-            placeholder="Token"
-          />
-        </label>
-
-        <button
-          type="button"
-          className="button primary"
-          onClick={() =>
-            onLogin({ role, userId: userId.trim() || `admin-${role.toLowerCase()}`, token: token.trim() || undefined })
-          }
-        >
-          Sign in
-        </button>
-      </section>
-    </main>
-  );
-};
 
 const App = () => {
-  const [session, setSession] = useState<AdminSession | null>(() => readStoredSession());
+  const { isLoaded, isSignedIn, getToken, signOut } = useAuth();
+  const { user } = useUser();
+  const location = useLocation();
+  const navigate = useNavigate();
+  const session = useMemo<AuthTokenProvider | null>(
+    () =>
+      isSignedIn
+        ? async () => {
+            const token = await getToken();
+            return token;
+          }
+        : null,
+    [isSignedIn, getToken]
+  );
   const [tab, setTab] = useState<TabKey>('quotes');
   const [themeMode, setThemeMode] = useState<ThemeMode>('system');
 
@@ -286,17 +253,16 @@ const App = () => {
   const [attributionSearch, setAttributionSearch] = useState('');
   const [attributionSortBy, setAttributionSortBy] = useState<'count' | 'source' | 'campaign'>('count');
   const [attributionSortDir, setAttributionSortDir] = useState<'asc' | 'desc'>('desc');
-
-  useEffect(() => {
-    storeSession(session);
-  }, [session]);
+  const quoteEditorMatch = location.pathname.match(/^\/quotes\/([^/]+)\/edit$/);
+  const editorQuoteId = quoteEditorMatch ? decodeURIComponent(quoteEditorMatch[1]) : null;
+  const activeTabForUi: TabKey = editorQuoteId ? 'quotes' : tab;
 
   useEffect(() => {
     const root = document.documentElement;
     root.dataset.theme = themeMode;
   }, [themeMode]);
 
-  const loadHealth = async (activeSession: AdminSession) => {
+  const loadHealth = async (activeSession: AuthTokenProvider) => {
     try {
       const response = await adminApi.getHealth(activeSession);
       setHealth({ role: response.role, capabilities: response.capabilities });
@@ -306,7 +272,7 @@ const App = () => {
     }
   };
 
-  const loadQuotes = async (activeSession: AdminSession, options?: { append?: boolean; cursor?: string }) => {
+  const loadQuotes = async (activeSession: AuthTokenProvider, options?: { append?: boolean; cursor?: string }) => {
     setLoadingQuotes(true);
     setError(null);
 
@@ -328,7 +294,7 @@ const App = () => {
     }
   };
 
-  const loadRequests = async (activeSession: AdminSession, options?: { append?: boolean; cursor?: string }) => {
+  const loadRequests = async (activeSession: AuthTokenProvider, options?: { append?: boolean; cursor?: string }) => {
     setLoadingRequests(true);
     setError(null);
 
@@ -361,7 +327,7 @@ const App = () => {
     }
   };
 
-  const loadContacts = async (activeSession: AdminSession, options?: { append?: boolean; cursor?: string }) => {
+  const loadContacts = async (activeSession: AuthTokenProvider, options?: { append?: boolean; cursor?: string }) => {
     setLoadingContacts(true);
     setError(null);
 
@@ -382,7 +348,7 @@ const App = () => {
     }
   };
 
-  const loadLeads = async (activeSession: AdminSession, options?: { append?: boolean; cursor?: string }) => {
+  const loadLeads = async (activeSession: AuthTokenProvider, options?: { append?: boolean; cursor?: string }) => {
     setLoadingLeads(true);
     setError(null);
 
@@ -403,7 +369,7 @@ const App = () => {
     }
   };
 
-  const loadAudit = async (activeSession: AdminSession, options?: { append?: boolean; cursor?: string }) => {
+  const loadAudit = async (activeSession: AuthTokenProvider, options?: { append?: boolean; cursor?: string }) => {
     setLoadingAudit(true);
     setError(null);
 
@@ -425,7 +391,7 @@ const App = () => {
     }
   };
 
-  const loadAttribution = async (activeSession: AdminSession) => {
+  const loadAttribution = async (activeSession: AuthTokenProvider) => {
     setLoadingAttribution(true);
     setError(null);
 
@@ -439,7 +405,7 @@ const App = () => {
     }
   };
 
-  const loadTab = async (activeSession: AdminSession, activeTab: TabKey) => {
+  const loadTab = async (activeSession: AuthTokenProvider, activeTab: TabKey) => {
     if (activeTab === 'quotes') {
       await loadQuotes(activeSession);
       return;
@@ -477,18 +443,22 @@ const App = () => {
     }
 
     void loadHealth(session);
-    void loadTab(session, tab);
-  }, [session, tab]);
+    void loadTab(session, activeTabForUi);
+  }, [session, activeTabForUi]);
 
   const stats = useMemo(() => {
-    const submitted = quotes.filter((quote) => quote.status === 'submitted').length;
+    const pending = quotes.filter(
+      (quote) => quote.status === 'in_review' && quote.customerStatus === 'pending'
+    ).length;
     const inReview = quotes.filter((quote) => quote.status === 'in_review').length;
-    const verified = quotes.filter((quote) => quote.status === 'verified').length;
+    const verifiedAwaitingPayment = quotes.filter(
+      (quote) => quote.status === 'verified' && quote.customerStatus === 'awaiting_payment'
+    ).length;
 
     return {
-      submitted,
+      pending,
       inReview,
-      verified,
+      verifiedAwaitingPayment,
       requestsOpen: requests.filter((request) => request.status === 'open').length
     };
   }, [quotes, requests]);
@@ -517,8 +487,27 @@ const App = () => {
     });
   }, [attributionSearch, attributionSortBy, attributionSortDir, attributionSummary]);
 
+  if (!isLoaded) {
+    return (
+      <main className="login-shell">
+        <section className="login-card">
+          <h1>Autoscape Admin</h1>
+          <p>Loading authentication...</p>
+        </section>
+      </main>
+    );
+  }
+
   if (!session) {
-    return <LoginPanel onLogin={setSession} />;
+    return (
+      <main className="login-shell">
+        <section className="login-card">
+          <h1>Autoscape Admin</h1>
+          <p>Sign in with your admin account.</p>
+          <SignIn routing="virtual" forceRedirectUrl="/" fallbackRedirectUrl="/" />
+        </section>
+      </main>
+    );
   }
 
   return (
@@ -527,7 +516,7 @@ const App = () => {
         <div className="sidebar-brand">
           <h1>Autoscape Admin</h1>
           <p>
-            {session.userId} ({session.role})
+            {user?.id ?? 'unknown-user'} ({health?.role ?? 'loading role...'})
           </p>
         </div>
 
@@ -536,8 +525,11 @@ const App = () => {
             <button
               key={item.key}
               type="button"
-              onClick={() => setTab(item.key)}
-              className={`sidebar-link ${tab === item.key ? 'active' : ''}`}
+              onClick={() => {
+                setTab(item.key);
+                navigate('/');
+              }}
+              className={`sidebar-link ${activeTabForUi === item.key ? 'active' : ''}`}
             >
               {item.label}
             </button>
@@ -553,7 +545,7 @@ const App = () => {
       <section className="main-panel">
         <header className="topbar">
           <div>
-            <h2>{tabs.find((item) => item.key === tab)?.label}</h2>
+            <h2>{editorQuoteId ? 'Quote Editor' : tabs.find((item) => item.key === activeTabForUi)?.label}</h2>
             <p className="hint">
               PII: {health?.capabilities.viewPiiFull ? 'full' : 'masked'} | Attribution:{' '}
               {health?.capabilities.viewAttribution ? 'enabled' : 'disabled'}
@@ -579,12 +571,16 @@ const App = () => {
             >
               Export Quotes CSV
             </button>
+            <div className="button">
+              <UserButton afterSignOutUrl="/" />
+            </div>
             <button
               type="button"
               className="button"
-              onClick={() => {
-                setSession(null);
+              onClick={async () => {
+                await signOut({ redirectUrl: '/' });
                 setTab('quotes');
+                navigate('/');
               }}
             >
               Sign out
@@ -593,15 +589,24 @@ const App = () => {
         </header>
 
         <section className="metrics-grid">
-          <MetricCard label="Submitted" value={stats.submitted} />
+          <MetricCard label="Pending" value={stats.pending} />
           <MetricCard label="In Review" value={stats.inReview} />
-          <MetricCard label="Verified" value={stats.verified} />
+          <MetricCard label="Verified (Awaiting Payment)" value={stats.verifiedAwaitingPayment} />
           <MetricCard label="Open Requests" value={stats.requestsOpen} />
         </section>
 
         {error ? <p className="error-banner">{error}</p> : null}
 
-        {tab === 'quotes' ? (
+        {editorQuoteId ? (
+          <QuoteEditorPage
+            getToken={session}
+            quoteId={editorQuoteId}
+            onBack={() => {
+              setTab('quotes');
+              navigate('/');
+            }}
+          />
+        ) : tab === 'quotes' ? (
           <section className="panel">
             <Toolbar
               search={quoteFilters.q ?? ''}
@@ -700,9 +705,9 @@ const App = () => {
                     <tr key={quote.quoteId}>
                       <td>{quote.quoteId}</td>
                       <td>
-                        {quote.status}
+                        {quoteStatusLabel(quote.status, quote.customerStatus)}
                         <br />
-                        <small>{quote.customerStatus}</small>
+                        <small>{quote.status} / {quote.customerStatus}</small>
                       </td>
                       <td>
                         <div>{quote.lead.name ?? 'N/A'}</div>
@@ -725,69 +730,12 @@ const App = () => {
                           <button
                             type="button"
                             className="button"
-                            disabled={quote.status !== 'submitted'}
-                            onClick={async () => {
-                              try {
-                                await adminApi.updateQuoteStatus(session, quote.quoteId, 'in_review');
-                                await loadQuotes(session);
-                              } catch (err) {
-                                setError(err instanceof Error ? err.message : 'Status update failed.');
-                              }
+                            disabled={!(quote.status === 'in_review' || quote.status === 'submitted')}
+                            onClick={() => {
+                              navigate(`/quotes/${encodeURIComponent(quote.quoteId)}/edit`);
                             }}
                           >
-                            Move to In Review
-                          </button>
-
-                          <button
-                            type="button"
-                            className="button"
-                            disabled={quote.status !== 'in_review'}
-                            onClick={async () => {
-                              try {
-                                await adminApi.updateQuoteStatus(session, quote.quoteId, 'verified');
-                                await loadQuotes(session);
-                              } catch (err) {
-                                setError(err instanceof Error ? err.message : 'Status update failed.');
-                              }
-                            }}
-                          >
-                            Verify
-                          </button>
-
-                          <button
-                            type="button"
-                            className="button"
-                            disabled={quote.status !== 'in_review'}
-                            onClick={async () => {
-                              const totalInput = window.prompt(
-                                'Enter revised per-session total (CAD):',
-                                String(quote.perSessionTotal)
-                              );
-                              if (!totalInput) {
-                                return;
-                              }
-
-                              const perSessionTotal = Number(totalInput);
-                              if (!Number.isFinite(perSessionTotal) || perSessionTotal < 0) {
-                                setError('Per-session total must be a valid number.');
-                                return;
-                              }
-
-                              const reason = window.prompt('Optional revision reason:', '') ?? undefined;
-
-                              try {
-                                await adminApi.reviseQuote(session, quote.quoteId, {
-                                  perSessionTotal,
-                                  overrideAmount: Math.max(0, quote.perSessionTotal - perSessionTotal),
-                                  overrideReason: reason
-                                });
-                                await loadQuotes(session);
-                              } catch (err) {
-                                setError(err instanceof Error ? err.message : 'Revision failed.');
-                              }
-                            }}
-                          >
-                            Revise
+                            Edit
                           </button>
 
                           <button

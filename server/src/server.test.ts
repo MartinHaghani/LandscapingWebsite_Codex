@@ -1,7 +1,9 @@
 import assert from 'node:assert/strict';
 import { afterEach, describe, it } from 'node:test';
 import type { AddressInfo } from 'node:net';
+import type http from 'node:http';
 import { createServer } from './server.js';
+import type { AdminIdentity, CustomerIdentity } from './lib/adminAuth.js';
 import type { BaseStationConfig } from './lib/serviceAreaConfig.js';
 
 const stations: BaseStationConfig[] = [
@@ -16,12 +18,86 @@ const stations: BaseStationConfig[] = [
 
 const startedServers: Array<ReturnType<typeof createServer>['server']> = [];
 
+const parseToken = (req: http.IncomingMessage) => {
+  const header = req.headers.authorization;
+  if (!header || !header.startsWith('Bearer ')) {
+    return null;
+  }
+
+  const token = header.slice('Bearer '.length).trim();
+  return token.length > 0 ? token : null;
+};
+
+const customerIdentityFromToken = (token: string): CustomerIdentity | null => {
+  if (token.startsWith('customer-')) {
+    const userId = token;
+    return {
+      userId,
+      email: `${userId}@example.com`,
+      name: userId.replace('customer-', 'Customer ')
+    };
+  }
+
+  if (token.startsWith('admin-')) {
+    return {
+      userId: token,
+      email: `${token}@example.com`,
+      name: token
+    };
+  }
+
+  return null;
+};
+
+const adminIdentityFromToken = (token: string): AdminIdentity | null => {
+  if (token === 'admin-owner') {
+    return { userId: token, role: 'OWNER', orgId: 'org_test_admin' };
+  }
+  if (token === 'admin-admin') {
+    return { userId: token, role: 'ADMIN', orgId: 'org_test_admin' };
+  }
+  if (token === 'admin-reviewer') {
+    return { userId: token, role: 'REVIEWER', orgId: 'org_test_admin' };
+  }
+  if (token === 'admin-marketing') {
+    return { userId: token, role: 'MARKETING', orgId: 'org_test_admin' };
+  }
+
+  return null;
+};
+
 const startServer = async () => {
   const started = createServer({
     port: 0,
     baseStations: stations,
     servedRegions: ['Dallas Test Region'],
-    nowMs: () => Date.UTC(2026, 2, 3, 12, 0, 0)
+    nowMs: () => Date.UTC(2026, 2, 3, 12, 0, 0),
+    authResolvers: {
+      resolveCustomerIdentity: async (req) => {
+        const token = parseToken(req);
+        if (!token) {
+          return null;
+        }
+        const identity = customerIdentityFromToken(token);
+        if (!identity) {
+          throw new Error('AUTH_REQUIRED');
+        }
+
+        return identity;
+      },
+      resolveAdminIdentity: async (req) => {
+        const token = parseToken(req);
+        if (!token) {
+          return null;
+        }
+        const identity = adminIdentityFromToken(token);
+        if (!identity) {
+          throw new Error('AUTH_FORBIDDEN');
+        }
+
+        return identity;
+      }
+    }
   });
 
   await new Promise<void>((resolve) => {
@@ -198,15 +274,22 @@ describe('quote draft + contact finalize flow', () => {
 
     assert.equal(conflictDraft.status, 409);
 
+    const claimResponse = await fetch(`${baseUrl}/api/quote/${firstDraftBody.quoteId}/claim`, {
+      method: 'POST',
+      headers: {
+        Authorization: 'Bearer customer-martin'
+      }
+    });
+    assert.equal(claimResponse.status, 200);
+
     const finalizeResponse = await fetch(`${baseUrl}/api/quote/${firstDraftBody.quoteId}/contact`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'Idempotency-Key': 'quote-contact-1'
+        'Idempotency-Key': 'quote-contact-1',
+        Authorization: 'Bearer customer-martin'
       },
       body: JSON.stringify({
-        name: 'Martin H',
-        email: 'martin@example.com',
         phone: '+1 416 555 1212',
         message: 'Please call before arrival.'
       })
@@ -219,10 +302,14 @@ describe('quote draft + contact finalize flow', () => {
       replayed: boolean;
     };
     assert.equal(finalizeBody.ok, true);
-    assert.equal(finalizeBody.status, 'submitted');
+    assert.equal(finalizeBody.status, 'in_review');
     assert.equal(finalizeBody.replayed, false);
 
-    const quoteResponse = await fetch(`${baseUrl}/api/quote/${firstDraftBody.quoteId}`);
+    const quoteResponse = await fetch(`${baseUrl}/api/quote/${firstDraftBody.quoteId}`, {
+      headers: {
+        Authorization: 'Bearer customer-martin'
+      }
+    });
     assert.equal(quoteResponse.status, 200);
     const quote = (await quoteResponse.json()) as {
       id: string;
@@ -238,7 +325,7 @@ describe('quote draft + contact finalize flow', () => {
     };
 
     assert.equal(quote.id, firstDraftBody.quoteId);
-    assert.equal(quote.status, 'submitted');
+    assert.equal(quote.status, 'in_review');
     assert.equal(quote.contactPending, false);
     assert.equal(quote.serviceFrequency, 'biweekly');
     assert.equal(quote.sessionsMin, 13);
@@ -247,6 +334,440 @@ describe('quote draft + contact finalize flow', () => {
     assert.equal(quote.seasonalTotalMin, 3192.15);
     assert.equal(quote.seasonalTotalMax, 3683.25);
     assert.ok(typeof quote.submittedAt === 'string' && quote.submittedAt.length > 0);
+  });
+
+  it('enforces quote ownership for claim, contact finalize, and lookup', async () => {
+    const { baseUrl } = await startServer();
+
+    const draft = await fetch(`${baseUrl}/api/quote/draft`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Idempotency-Key': 'quote-ownership-draft-1'
+      },
+      body: JSON.stringify({
+        address: '18 Secure Lane, Vaughan, ON',
+        location: {
+          lat: 43.844147,
+          lng: -79.51962
+        },
+        polygon: {
+          type: 'Polygon',
+          coordinates: [
+            [
+              [-79.5202, 43.8438],
+              [-79.5193, 43.8438],
+              [-79.5193, 43.8445],
+              [-79.5202, 43.8445],
+              [-79.5202, 43.8438]
+            ]
+          ]
+        },
+        plan: 'Starter',
+        quoteTotal: 180,
+        serviceFrequency: 'weekly'
+      })
+    });
+    assert.equal(draft.status, 201);
+    const draftBody = (await draft.json()) as { quoteId: string };
+
+    const unauthFinalize = await fetch(`${baseUrl}/api/quote/${draftBody.quoteId}/contact`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Idempotency-Key': 'quote-ownership-contact-1'
+      },
+      body: JSON.stringify({
+        phone: '+1 416 555 0101'
+      })
+    });
+    assert.equal(unauthFinalize.status, 401);
+
+    const firstClaim = await fetch(`${baseUrl}/api/quote/${draftBody.quoteId}/claim`, {
+      method: 'POST',
+      headers: {
+        Authorization: 'Bearer customer-owner'
+      }
+    });
+    assert.equal(firstClaim.status, 200);
+
+    const secondUserClaim = await fetch(`${baseUrl}/api/quote/${draftBody.quoteId}/claim`, {
+      method: 'POST',
+      headers: {
+        Authorization: 'Bearer customer-other'
+      }
+    });
+    assert.equal(secondUserClaim.status, 409);
+
+    const ownerQuote = await fetch(`${baseUrl}/api/quote/${draftBody.quoteId}`, {
+      headers: {
+        Authorization: 'Bearer customer-owner'
+      }
+    });
+    assert.equal(ownerQuote.status, 200);
+
+    const accountQuotes = await fetch(`${baseUrl}/api/account/quotes`, {
+      headers: {
+        Authorization: 'Bearer customer-owner'
+      }
+    });
+    assert.equal(accountQuotes.status, 200);
+    const accountQuotesBody = (await accountQuotes.json()) as { items: Array<{ id: string }> };
+    assert.equal(accountQuotesBody.items.some((item) => item.id === draftBody.quoteId), true);
+
+    const otherQuote = await fetch(`${baseUrl}/api/quote/${draftBody.quoteId}`, {
+      headers: {
+        Authorization: 'Bearer customer-other'
+      }
+    });
+    assert.equal(otherQuote.status, 403);
+  });
+});
+
+describe('admin quote editor workflow', () => {
+  it('returns derived polygon source fallback when draft source payload is missing', async () => {
+    const { baseUrl } = await startServer();
+
+    const draftResponse = await fetch(`${baseUrl}/api/quote/draft`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Idempotency-Key': 'quote-editor-draft-fallback-1'
+      },
+      body: JSON.stringify({
+        address: '100 Legacy Path, Vaughan, ON',
+        location: {
+          lat: 43.844147,
+          lng: -79.51962
+        },
+        polygon: {
+          type: 'Polygon',
+          coordinates: [
+            [
+              [-79.5201, 43.8439],
+              [-79.5194, 43.8439],
+              [-79.5194, 43.8444],
+              [-79.5201, 43.8444],
+              [-79.5201, 43.8439]
+            ]
+          ]
+        },
+        plan: 'Starter Autonomy Plan',
+        quoteTotal: 175,
+        serviceFrequency: 'weekly',
+        baseTotal: 49,
+        pricingVersion: 'v1',
+        currency: 'CAD'
+      })
+    });
+    assert.equal(draftResponse.status, 201);
+    const draftBody = (await draftResponse.json()) as { quoteId: string };
+
+    const finalizeResponse = await fetch(`${baseUrl}/api/quote/${draftBody.quoteId}/contact`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Idempotency-Key': 'quote-editor-contact-fallback-1',
+        Authorization: 'Bearer customer-legacy'
+      },
+      body: JSON.stringify({
+        phone: '+1 416 555 0022'
+      })
+    });
+    assert.equal(finalizeResponse.status, 200);
+
+    const editorResponse = await fetch(`${baseUrl}/api/admin/quotes/${draftBody.quoteId}/editor`, {
+      headers: {
+        Authorization: 'Bearer admin-admin'
+      }
+    });
+    assert.equal(editorResponse.status, 200);
+    const editorBody = (await editorResponse.json()) as {
+      polygonSourceFallback: boolean;
+      polygonSource: { polygons: Array<{ kind: string; points: unknown[] }> };
+    };
+    assert.equal(editorBody.polygonSourceFallback, true);
+    assert.equal(editorBody.polygonSource.polygons.length > 0, true);
+    assert.equal(editorBody.polygonSource.polygons[0]?.kind, 'service');
+  });
+
+  it('supports versioned admin edits and submit to verified awaiting payment', async () => {
+    const { baseUrl } = await startServer();
+
+    const draftPayload = {
+      address: '88 Review Crescent, Vaughan, ON',
+      location: {
+        lat: 43.844147,
+        lng: -79.51962
+      },
+      polygon: {
+        type: 'Polygon',
+        coordinates: [
+          [
+            [-79.5203, 43.8437],
+            [-79.5192, 43.8437],
+            [-79.5192, 43.8446],
+            [-79.5203, 43.8446],
+            [-79.5203, 43.8437]
+          ]
+        ]
+      },
+      polygonSource: {
+        schemaVersion: 1,
+        activePolygonId: 'service-1',
+        polygons: [
+          {
+            id: 'service-1',
+            kind: 'service',
+            points: [
+              [-79.5203, 43.8437],
+              [-79.5192, 43.8437],
+              [-79.5192, 43.8446],
+              [-79.5203, 43.8446]
+            ]
+          }
+        ]
+      },
+      plan: 'Precision Weekly Plan',
+      quoteTotal: 210.25,
+      serviceFrequency: 'weekly',
+      baseTotal: 49,
+      pricingVersion: 'v1',
+      currency: 'CAD'
+    };
+
+    const draftResponse = await fetch(`${baseUrl}/api/quote/draft`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Idempotency-Key': 'quote-editor-draft-1'
+      },
+      body: JSON.stringify(draftPayload)
+    });
+    assert.equal(draftResponse.status, 201);
+    const draftBody = (await draftResponse.json()) as { quoteId: string };
+
+    const finalizeResponse = await fetch(`${baseUrl}/api/quote/${draftBody.quoteId}/contact`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Idempotency-Key': 'quote-editor-contact-1',
+        Authorization: 'Bearer customer-reviewer'
+      },
+      body: JSON.stringify({
+        phone: '+1 416 555 7777'
+      })
+    });
+    assert.equal(finalizeResponse.status, 200);
+
+    const editorResponse = await fetch(`${baseUrl}/api/admin/quotes/${draftBody.quoteId}/editor`, {
+      headers: {
+        Authorization: 'Bearer admin-admin'
+      }
+    });
+    assert.equal(editorResponse.status, 200);
+    const editorBody = (await editorResponse.json()) as {
+      status: string;
+      customerStatus: string;
+      polygonSource: { schemaVersion: number };
+      versions: Array<{ versionNumber: number; actorType: string }>;
+    };
+    assert.equal(editorBody.status, 'in_review');
+    assert.equal(editorBody.customerStatus, 'pending');
+    assert.equal(editorBody.polygonSource.schemaVersion, 1);
+    assert.equal(editorBody.versions[0]?.versionNumber, 1);
+    assert.equal(editorBody.versions[0]?.actorType, 'client');
+
+    const versionResponse = await fetch(`${baseUrl}/api/admin/quotes/${draftBody.quoteId}/versions`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: 'Bearer admin-admin'
+      },
+      body: JSON.stringify({
+        polygonSource: {
+          schemaVersion: 1,
+          activePolygonId: 'service-1',
+          polygons: [
+            {
+              id: 'service-1',
+              kind: 'service',
+              points: [
+                [-79.5204, 43.8437],
+                [-79.5191, 43.8437],
+                [-79.5191, 43.8447],
+                [-79.5204, 43.8447]
+              ]
+            }
+          ]
+        },
+        serviceFrequency: 'biweekly',
+        perSessionTotal: 199.99,
+        finalTotal: 225
+      })
+    });
+    assert.equal(versionResponse.status, 200);
+    const versionBody = (await versionResponse.json()) as {
+      status: string;
+      customerStatus: string;
+      version: number;
+    };
+    assert.equal(versionBody.status, 'in_review');
+    assert.equal(versionBody.customerStatus, 'updated');
+    assert.equal(versionBody.version, 2);
+
+    const submitResponse = await fetch(
+      `${baseUrl}/api/admin/quotes/${draftBody.quoteId}/versions/${versionBody.version}/submit`,
+      {
+        method: 'POST',
+        headers: {
+          Authorization: 'Bearer admin-reviewer'
+        }
+      }
+    );
+    assert.equal(submitResponse.status, 200);
+    const submitBody = (await submitResponse.json()) as {
+      status: string;
+      customerStatus: string;
+      selectedVersion: number;
+    };
+    assert.equal(submitBody.status, 'verified');
+    assert.equal(submitBody.customerStatus, 'awaiting_payment');
+    assert.equal(submitBody.selectedVersion, 2);
+
+    const updatedQuote = await fetch(`${baseUrl}/api/quote/${draftBody.quoteId}`, {
+      headers: {
+        Authorization: 'Bearer customer-reviewer'
+      }
+    });
+    assert.equal(updatedQuote.status, 200);
+    const updatedQuoteBody = (await updatedQuote.json()) as { status: string };
+    assert.equal(updatedQuoteBody.status, 'verified');
+
+    const finalEditorResponse = await fetch(`${baseUrl}/api/admin/quotes/${draftBody.quoteId}/editor`, {
+      headers: {
+        Authorization: 'Bearer admin-admin'
+      }
+    });
+    assert.equal(finalEditorResponse.status, 200);
+    const finalEditorBody = (await finalEditorResponse.json()) as {
+      status: string;
+      customerStatus: string;
+      versions: Array<{ actorType: string }>;
+    };
+    assert.equal(finalEditorBody.status, 'verified');
+    assert.equal(finalEditorBody.customerStatus, 'awaiting_payment');
+    assert.equal(finalEditorBody.versions.some((item) => item.actorType === 'admin'), true);
+  });
+
+  it('blocks marketing from mutating quote endpoints', async () => {
+    const { baseUrl } = await startServer();
+
+    const draftResponse = await fetch(`${baseUrl}/api/quote/draft`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Idempotency-Key': 'quote-editor-draft-2'
+      },
+      body: JSON.stringify({
+        address: '77 Guardrail Street, Vaughan, ON',
+        location: {
+          lat: 43.844147,
+          lng: -79.51962
+        },
+        polygon: {
+          type: 'Polygon',
+          coordinates: [
+            [
+              [-79.5202, 43.8438],
+              [-79.5193, 43.8438],
+              [-79.5193, 43.8445],
+              [-79.5202, 43.8445],
+              [-79.5202, 43.8438]
+            ]
+          ]
+        },
+        polygonSource: {
+          schemaVersion: 1,
+          activePolygonId: 'service-1',
+          polygons: [
+            {
+              id: 'service-1',
+              kind: 'service',
+              points: [
+                [-79.5202, 43.8438],
+                [-79.5193, 43.8438],
+                [-79.5193, 43.8445],
+                [-79.5202, 43.8445]
+              ]
+            }
+          ]
+        },
+        plan: 'Starter Autonomy Plan',
+        quoteTotal: 180,
+        serviceFrequency: 'weekly',
+        baseTotal: 49,
+        pricingVersion: 'v1',
+        currency: 'CAD'
+      })
+    });
+    assert.equal(draftResponse.status, 201);
+    const draftBody = (await draftResponse.json()) as { quoteId: string };
+
+    const finalizeResponse = await fetch(`${baseUrl}/api/quote/${draftBody.quoteId}/contact`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Idempotency-Key': 'quote-editor-contact-2',
+        Authorization: 'Bearer customer-marketing'
+      },
+      body: JSON.stringify({
+        phone: '+1 416 555 9999'
+      })
+    });
+    assert.equal(finalizeResponse.status, 200);
+
+    const versionCreate = await fetch(`${baseUrl}/api/admin/quotes/${draftBody.quoteId}/versions`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: 'Bearer admin-marketing'
+      },
+      body: JSON.stringify({
+        polygonSource: {
+          schemaVersion: 1,
+          activePolygonId: 'service-1',
+          polygons: [
+            {
+              id: 'service-1',
+              kind: 'service',
+              points: [
+                [-79.5202, 43.8438],
+                [-79.5193, 43.8438],
+                [-79.5193, 43.8445],
+                [-79.5202, 43.8445]
+              ]
+            }
+          ]
+        },
+        serviceFrequency: 'weekly',
+        perSessionTotal: 180,
+        finalTotal: 180
+      })
+    });
+    assert.equal(versionCreate.status, 403);
+
+    const statusUpdate = await fetch(`${baseUrl}/api/admin/quotes/${draftBody.quoteId}/status`, {
+      method: 'PATCH',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: 'Bearer admin-marketing'
+      },
+      body: JSON.stringify({
+        status: 'verified'
+      })
+    });
+    assert.equal(statusUpdate.status, 403);
   });
 });
 
@@ -316,8 +837,7 @@ describe('/api/admin/service-area-requests/map', () => {
 
     const adminMap = await fetch(`${baseUrl}/api/admin/service-area-requests/map`, {
       headers: {
-        'X-Admin-Role': 'ADMIN',
-        'X-Admin-User-Id': 'admin-map'
+        Authorization: 'Bearer admin-admin'
       }
     });
 
@@ -332,8 +852,7 @@ describe('/api/admin/service-area-requests/map', () => {
 
     const marketingMap = await fetch(`${baseUrl}/api/admin/service-area-requests/map`, {
       headers: {
-        'X-Admin-Role': 'MARKETING',
-        'X-Admin-User-Id': 'marketing-map'
+        Authorization: 'Bearer admin-marketing'
       }
     });
 
@@ -342,5 +861,26 @@ describe('/api/admin/service-area-requests/map', () => {
       points: Array<{ addressText: string }>;
     };
     assert.equal(marketingBody.points[0]?.addressText.includes('***'), true);
+  });
+});
+
+describe('admin authentication mode', () => {
+  it('rejects legacy header-only auth and accepts bearer token auth', async () => {
+    const { baseUrl } = await startServer();
+
+    const legacy = await fetch(`${baseUrl}/api/admin/health`, {
+      headers: {
+        'X-Admin-Role': 'ADMIN',
+        'X-Admin-User-Id': 'legacy-admin'
+      }
+    });
+    assert.equal(legacy.status, 401);
+
+    const bearer = await fetch(`${baseUrl}/api/admin/health`, {
+      headers: {
+        Authorization: 'Bearer admin-admin'
+      }
+    });
+    assert.equal(bearer.status, 200);
   });
 });

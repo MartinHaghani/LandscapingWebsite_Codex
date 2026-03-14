@@ -29,6 +29,7 @@ enum CustomerStatus {
   pending
   updated
   verified
+  awaiting_payment
   rejected
 }
 
@@ -42,6 +43,11 @@ enum QuoteVersionChangeType {
   admin_revision
   pricing_override
   verification
+}
+
+enum QuoteVersionActorType {
+  client
+  admin
 }
 
 enum ServiceAreaRequestSource {
@@ -120,6 +126,7 @@ model Quote {
   id                  String                @id @default(cuid())
   publicQuoteId       String                @unique @map("public_quote_id") @db.VarChar(32)
   leadId              String                @map("lead_id")
+  authUserId          String?               @map("auth_user_id") @db.VarChar(255)
   addressText         String                @map("address_text") @db.VarChar(300)
   locationGeog        Unsupported("geography(Point,4326)")? @map("location_geog")
   locationSource      LocationSource        @default(address_geocode) @map("location_source")
@@ -159,6 +166,7 @@ model Quote {
   @@index([submittedAt(sort: Desc)])
   @@index([status, submittedAt(sort: Desc)])
   @@index([createdAt(sort: Desc)])
+  @@index([authUserId, createdAt(sort: Desc)])
   @@map("quotes")
 }
 
@@ -167,6 +175,7 @@ model QuoteVersion {
   quoteId             String                 @map("quote_id")
   versionNumber       Int                    @map("version_number")
   changeType          QuoteVersionChangeType @map("change_type")
+  actorType           QuoteVersionActorType  @default(client) @map("actor_type")
   polygonGeom         Unsupported("geometry(MultiPolygon,4326)") @map("polygon_geom")
   polygonSourceJson   Json?                  @map("polygon_source_json")
   polygonCentroidGeog Unsupported("geography(Point,4326)")? @map("polygon_centroid_geog")

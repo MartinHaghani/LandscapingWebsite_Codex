@@ -1,1 +1,1 @@
-{"root":["./src/app.tsx","./src/main.tsx","./src/components/requestsmap.tsx","./src/lib/api.ts"],"version":"5.6.2"}
+{"root":["./src/app.tsx","./src/main.tsx","./src/components/quoteeditormap.tsx","./src/components/requestsmap.tsx","./src/lib/api.ts","./src/lib/multipolygonmetrics.ts","./src/lib/polygonhistory.ts","./src/lib/quoteeditorgeometry.ts","./src/lib/quoteeditortypes.ts","./src/lib/quotemath.ts","./src/pages/quoteeditorpage.tsx"],"version":"5.6.2"}

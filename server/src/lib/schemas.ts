@@ -6,6 +6,18 @@ const coordinateSchema = z
     z.number().min(-90).max(90)
   ]);
 
+const polygonSourcePolygonSchema = z.object({
+  id: z.string().trim().min(1).max(120),
+  kind: z.enum(['service', 'obstacle']),
+  points: z.array(coordinateSchema).min(3)
+});
+
+export const polygonSourceSchema = z.object({
+  schemaVersion: z.literal(1),
+  polygons: z.array(polygonSourcePolygonSchema).min(1),
+  activePolygonId: z.string().trim().max(120).nullable().optional()
+});
+
 export const quotePayloadSchema = z.object({
   address: z.string().trim().min(3).max(300),
   location: z.object({
@@ -76,8 +88,6 @@ export const quoteDraftPayloadSchema = z.object({
 });
 
 export const quoteContactPayloadSchema = z.object({
-  name: z.string().trim().min(2).max(100),
-  email: z.string().trim().email().max(160),
   phone: z.string().trim().min(7).max(40),
   addressText: z.string().trim().max(300).optional(),
   message: z.string().trim().max(5000).optional(),
@@ -122,4 +132,12 @@ export const adminQuoteRevisionSchema = z.object({
 }).refine((payload) => payload.perSessionTotal !== undefined || payload.finalTotal !== undefined, {
   message: 'perSessionTotal or finalTotal is required',
   path: ['perSessionTotal']
+});
+
+export const adminQuoteVersionCreateSchema = z.object({
+  polygonSource: polygonSourceSchema,
+  serviceFrequency: z.enum(['weekly', 'biweekly']),
+  perSessionTotal: z.number().nonnegative(),
+  finalTotal: z.number().nonnegative(),
+  overrideReason: z.string().trim().max(2000).optional()
 });

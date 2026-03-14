@@ -27,6 +27,14 @@ const HowRateCalculatedPage = lazy(() =>
 const QuoteConfirmationPage = lazy(() =>
   import('./pages/QuoteConfirmationPage').then((module) => ({ default: module.QuoteConfirmationPage }))
 );
+const SignInPage = lazy(() => import('./pages/SignInPage').then((module) => ({ default: module.SignInPage })));
+const SignUpPage = lazy(() => import('./pages/SignUpPage').then((module) => ({ default: module.SignUpPage })));
+const DashboardPage = lazy(() =>
+  import('./pages/DashboardPage').then((module) => ({ default: module.DashboardPage }))
+);
+const DashboardQuoteDetailPage = lazy(() =>
+  import('./pages/DashboardQuoteDetailPage').then((module) => ({ default: module.DashboardQuoteDetailPage }))
+);
 
 const App = () => (
   <Suspense
@@ -49,6 +57,10 @@ const App = () => (
         <Route path="/service-area-requested" element={<ServiceAreaRequestedPage />} />
         <Route path="/how-rate-is-calculated" element={<HowRateCalculatedPage />} />
         <Route path="/quote-confirmation/:quoteId" element={<QuoteConfirmationPage />} />
+        <Route path="/sign-in/*" element={<SignInPage />} />
+        <Route path="/sign-up/*" element={<SignUpPage />} />
+        <Route path="/dashboard" element={<DashboardPage />} />
+        <Route path="/dashboard/quotes/:quoteId" element={<DashboardQuoteDetailPage />} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Route>
     </Routes>
