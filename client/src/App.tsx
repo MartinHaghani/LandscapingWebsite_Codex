@@ -35,6 +35,9 @@ const DashboardPage = lazy(() =>
 const DashboardQuoteDetailPage = lazy(() =>
   import('./pages/DashboardQuoteDetailPage').then((module) => ({ default: module.DashboardQuoteDetailPage }))
 );
+const CompleteProfilePage = lazy(() =>
+  import('./pages/CompleteProfilePage').then((module) => ({ default: module.CompleteProfilePage }))
+);
 
 const App = () => (
   <Suspense
@@ -59,6 +62,7 @@ const App = () => (
         <Route path="/quote-confirmation/:quoteId" element={<QuoteConfirmationPage />} />
         <Route path="/sign-in/*" element={<SignInPage />} />
         <Route path="/sign-up/*" element={<SignUpPage />} />
+        <Route path="/complete-profile/*" element={<CompleteProfilePage />} />
         <Route path="/dashboard" element={<DashboardPage />} />
         <Route path="/dashboard/quotes/:quoteId" element={<DashboardQuoteDetailPage />} />
         <Route path="*" element={<Navigate to="/" replace />} />

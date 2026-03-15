@@ -34,7 +34,8 @@ const customerIdentityFromToken = (token: string): CustomerIdentity | null => {
     return {
       userId,
       email: `${userId}@example.com`,
-      name: userId.replace('customer-', 'Customer ')
+      name: userId.replace('customer-', 'Customer '),
+      phone: token.includes('no-phone') ? null : '+1 416 555 0100'
     };
   }
 
@@ -42,7 +43,8 @@ const customerIdentityFromToken = (token: string): CustomerIdentity | null => {
     return {
       userId: token,
       email: `${token}@example.com`,
-      name: token
+      name: token,
+      phone: '+1 416 555 0109'
     };
   }
 
@@ -66,7 +68,12 @@ const adminIdentityFromToken = (token: string): AdminIdentity | null => {
   return null;
 };
 
-const startServer = async () => {
+const startServer = async (options?: {
+  customerIdentityFromToken?: (token: string) => CustomerIdentity | null;
+  recordAddress?: (input: { userId: string; addressText: string }) => Promise<void>;
+}) => {
+  const customerIdentityResolver = options?.customerIdentityFromToken ?? customerIdentityFromToken;
+  const recordAddress = options?.recordAddress ?? (async () => {});
   const started = createServer({
     port: 0,
     baseStations: stations,
@@ -78,7 +85,7 @@ const startServer = async () => {
         if (!token) {
           return null;
         }
-        const identity = customerIdentityFromToken(token);
+        const identity = customerIdentityResolver(token);
         if (!identity) {
           throw new Error('AUTH_REQUIRED');
         }
@@ -97,6 +104,9 @@ const startServer = async () => {
 
         return identity;
       }
+    },
+    customerProfile: {
+      recordAddress
     }
   });
 
@@ -290,7 +300,6 @@ describe('quote draft + contact finalize flow', () => {
         Authorization: 'Bearer customer-martin'
       },
       body: JSON.stringify({
-        phone: '+1 416 555 1212',
         message: 'Please call before arrival.'
       })
     });
@@ -334,6 +343,20 @@ describe('quote draft + contact finalize flow', () => {
     assert.equal(quote.seasonalTotalMin, 3192.15);
     assert.equal(quote.seasonalTotalMax, 3683.25);
     assert.ok(typeof quote.submittedAt === 'string' && quote.submittedAt.length > 0);
+
+    const contactsResponse = await fetch(`${baseUrl}/api/admin/contacts?limit=10`, {
+      headers: {
+        Authorization: 'Bearer admin-admin'
+      }
+    });
+    assert.equal(contactsResponse.status, 200);
+    const contactsBody = (await contactsResponse.json()) as {
+      items: Array<{ email: string | null; phone: string | null; addressText: string | null }>;
+    };
+    const quoteContact = contactsBody.items.find((item) => item.email === 'customer-martin@example.com');
+    assert.ok(quoteContact);
+    assert.equal(quoteContact.phone, '+1 416 555 0100');
+    assert.equal(quoteContact.addressText, draftPayload.address);
   });
 
   it('enforces quote ownership for claim, contact finalize, and lookup', async () => {
@@ -377,9 +400,7 @@ describe('quote draft + contact finalize flow', () => {
         'Content-Type': 'application/json',
         'Idempotency-Key': 'quote-ownership-contact-1'
       },
-      body: JSON.stringify({
-        phone: '+1 416 555 0101'
-      })
+      body: JSON.stringify({})
     });
     assert.equal(unauthFinalize.status, 401);
 
@@ -421,6 +442,146 @@ describe('quote draft + contact finalize flow', () => {
       }
     });
     assert.equal(otherQuote.status, 403);
+  });
+
+  it('rejects quote finalization when account phone is missing', async () => {
+    const { baseUrl } = await startServer({
+      customerIdentityFromToken: (token) => {
+        const identity = customerIdentityFromToken(token);
+        if (!identity) {
+          return null;
+        }
+
+        if (token === 'customer-no-phone') {
+          return {
+            ...identity,
+            phone: null
+          };
+        }
+
+        return identity;
+      }
+    });
+
+    const draft = await fetch(`${baseUrl}/api/quote/draft`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Idempotency-Key': 'quote-no-phone-draft-1'
+      },
+      body: JSON.stringify({
+        address: '200 No Phone Road, Vaughan, ON',
+        location: {
+          lat: 43.844147,
+          lng: -79.51962
+        },
+        polygon: {
+          type: 'Polygon',
+          coordinates: [
+            [
+              [-79.5202, 43.8438],
+              [-79.5193, 43.8438],
+              [-79.5193, 43.8445],
+              [-79.5202, 43.8445],
+              [-79.5202, 43.8438]
+            ]
+          ]
+        },
+        plan: 'Starter',
+        quoteTotal: 180,
+        serviceFrequency: 'weekly'
+      })
+    });
+    assert.equal(draft.status, 201);
+    const draftBody = (await draft.json()) as { quoteId: string };
+
+    const claim = await fetch(`${baseUrl}/api/quote/${draftBody.quoteId}/claim`, {
+      method: 'POST',
+      headers: {
+        Authorization: 'Bearer customer-no-phone'
+      }
+    });
+    assert.equal(claim.status, 200);
+
+    const finalizeResponse = await fetch(`${baseUrl}/api/quote/${draftBody.quoteId}/contact`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Idempotency-Key': 'quote-no-phone-contact-1',
+        Authorization: 'Bearer customer-no-phone'
+      },
+      body: JSON.stringify({})
+    });
+    assert.equal(finalizeResponse.status, 400);
+    const finalizeBody = (await finalizeResponse.json()) as { error: string };
+    assert.equal(finalizeBody.error, 'Authenticated account profile is missing required fields.');
+
+    const accountQuotes = await fetch(`${baseUrl}/api/account/quotes`, {
+      headers: {
+        Authorization: 'Bearer customer-no-phone'
+      }
+    });
+    assert.equal(accountQuotes.status, 400);
+  });
+
+  it('records signed-in customer addresses on draft create and finalize', async () => {
+    const recordedAddresses: Array<{ userId: string; addressText: string }> = [];
+    const { baseUrl } = await startServer({
+      recordAddress: async (input) => {
+        recordedAddresses.push(input);
+      }
+    });
+
+    const draftAddress = '900 Address Trail, Vaughan, ON';
+    const draft = await fetch(`${baseUrl}/api/quote/draft`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Idempotency-Key': 'quote-address-sync-draft-1',
+        Authorization: 'Bearer customer-address-sync'
+      },
+      body: JSON.stringify({
+        address: draftAddress,
+        location: {
+          lat: 43.844147,
+          lng: -79.51962
+        },
+        polygon: {
+          type: 'Polygon',
+          coordinates: [
+            [
+              [-79.5202, 43.8438],
+              [-79.5193, 43.8438],
+              [-79.5193, 43.8445],
+              [-79.5202, 43.8445],
+              [-79.5202, 43.8438]
+            ]
+          ]
+        },
+        plan: 'Starter',
+        quoteTotal: 180,
+        serviceFrequency: 'weekly'
+      })
+    });
+    assert.equal(draft.status, 201);
+    const draftBody = (await draft.json()) as { quoteId: string };
+
+    const finalizeResponse = await fetch(`${baseUrl}/api/quote/${draftBody.quoteId}/contact`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Idempotency-Key': 'quote-address-sync-contact-1',
+        Authorization: 'Bearer customer-address-sync'
+      },
+      body: JSON.stringify({})
+    });
+    assert.equal(finalizeResponse.status, 200);
+
+    assert.equal(recordedAddresses.length, 2);
+    assert.deepEqual(recordedAddresses, [
+      { userId: 'customer-address-sync', addressText: draftAddress },
+      { userId: 'customer-address-sync', addressText: draftAddress }
+    ]);
   });
 });
 
@@ -470,9 +631,7 @@ describe('admin quote editor workflow', () => {
         'Idempotency-Key': 'quote-editor-contact-fallback-1',
         Authorization: 'Bearer customer-legacy'
       },
-      body: JSON.stringify({
-        phone: '+1 416 555 0022'
-      })
+      body: JSON.stringify({})
     });
     assert.equal(finalizeResponse.status, 200);
 
@@ -552,9 +711,7 @@ describe('admin quote editor workflow', () => {
         'Idempotency-Key': 'quote-editor-contact-swapped-1',
         Authorization: 'Bearer customer-swapped'
       },
-      body: JSON.stringify({
-        phone: '+1 416 555 1145'
-      })
+      body: JSON.stringify({})
     });
     assert.equal(finalizeResponse.status, 200);
 
@@ -637,9 +794,7 @@ describe('admin quote editor workflow', () => {
         'Idempotency-Key': 'quote-editor-contact-swapped-geometry-1',
         Authorization: 'Bearer customer-swapped-geometry'
       },
-      body: JSON.stringify({
-        phone: '+1 416 555 2288'
-      })
+      body: JSON.stringify({})
     });
     assert.equal(finalizeResponse.status, 200);
 
@@ -724,9 +879,7 @@ describe('admin quote editor workflow', () => {
         'Idempotency-Key': 'quote-editor-contact-1',
         Authorization: 'Bearer customer-reviewer'
       },
-      body: JSON.stringify({
-        phone: '+1 416 555 7777'
-      })
+      body: JSON.stringify({})
     });
     assert.equal(finalizeResponse.status, 200);
 
@@ -891,9 +1044,7 @@ describe('admin quote editor workflow', () => {
         'Idempotency-Key': 'quote-editor-contact-2',
         Authorization: 'Bearer customer-marketing'
       },
-      body: JSON.stringify({
-        phone: '+1 416 555 9999'
-      })
+      body: JSON.stringify({})
     });
     assert.equal(finalizeResponse.status, 200);
 

@@ -17,6 +17,7 @@ import {
 import { createDataStore } from './lib/dataStore.js';
 import {
   hasCapability,
+  recordCustomerAddress,
   resolveAdminIdentity,
   resolveCustomerIdentity,
   type AdminIdentity,
@@ -33,6 +34,9 @@ interface CreateServerOptions {
   authResolvers?: {
     resolveCustomerIdentity?: (req: http.IncomingMessage) => Promise<CustomerIdentity | null>;
     resolveAdminIdentity?: (req: http.IncomingMessage) => Promise<AdminIdentity | null>;
+  };
+  customerProfile?: {
+    recordAddress?: (input: { userId: string; addressText: string }) => Promise<void>;
   };
 }
 
@@ -295,6 +299,14 @@ const mapStoreError = (error: unknown): { statusCode: number; message: string } 
   }
 };
 
+function assertCustomerPhoneProfile(
+  customerIdentity: CustomerIdentity
+): asserts customerIdentity is CustomerIdentity & { phone: string } {
+  if (!customerIdentity.phone || customerIdentity.phone.trim().length < 7) {
+    throw new Error('AUTH_PROFILE_INCOMPLETE');
+  }
+}
+
 const buildServiceAreaCacheEntry = (
   stations: BaseStationConfig[],
   servedRegions: string[],
@@ -336,6 +348,7 @@ export const createServer = (options: CreateServerOptions = {}) => {
   const dataStore = createDataStore(baseStations);
   const customerIdentityResolver = options.authResolvers?.resolveCustomerIdentity ?? resolveCustomerIdentity;
   const adminIdentityResolver = options.authResolvers?.resolveAdminIdentity ?? resolveAdminIdentity;
+  const customerAddressRecorder = options.customerProfile?.recordAddress ?? recordCustomerAddress;
   void dataStore.initialize().catch((error) => {
     console.error('Failed to initialize datastore base stations:', error);
   });
@@ -630,6 +643,15 @@ export const createServer = (options: CreateServerOptions = {}) => {
             authUserId: customerIdentity?.userId
           });
 
+          if (customerIdentity) {
+            void customerAddressRecorder({
+              userId: customerIdentity.userId,
+              addressText: legacy.address
+            }).catch((error) => {
+              console.warn('Failed to update customer address metadata from legacy quote draft:', error);
+            });
+          }
+
           json(res, result.statusCode, {
             ...result.body,
             replayed: result.replayed
@@ -654,6 +676,15 @@ export const createServer = (options: CreateServerOptions = {}) => {
           attribution: payload.attribution,
           authUserId: customerIdentity?.userId
         });
+
+        if (customerIdentity) {
+          void customerAddressRecorder({
+            userId: customerIdentity.userId,
+            addressText: payload.address
+          }).catch((error) => {
+            console.warn('Failed to update customer address metadata from quote draft:', error);
+          });
+        }
 
         json(res, result.statusCode, {
           ...result.body,
@@ -707,6 +738,7 @@ export const createServer = (options: CreateServerOptions = {}) => {
         if (!customerIdentity) {
           throw new Error('AUTH_REQUIRED');
         }
+        assertCustomerPhoneProfile(customerIdentity);
 
         const idempotencyKey = getIdempotencyKey(req);
         if (!idempotencyKey) {
@@ -728,11 +760,29 @@ export const createServer = (options: CreateServerOptions = {}) => {
           authUserId: customerIdentity.userId,
           name: customerIdentity.name ?? 'Autoscape Customer',
           email: customerIdentity.email,
-          phone: parsed.data.phone,
-          addressText: parsed.data.addressText,
+          phone: customerIdentity.phone,
           message: parsed.data.message,
           attribution: parsed.data.attribution
         });
+
+        void dataStore
+          .getQuoteByPublicId(quoteContactId, {
+            authUserId: customerIdentity.userId,
+            isAdmin: false
+          })
+          .then((quote) => {
+            if (!quote) {
+              return;
+            }
+
+            return customerAddressRecorder({
+              userId: customerIdentity.userId,
+              addressText: quote.address
+            });
+          })
+          .catch((error) => {
+            console.warn('Failed to update customer address metadata from quote finalize:', error);
+          });
 
         json(res, result.statusCode, {
           ...result.body,
@@ -761,6 +811,7 @@ export const createServer = (options: CreateServerOptions = {}) => {
         if (!customerIdentity) {
           throw new Error('AUTH_REQUIRED');
         }
+        assertCustomerPhoneProfile(customerIdentity);
 
         const limit = parseLimit(url.searchParams.get('limit'), 25, 100);
         const cursor = url.searchParams.get('cursor') ?? undefined;
@@ -786,6 +837,7 @@ export const createServer = (options: CreateServerOptions = {}) => {
         if (!customerIdentity) {
           throw new Error('AUTH_REQUIRED');
         }
+        assertCustomerPhoneProfile(customerIdentity);
 
         const quote = await dataStore.getQuoteByPublicId(accountQuoteId, {
           authUserId: customerIdentity.userId,

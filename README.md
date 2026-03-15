@@ -97,10 +97,13 @@ Default local URLs:
   - users can clear geometry or reset saved draft from the quote UI
   1. `POST /api/quote/draft`
   2. Sign in/sign up required at `/quote-contact/:quoteId`
-  3. `POST /api/quote/:quoteId/claim` links quote to authenticated account
-  4. `POST /api/quote/:quoteId/contact` finalizes contact + sets status `in_review` (`customer_status=pending`)
-  5. Confirmation page `/quote-confirmation/:quoteId`
+  3. Signed-in draft saves quote address to Clerk account metadata (`addressHistory`, latest as `defaultAddress`)
+  4. `POST /api/quote/:quoteId/claim` links quote to authenticated account
+  5. `/quote-contact/:quoteId` collects optional notes only; phone and address come from account + quote draft
+  6. `POST /api/quote/:quoteId/contact` finalizes contact + sets status `in_review` (`customer_status=pending`)
+  7. Confirmation page `/quote-confirmation/:quoteId`
 - Customer dashboard:
+  - `/complete-profile/*` captures required phone number for any auth method
   - `/dashboard` for profile + owned quote list
   - `/dashboard/quotes/:quoteId` for owned quote detail
 - Out-of-area page auto-captures expansion demand via `POST /api/service-area/request`.
@@ -136,6 +139,8 @@ Admin auth:
 
 - bearer token auth from Clerk only (no static token and no header-role fallback)
 - admin access requires membership in configured `CLERK_ADMIN_ORG_ID`
+- customer phone completeness is enforced in-app via `/complete-profile/*`
+- phone is stored in Clerk `unsafeMetadata.autoscapeProfile.phone` (no paid phone auth dependency)
 - Clerk org roles map to internal RBAC roles:
   - `owner` -> `OWNER`
   - `admin` -> `ADMIN`

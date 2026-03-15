@@ -57,7 +57,7 @@ Spatial storage:
 
 - `POST /api/quote/draft` (idempotent)
 - `POST /api/quote/:quoteId/claim` (auth required)
-- `POST /api/quote/:quoteId/contact` (idempotent)
+- `POST /api/quote/:quoteId/contact` (idempotent, auth required, optional notes payload only)
 - `GET /api/quote/:quoteId` (auth required, owner/admin only)
 
 ### Account
@@ -79,6 +79,14 @@ Quote pricing contract:
 
 - `quoteTotal` remains compatibility alias for per-session total
 - canonical fields: `serviceFrequency`, `perSessionTotal`, `sessionsMin`, `sessionsMax`, `seasonalTotalMin`, `seasonalTotalMax`
+
+Customer profile sync contract:
+
+- signed-in draft creation records address to Clerk private metadata (`autoscapeProfile`)
+- metadata shape:
+  - `defaultAddress: string`
+  - `addressHistory: string[]` (latest-first, deduped, max 10)
+- quote finalize performs a secondary address sync pass
 
 ### Contact
 
@@ -163,6 +171,8 @@ Allowed transitions:
 Runtime quote finalize behavior:
 
 - `POST /api/quote/:quoteId/contact` now moves drafts directly to `in_review` with `customer_status=pending`.
+- quote-contact payload accepts optional `message` + optional `attribution` only.
+- lead phone is derived from Clerk customer identity; lead contact address is derived from quote draft address.
 - `submitted` remains in the enum for backward compatibility and controlled transitions.
 
 Revisions:
@@ -197,6 +207,14 @@ Quote ownership:
 - `quotes.auth_user_id` stores owning customer account ID
 - quote claim endpoint binds drafts to customer identity
 - quote read/finalize endpoints enforce owner match unless caller is admin
+- account quote APIs and quote finalize require customer profile phone completeness
+
+Customer profile completeness:
+
+- required account field: phone number
+- client gate route: `/complete-profile/*`
+- dashboard and quote-contact flows redirect to profile gate when phone is missing
+- phone source of truth: Clerk `unsafeMetadata.autoscapeProfile.phone` (fallback from Clerk primary phone when available)
 
 RBAC roles:
 

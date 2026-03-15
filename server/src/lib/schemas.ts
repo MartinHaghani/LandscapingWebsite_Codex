@@ -88,8 +88,6 @@ export const quoteDraftPayloadSchema = z.object({
 });
 
 export const quoteContactPayloadSchema = z.object({
-  phone: z.string().trim().min(7).max(40),
-  addressText: z.string().trim().max(300).optional(),
   message: z.string().trim().max(5000).optional(),
   attribution: attributionSchema
 });

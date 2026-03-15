@@ -7,6 +7,7 @@ export interface CustomerIdentity {
   userId: string;
   email: string;
   name: string | null;
+  phone: string | null;
 }
 
 export interface AdminIdentity {
@@ -17,6 +18,8 @@ export interface AdminIdentity {
 
 const roleOrder: AdminRole[] = ['MARKETING', 'REVIEWER', 'ADMIN', 'OWNER'];
 const roleSet = new Set<AdminRole>(roleOrder);
+const accountAddressMetadataKey = 'autoscapeProfile';
+const accountAddressHistoryLimit = 10;
 
 const jwksCache = new Map<string, ReturnType<typeof createRemoteJWKSet>>();
 
@@ -72,6 +75,47 @@ const readStringClaim = (payload: JWTPayload, key: string) => {
 
   const trimmed = value.trim();
   return trimmed.length > 0 ? trimmed : null;
+};
+
+const toMetadataRecord = (value: unknown): Record<string, unknown> => {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    return {};
+  }
+
+  return value as Record<string, unknown>;
+};
+
+const normalizeAddress = (value: string) => value.trim().replace(/\s+/g, ' ');
+
+const dedupeAddresses = (items: string[]) => {
+  const seen = new Set<string>();
+  const deduped: string[] = [];
+
+  for (const item of items) {
+    const normalized = normalizeAddress(item);
+    if (!normalized) {
+      continue;
+    }
+
+    const key = normalized.toLowerCase();
+    if (seen.has(key)) {
+      continue;
+    }
+
+    seen.add(key);
+    deduped.push(normalized);
+  }
+
+  return deduped;
+};
+
+const readAddressHistory = (metadata: Record<string, unknown>) => {
+  const raw = metadata.addressHistory;
+  if (!Array.isArray(raw)) {
+    return [] as string[];
+  }
+
+  return dedupeAddresses(raw.filter((entry): entry is string => typeof entry === 'string'));
 };
 
 const getTokenIssuer = () => {
@@ -168,6 +212,23 @@ const readNameFromTokenPayload = (payload: JWTPayload) => {
   return combined.length > 0 ? combined : null;
 };
 
+const readPhoneFromTokenPayload = (payload: JWTPayload) =>
+  readStringClaim(payload, 'phone_number') ??
+  readStringClaim(payload, 'phone') ??
+  readStringClaim(payload, 'primary_phone_number');
+
+const readPhoneFromUserMetadata = (metadata: unknown) => {
+  const metadataRecord = toMetadataRecord(metadata);
+  const profileMetadata = toMetadataRecord(metadataRecord[accountAddressMetadataKey]);
+  const value = profileMetadata.phone;
+  if (typeof value !== 'string') {
+    return null;
+  }
+
+  const trimmed = value.trim();
+  return trimmed.length > 0 ? trimmed : null;
+};
+
 const loadUserProfile = async (userId: string) => {
   const clerk = getClerkClient();
   if (!clerk) {
@@ -181,10 +242,17 @@ const loadUserProfile = async (userId: string) => {
     null;
 
   const name = [user.firstName, user.lastName].filter((value) => !!value).join(' ').trim() || user.username || null;
+  const metadataPhone = readPhoneFromUserMetadata(user.unsafeMetadata);
+  const phone =
+    user.phoneNumbers.find((entry) => entry.id === user.primaryPhoneNumberId)?.phoneNumber ??
+    user.phoneNumbers[0]?.phoneNumber ??
+    metadataPhone ??
+    null;
 
   return {
     email,
-    name
+    name,
+    phone
   };
 };
 
@@ -222,11 +290,13 @@ export const resolveCustomerIdentity = async (
 
     let email = readEmailFromTokenPayload(payload);
     let name = readNameFromTokenPayload(payload);
+    let phone = readPhoneFromTokenPayload(payload);
 
-    if (!email || !name) {
+    if (!email || !name || !phone) {
       const profile = await loadUserProfile(userId);
       email = email ?? profile?.email ?? null;
       name = name ?? profile?.name ?? null;
+      phone = phone ?? profile?.phone ?? null;
     }
 
     if (!email) {
@@ -236,7 +306,8 @@ export const resolveCustomerIdentity = async (
     return {
       userId,
       email,
-      name
+      name,
+      phone
     };
   } catch (error) {
     const code = toAuthErrorCode(error);
@@ -246,6 +317,43 @@ export const resolveCustomerIdentity = async (
 
     throw new Error('AUTH_REQUIRED');
   }
+};
+
+export const recordCustomerAddress = async (input: { userId: string; addressText: string }) => {
+  const clerk = getClerkClient();
+  if (!clerk) {
+    return;
+  }
+
+  const normalizedAddress = normalizeAddress(input.addressText);
+  if (!normalizedAddress) {
+    return;
+  }
+
+  const user = await clerk.users.getUser(input.userId);
+  const privateMetadata = toMetadataRecord(user.privateMetadata);
+  const profileMetadata = toMetadataRecord(privateMetadata[accountAddressMetadataKey]);
+  const currentHistory = readAddressHistory(profileMetadata);
+  const nextHistory = dedupeAddresses([normalizedAddress, ...currentHistory]).slice(0, accountAddressHistoryLimit);
+  const currentDefault = typeof profileMetadata.defaultAddress === 'string' ? normalizeAddress(profileMetadata.defaultAddress) : '';
+
+  if (currentDefault === normalizedAddress && currentHistory.length === nextHistory.length) {
+    const sameHistory = currentHistory.every((item, index) => item === nextHistory[index]);
+    if (sameHistory) {
+      return;
+    }
+  }
+
+  await clerk.users.updateUserMetadata(input.userId, {
+    privateMetadata: {
+      ...privateMetadata,
+      [accountAddressMetadataKey]: {
+        ...profileMetadata,
+        defaultAddress: normalizedAddress,
+        addressHistory: nextHistory
+      }
+    }
+  });
 };
 
 export const resolveAdminIdentity = async (req: http.IncomingMessage): Promise<AdminIdentity | null> => {

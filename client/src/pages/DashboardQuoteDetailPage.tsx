@@ -1,18 +1,22 @@
-import { useAuth } from '@clerk/clerk-react';
+import { useAuth, useUser } from '@clerk/clerk-react';
 import { useEffect, useState } from 'react';
-import { Link, useParams } from 'react-router-dom';
+import { Link, Navigate, useLocation, useParams } from 'react-router-dom';
 import { Button } from '../components/ui/Button';
 import { Card } from '../components/ui/Card';
 import { api, ApiError } from '../lib/api';
+import { hasRequiredPhone } from '../lib/accountProfile';
 import { formatNumber } from '../lib/geometry';
 import type { QuoteLookupResponse } from '../types';
 
 export const DashboardQuoteDetailPage = () => {
   const { quoteId } = useParams();
+  const location = useLocation();
   const { isLoaded, isSignedIn, getToken } = useAuth();
+  const { user } = useUser();
   const [quote, setQuote] = useState<QuoteLookupResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const profileHasRequiredPhone = hasRequiredPhone(user);
 
   useEffect(() => {
     if (!isLoaded) {
@@ -27,6 +31,12 @@ export const DashboardQuoteDetailPage = () => {
 
     if (!isSignedIn) {
       setError('Sign in to view this quote.');
+      setLoading(false);
+      return;
+    }
+
+    if (!profileHasRequiredPhone) {
+      setError('Phone number is required to view this quote.');
       setLoading(false);
       return;
     }
@@ -64,7 +74,17 @@ export const DashboardQuoteDetailPage = () => {
     return () => {
       mounted = false;
     };
-  }, [quoteId, isLoaded, isSignedIn, getToken]);
+  }, [quoteId, isLoaded, isSignedIn, getToken, profileHasRequiredPhone]);
+
+  if (isLoaded && !isSignedIn) {
+    const redirectPath = encodeURIComponent(location.pathname + location.search);
+    return <Navigate to={`/sign-in?redirect_url=${redirectPath}`} replace />;
+  }
+
+  if (isLoaded && isSignedIn && !profileHasRequiredPhone) {
+    const redirectPath = encodeURIComponent(location.pathname + location.search);
+    return <Navigate to={`/complete-profile?redirect_url=${redirectPath}`} replace />;
+  }
 
   return (
     <div className="mx-auto w-full max-w-4xl px-4 py-14 md:px-8 md:py-20">

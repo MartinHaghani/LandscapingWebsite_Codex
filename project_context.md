@@ -31,15 +31,20 @@ Autoscape provides:
    - Saved draft can be reset from address or map panels.
 5. Draft save (`POST /api/quote/draft`) after geometry submit.
 6. Required auth gate at `/quote-contact/:quoteId` (Clerk sign-in/sign-up, Google enabled).
-7. Authenticated user claim step (`POST /api/quote/:quoteId/claim`) links quote ownership.
-8. Contact finalize calls `POST /api/quote/:quoteId/contact` with phone + optional notes.
-   - Server derives name/email from authenticated account.
+7. Signed-in draft creation records quote address in Clerk account metadata (`addressHistory` + `defaultAddress`).
+8. Authenticated user claim step (`POST /api/quote/:quoteId/claim`) links quote ownership.
+9. Contact finalize calls `POST /api/quote/:quoteId/contact` with optional notes only.
+   - Server derives name/email/phone from authenticated account.
+   - Property address is derived from stored quote draft address (not a form field).
    - Finalize moves quote directly to `in_review` with `customer_status=pending`.
-9. Confirmation page loads quote for owner/admin only.
+10. Confirmation page loads quote for owner/admin only.
 
 ### Customer Accounts
 
 - Clerk handles customer sign-up/sign-in, Google auth, and password reset.
+- Required phone is enforced in-app via `/complete-profile/*` for all auth methods.
+- Phone is stored on account metadata (`unsafeMetadata.autoscapeProfile.phone`).
+- Users without phone are gated before dashboard and quote finalize routes.
 - Protected dashboard routes:
   - `/dashboard` (profile + owned quotes + placeholder billing/messages cards)
   - `/dashboard/quotes/:quoteId` (owned quote detail)
@@ -98,6 +103,8 @@ Admin app (separate Vite frontend) supports:
 - Service overlay returned to clients is unioned/simplified/jittered/quantized geometry.
 - Authentication provider: Clerk for both customer and admin surfaces.
 - Quote ownership stored on `quotes.auth_user_id` and enforced on quote read/finalize paths.
+- Customer phone requirement enforced for quote finalize and account quote APIs.
+- Customer address history/default persisted in Clerk private metadata (`autoscapeProfile`).
 - Admin RBAC roles: `OWNER`, `ADMIN`, `REVIEWER`, `MARKETING`.
 - Admin role mapping source: Clerk org roles `owner/admin/reviewer/marketing`.
 - MARKETING role gets masked PII for lists and exports.

@@ -6,8 +6,7 @@ export const SignUpPage = () => (
       path="/sign-up"
       routing="path"
       signInUrl="/sign-in"
-      forceRedirectUrl="/dashboard"
-      fallbackRedirectUrl="/dashboard"
+      fallbackRedirectUrl="/complete-profile"
     />
   </div>
 );

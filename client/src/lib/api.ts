@@ -65,11 +65,12 @@ const request = async <T>(path: string, init?: RequestOptions): Promise<T> => {
 };
 
 export const api = {
-  submitQuoteDraft(payload: QuotePayload, idempotencyKey: string) {
+  submitQuoteDraft(payload: QuotePayload, idempotencyKey: string, authToken?: string) {
     return request<QuoteResponse>('/api/quote/draft', {
       method: 'POST',
       idempotencyKey,
-      body: JSON.stringify(payload)
+      body: JSON.stringify(payload),
+      authToken
     });
   },
   submitQuote(payload: QuotePayload, idempotencyKey: string) {

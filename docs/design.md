@@ -223,12 +223,15 @@ Implementation:
   - `/sign-in/*`, `/sign-up/*`
   - Google sign-in enabled
   - email/password with forgot/reset
+  - required phone captured through in-app `/complete-profile/*`
+  - phone persisted to `unsafeMetadata.autoscapeProfile.phone`
+  - users missing phone are routed to `/complete-profile/*` before dashboard/finalize
 - admin app:
   - Clerk sign-in required before rendering admin shell
   - bearer token sent on all `/api/admin/*` requests
 - server:
   - verifies bearer JWT via Clerk issuer/JWKS
-  - derives customer profile identity for quote finalize actions
+  - derives customer profile identity (name/email/phone) for quote finalize actions
 
 ## 17) Quote Ownership + Account Dashboard
 
@@ -241,10 +244,15 @@ Implementation:
 - quote ownership column: `quotes.auth_user_id`
 - ownership claim endpoint: `POST /api/quote/:quoteId/claim`
 - owner/admin-only quote lookup: `GET /api/quote/:quoteId`
-- finalize endpoint now auth-required and uses account name/email server-side
+- finalize endpoint now auth-required and accepts optional notes only
+- finalize uses account name/email/phone server-side, with address sourced from quote draft
+- signed-in draft creation and finalize sync quote address to Clerk private metadata:
+  - `autoscapeProfile.defaultAddress`
+  - `autoscapeProfile.addressHistory` (latest-first, deduped, max 10)
 - account APIs:
   - `GET /api/account/quotes`
   - `GET /api/account/quotes/:quoteId`
 - dashboard routes:
+  - `/complete-profile/*`
   - `/dashboard`
   - `/dashboard/quotes/:quoteId`

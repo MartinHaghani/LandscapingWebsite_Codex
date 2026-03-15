@@ -84,7 +84,6 @@ interface QuoteContactInput {
   name: string;
   email: string;
   phone: string;
-  addressText?: string;
   message?: string;
   attribution?: AttributionInput;
 }
@@ -1896,7 +1895,6 @@ export class DataStore {
         name: input.name,
         email: input.email,
         phone: input.phone,
-        addressText: input.addressText,
         message: input.message,
         attribution: cleanAttribution(input.attribution)
       },
@@ -1934,7 +1932,7 @@ export class DataStore {
             name: input.name,
             email: input.email,
             phone: input.phone,
-            addressText: input.addressText?.trim() || quote.addressText,
+            addressText: quote.addressText,
             message: input.message?.trim() || null,
             createdAt: nowIso()
           });
@@ -2034,7 +2032,7 @@ export class DataStore {
               name: input.name,
               email: input.email,
               phone: input.phone,
-              addressText: input.addressText?.trim() || quote.addressText,
+              addressText: quote.addressText,
               message: input.message?.trim() || null
             }
           });

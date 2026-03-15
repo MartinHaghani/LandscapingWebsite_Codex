@@ -114,8 +114,6 @@ export interface ContactResponse {
 }
 
 export interface QuoteContactPayload {
-  phone: string;
-  addressText?: string;
   message?: string;
   attribution?: AttributionPayload;
 }

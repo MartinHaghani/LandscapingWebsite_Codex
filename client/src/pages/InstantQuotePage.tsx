@@ -1,3 +1,4 @@
+import { useAuth } from '@clerk/clerk-react';
 import { useEffect, useMemo, useRef, useState, type FormEvent, type KeyboardEvent } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { QuoteMap } from '../components/quote/QuoteMap';
@@ -71,6 +72,7 @@ const createPolygonId = () => {
 
 export const InstantQuotePage = () => {
   const navigate = useNavigate();
+  const { getToken } = useAuth();
   const polygonCounterRef = useRef(0);
   const mapStepRef = useRef<HTMLDivElement | null>(null);
   const attributionRef = useRef(getAttributionSnapshot());
@@ -582,6 +584,7 @@ export const InstantQuotePage = () => {
     setStatusMessage(null);
 
     try {
+      const authToken = await getToken();
       const response = await api.submitQuoteDraft(
         {
           address: selectedAddress,
@@ -611,7 +614,8 @@ export const InstantQuotePage = () => {
           serviceFrequency,
           attribution: attributionRef.current
         },
-        createIdempotencyKey()
+        createIdempotencyKey(),
+        authToken ?? undefined
       );
 
       if (typeof window !== 'undefined') {

@@ -1,9 +1,10 @@
 import { useAuth, useUser } from '@clerk/clerk-react';
 import { useEffect, useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useLocation } from 'react-router-dom';
 import { Button } from '../components/ui/Button';
 import { Card } from '../components/ui/Card';
 import { api, ApiError } from '../lib/api';
+import { hasRequiredPhone } from '../lib/accountProfile';
 import type { AccountQuoteListItem } from '../types';
 
 const formatStatus = (status: string) =>
@@ -15,16 +16,18 @@ const formatStatus = (status: string) =>
 export const DashboardPage = () => {
   const { isLoaded, isSignedIn, getToken } = useAuth();
   const { user } = useUser();
+  const location = useLocation();
   const [quotes, setQuotes] = useState<AccountQuoteListItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const profileHasRequiredPhone = hasRequiredPhone(user);
 
   useEffect(() => {
     if (!isLoaded) {
       return;
     }
 
-    if (!isSignedIn) {
+    if (!isSignedIn || !profileHasRequiredPhone) {
       setLoading(false);
       return;
     }
@@ -62,7 +65,7 @@ export const DashboardPage = () => {
     return () => {
       mounted = false;
     };
-  }, [isLoaded, isSignedIn, getToken]);
+  }, [isLoaded, isSignedIn, getToken, profileHasRequiredPhone]);
 
   if (isLoaded && !isSignedIn) {
     return (
@@ -75,6 +78,26 @@ export const DashboardPage = () => {
             </Link>
             <Link to="/sign-up">
               <Button variant="secondary">Create Account</Button>
+            </Link>
+          </div>
+        </Card>
+      </div>
+    );
+  }
+
+  if (isLoaded && isSignedIn && !profileHasRequiredPhone) {
+    const redirectPath = encodeURIComponent(location.pathname + location.search);
+    return (
+      <div className="mx-auto w-full max-w-4xl px-4 py-16 md:px-8 md:py-20">
+        <Card className="space-y-5 bg-black/70 p-8">
+          <h1 className="text-3xl font-semibold text-white">Phone number required</h1>
+          <p className="text-sm text-white/75">Add your phone number to unlock dashboard access.</p>
+          <div className="flex flex-wrap gap-3">
+            <Link to={`/complete-profile?redirect_url=${redirectPath}`}>
+              <Button>Complete Profile</Button>
+            </Link>
+            <Link to="/instant-quote">
+              <Button variant="secondary">Back to quote builder</Button>
             </Link>
           </div>
         </Card>

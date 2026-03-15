@@ -34,38 +34,42 @@
 - payload includes `serviceFrequency`
 
 7. Server validates geometry and stores draft quote + v1 version.
-8. Client clears local draft snapshot and routes to `/quote-contact/:quoteId`.
+8. If request is authenticated, server records draft address to Clerk account metadata (`addressHistory`, latest as `defaultAddress`).
+9. Client clears local draft snapshot and routes to `/quote-contact/:quoteId`.
 
 ### Contact Finalize (Required)
 
 1. User lands on `/quote-contact/:quoteId`.
 2. If signed out, page shows auth wall (sign-in/sign-up).
 3. User signs in (email/password, Google, forgot/reset supported by Clerk).
-4. Client claims ownership of draft quote:
+4. If signed-in account has no phone (legacy profile), user is redirected to `/complete-profile/*`.
+5. Client claims ownership of draft quote:
 
 - `POST /api/quote/:quoteId/claim`
 - header: `Authorization: Bearer <clerk session token>`
 
-5. User submits phone (required), address (optional), and notes (optional). Name/email come from account profile.
-6. Client calls idempotent finalize endpoint:
+6. User submits optional notes only. Name/email/phone are derived from account profile and address comes from quote draft.
+7. Client calls idempotent finalize endpoint:
 
 - `POST /api/quote/:quoteId/contact`
 - header: `Idempotency-Key`
 - header: `Authorization: Bearer <clerk session token>`
 
-7. Server marks quote `in_review`, `customer_status=pending`, `contact_pending=false`, and writes lead contact event.
-8. Client routes to `/quote-confirmation/:quoteId`.
+8. Server marks quote `in_review`, `customer_status=pending`, `contact_pending=false`, and writes lead contact event.
+9. Server records quote address again into Clerk metadata as a secondary sync pass.
+10. Client routes to `/quote-confirmation/:quoteId`.
 
 ### Customer Dashboard
 
 1. Signed-in user opens `/dashboard`.
-2. Client calls owner-scoped account APIs:
+2. If phone is missing, user is redirected to `/complete-profile/*`.
+3. Client calls owner-scoped account APIs:
 
 - `GET /api/account/quotes`
 - `GET /api/account/quotes/:quoteId`
 - `GET /api/quote/:quoteId` (owner/admin only)
 
-3. Dashboard shows:
+4. Dashboard shows:
 
 - profile summary
 - linked quote list/statuses

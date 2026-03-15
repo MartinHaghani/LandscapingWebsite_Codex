@@ -1,14 +1,13 @@
 import { useAuth, useUser } from '@clerk/clerk-react';
-import { useEffect, useMemo, useState, type FormEvent } from 'react';
+import { useEffect, useState, type FormEvent } from 'react';
 import { Link, Navigate, useLocation, useNavigate, useParams } from 'react-router-dom';
 import { Button } from '../components/ui/Button';
 import { Card } from '../components/ui/Card';
 import { api, ApiError, createIdempotencyKey } from '../lib/api';
+import { hasRequiredPhone } from '../lib/accountProfile';
 import { getAttributionSnapshot } from '../lib/attribution';
 
 const defaultForm = {
-  phone: '',
-  addressText: '',
   message: ''
 };
 
@@ -35,18 +34,15 @@ export const QuoteContactPage = () => {
     status: string;
   } | null>(null);
   const [error, setError] = useState<string | null>(null);
-
-  const canSubmit = useMemo(
-    () => form.phone.trim().length >= 7 && !submitting,
-    [form.phone, submitting]
-  );
+  const profileHasRequiredPhone = hasRequiredPhone(user);
+  const canSubmit = !submitting;
 
   useEffect(() => {
     if (!quoteId || !isLoaded) {
       return;
     }
 
-    if (!isSignedIn) {
+    if (!isSignedIn || !profileHasRequiredPhone) {
       setLoadingQuote(false);
       return;
     }
@@ -81,11 +77,6 @@ export const QuoteContactPage = () => {
           contactPending: result.contactPending,
           status: result.status
         });
-
-        setForm((current) => ({
-          ...current,
-          addressText: result.address
-        }));
       } catch (err) {
         if (!mounted) {
           return;
@@ -104,7 +95,7 @@ export const QuoteContactPage = () => {
     return () => {
       mounted = false;
     };
-  }, [quoteId, isLoaded, isSignedIn, getToken]);
+  }, [quoteId, isLoaded, isSignedIn, getToken, profileHasRequiredPhone]);
 
   if (!quoteId) {
     return <Navigate to="/instant-quote" replace />;
@@ -129,8 +120,6 @@ export const QuoteContactPage = () => {
       await api.submitClaimedQuoteContact(
         quoteId,
         {
-          phone: form.phone.trim(),
-          addressText: form.addressText.trim() || undefined,
           message: form.message.trim() || undefined,
           attribution: getAttributionSnapshot()
         },
@@ -173,6 +162,31 @@ export const QuoteContactPage = () => {
     );
   }
 
+  if (isLoaded && isSignedIn && !profileHasRequiredPhone) {
+    const redirectPath = encodeURIComponent(location.pathname + location.search);
+    return (
+      <div className="mx-auto w-full max-w-4xl px-4 py-16 md:px-8 md:py-20">
+        <Card className="space-y-6 bg-black/70 p-7 md:p-10">
+          <div>
+            <p className="text-xs uppercase tracking-[0.15em] text-brand">Phone Number Required</p>
+            <h1 className="mt-3 text-3xl font-semibold text-white md:text-4xl">Add your phone number to continue</h1>
+            <p className="mt-3 text-sm text-white/75">
+              Your account must include a phone number before finalizing quotes.
+            </p>
+          </div>
+          <div className="flex flex-wrap gap-3">
+            <Link to={`/complete-profile?redirect_url=${redirectPath}`}>
+              <Button>Complete Profile</Button>
+            </Link>
+            <Link to="/instant-quote">
+              <Button variant="secondary">Back to quote builder</Button>
+            </Link>
+          </div>
+        </Card>
+      </div>
+    );
+  }
+
   return (
     <div className="mx-auto w-full max-w-5xl px-4 py-16 md:px-8 md:py-20">
       <Card className="space-y-6 bg-black/70 p-7 md:p-10">
@@ -180,7 +194,7 @@ export const QuoteContactPage = () => {
           <p className="text-xs uppercase tracking-[0.15em] text-brand">Quote Contact</p>
           <h1 className="mt-3 text-3xl font-semibold text-white md:text-4xl">Finalize your instant quote request</h1>
           <p className="mt-3 text-sm text-white/75">
-            One final step. We use your account profile for name and email.
+            One final step. We use your account profile for name, email, and phone, and your quote draft address.
           </p>
           <p className="mt-2 text-xs text-white/60">
             Signed in as {user?.primaryEmailAddress?.emailAddress ?? 'your account'}
@@ -219,35 +233,6 @@ export const QuoteContactPage = () => {
 
         {quote && quote.contactPending ? (
           <form onSubmit={handleSubmit} className="space-y-4">
-            <div className="grid gap-4 md:grid-cols-2">
-              <div>
-                <label htmlFor="quote-phone" className="mb-2 block text-sm text-white/80">
-                  Phone
-                </label>
-                <input
-                  id="quote-phone"
-                  required
-                  value={form.phone}
-                  onChange={(event) => setForm((current) => ({ ...current, phone: event.target.value }))}
-                  className="w-full rounded-xl border border-white/20 bg-black/50 px-4 py-3 text-white placeholder:text-white/35 focus:border-brand focus:outline-none"
-                  placeholder="+1 416 000 0000"
-                />
-              </div>
-
-              <div>
-                <label htmlFor="quote-address" className="mb-2 block text-sm text-white/80">
-                  Address (optional)
-                </label>
-                <input
-                  id="quote-address"
-                  value={form.addressText}
-                  onChange={(event) => setForm((current) => ({ ...current, addressText: event.target.value }))}
-                  className="w-full rounded-xl border border-white/20 bg-black/50 px-4 py-3 text-white placeholder:text-white/35 focus:border-brand focus:outline-none"
-                  placeholder="Property address"
-                />
-              </div>
-            </div>
-
             <div>
               <label htmlFor="quote-message" className="mb-2 block text-sm text-white/80">
                 Notes (optional)
