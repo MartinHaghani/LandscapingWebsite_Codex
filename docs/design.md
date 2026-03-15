@@ -169,6 +169,8 @@ Implementation:
 - persistent sidebar navigation + top utility bar
 - auto light/dark theme with manual override
 - route-based quote editor (`/quotes/:quoteId/edit`) with full polygon controls and version submit flow
+  - satellite basemap to align map context with on-site property imagery
+  - immediate polygon hydration on load to avoid blank-editor states
 - unified toolbar pattern on all tabs:
   - search
   - tab-specific filters

@@ -64,6 +64,8 @@ Admin app (separate Vite frontend) supports:
 - modern sidebar + top utility bar layout (auto light/dark theme)
 - quote inbox with pending semantics (`in_review + pending`) and verified-awaiting-payment label
 - route-based quote editor (`/quotes/:quoteId/edit`) with full polygon tools and editable quote controls
+  - satellite basemap for property-context editing
+  - stored customer polygons render immediately on editor load
 - append-only version flow:
   - client draft creates version `v1` (`actorType=client`)
   - admin edits create new versions (`actorType=admin`)

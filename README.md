@@ -118,6 +118,8 @@ Admin endpoints under `/api/admin/*` include:
 
 - quotes inbox (`/quotes`) with cursor pagination
 - quote editor (`/quotes/:quoteId/edit`) with full polygon tools, calculated vs actual quote panel, and version history
+  - satellite basemap in editor for property verification context
+  - persisted quote polygons hydrate immediately when editor opens
 - service-area request map payload (`/service-area-requests/map`) for heatmap/cluster rendering
 - quote versioning APIs:
   - `GET /api/admin/quotes/:id/editor`

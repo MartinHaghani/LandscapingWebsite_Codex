@@ -19,6 +19,7 @@ Primary domains:
 - API runtime: `server/src/index.ts` -> `server/src/server.ts`
 - Public app routes: `client/src/App.tsx`
 - Admin app routes/state: `admin/src/App.tsx`
+- Admin quote editor map module: `admin/src/components/QuoteEditorMap.tsx` (satellite raster basemap + immediate polygon source hydration)
 - Public layout shell: `client/src/components/layout/SiteLayout.tsx` (`Navbar`, `Footer`, `ScrollToTop`)
 
 ## 3) Persistence Layer

@@ -586,6 +586,68 @@ const getCentroidFromGeometry = (geometry: QuoteGeometry): { lat: number; lng: n
   };
 };
 
+const isValidLngLat = (lng: number, lat: number) =>
+  Number.isFinite(lng) &&
+  Number.isFinite(lat) &&
+  lng >= -180 &&
+  lng <= 180 &&
+  lat >= -90 &&
+  lat <= 90;
+
+const swapCoordinateOrder = (point: [number, number]): [number, number] | null => {
+  const [lng, lat] = point;
+  const swappedLng = lat;
+  const swappedLat = lng;
+  if (!isValidLngLat(swappedLng, swappedLat)) {
+    return null;
+  }
+
+  return [swappedLng, swappedLat];
+};
+
+const swapQuoteGeometryPointOrder = (geometry: QuoteGeometry): QuoteGeometry | null => {
+  if (geometry.type === 'Polygon') {
+    const swappedRings: [number, number][][] = [];
+    for (const ring of geometry.coordinates) {
+      const swappedRing: [number, number][] = [];
+      for (const point of ring) {
+        const swapped = swapCoordinateOrder(point as [number, number]);
+        if (!swapped) {
+          return null;
+        }
+        swappedRing.push(swapped);
+      }
+      swappedRings.push(swappedRing);
+    }
+    return {
+      type: 'Polygon',
+      coordinates: swappedRings
+    };
+  }
+
+  const swappedPolygons: [number, number][][][] = [];
+  for (const polygonCoordinates of geometry.coordinates) {
+    const swappedRings: [number, number][][] = [];
+    for (const ring of polygonCoordinates) {
+      const swappedRing: [number, number][] = [];
+      for (const point of ring) {
+        const swapped = swapCoordinateOrder(point as [number, number]);
+        if (!swapped) {
+          return null;
+        }
+        swappedRing.push(swapped);
+      }
+      swappedRings.push(swappedRing);
+    }
+    swappedPolygons.push(swappedRings);
+  }
+
+  return {
+    type: 'MultiPolygon',
+    coordinates: swappedPolygons
+  };
+};
+
 const roundMoney = (value: number) => Number(value.toFixed(2));
 
 const getRecommendedPlanFromArea = (areaM2: number) => {
@@ -798,6 +860,132 @@ const polygonSourceToEffectiveGeometry = (source: PolygonSourcePayload): QuoteGe
   };
 };
 
+const centroidDistanceM = (
+  left: { lng: number; lat: number },
+  right: { lng: number; lat: number }
+) => {
+  return haversineDistanceM([left.lng, left.lat], [right.lng, right.lat]);
+};
+
+const resolveEditorGeometryForLocation = (
+  geometry: QuoteGeometry,
+  location: { lat: number; lng: number } | null
+): QuoteGeometry => {
+  if (!location || !isValidLngLat(location.lng, location.lat)) {
+    return geometry;
+  }
+
+  const sourceCentroid = getCentroidFromGeometry(geometry);
+  if (!sourceCentroid) {
+    return geometry;
+  }
+
+  const sourceDistanceM = centroidDistanceM(sourceCentroid, location);
+  if (!Number.isFinite(sourceDistanceM) || sourceDistanceM <= 500_000) {
+    return geometry;
+  }
+
+  const swapped = swapQuoteGeometryPointOrder(geometry);
+  if (!swapped) {
+    return geometry;
+  }
+
+  try {
+    const swappedMeasured = validateAndMeasureGeometry(swapped);
+    const swappedCentroid = getCentroidFromGeometry(swappedMeasured.normalizedGeometry);
+    if (!swappedCentroid) {
+      return geometry;
+    }
+
+    const swappedDistanceM = centroidDistanceM(swappedCentroid, location);
+    if (
+      Number.isFinite(swappedDistanceM) &&
+      swappedDistanceM < 250_000 &&
+      swappedDistanceM + 50_000 < sourceDistanceM
+    ) {
+      return swappedMeasured.normalizedGeometry;
+    }
+  } catch {
+    return geometry;
+  }
+
+  return geometry;
+};
+
+const isPolygonSourceConsistentWithGeometry = (
+  source: PolygonSourcePayload,
+  geometry: QuoteGeometry
+) => {
+  try {
+    const sourceGeometry = polygonSourceToEffectiveGeometry(source);
+    const sourceMeasured = validateAndMeasureGeometry(sourceGeometry);
+    const targetMeasured = validateAndMeasureGeometry(geometry);
+    const areaDelta = Math.abs(sourceMeasured.areaM2 - targetMeasured.areaM2);
+    const perimeterDelta = Math.abs(sourceMeasured.perimeterM - targetMeasured.perimeterM);
+    const maxAreaDelta = Math.max(1, targetMeasured.areaM2 * 0.01);
+    const maxPerimeterDelta = Math.max(1, targetMeasured.perimeterM * 0.01);
+
+    if (areaDelta > maxAreaDelta || perimeterDelta > maxPerimeterDelta) {
+      return false;
+    }
+
+    const sourceCentroid = getCentroidFromGeometry(sourceMeasured.normalizedGeometry);
+    const targetCentroid = getCentroidFromGeometry(targetMeasured.normalizedGeometry);
+    if (!sourceCentroid || !targetCentroid) {
+      return false;
+    }
+
+    return centroidDistanceM(sourceCentroid, targetCentroid) <= 250;
+  } catch {
+    return false;
+  }
+};
+
+const swapPointOrder = (point: [number, number]): [number, number] | null => {
+  const [lng, lat] = point;
+  const swappedLng = lat;
+  const swappedLat = lng;
+  if (
+    !Number.isFinite(swappedLng) ||
+    swappedLng < -180 ||
+    swappedLng > 180 ||
+    !Number.isFinite(swappedLat) ||
+    swappedLat < -90 ||
+    swappedLat > 90
+  ) {
+    return null;
+  }
+
+  return [swappedLng, swappedLat];
+};
+
+const trySwapPolygonSourcePointOrder = (source: PolygonSourcePayload): PolygonSourcePayload | null => {
+  const polygons: PolygonSourcePolygon[] = [];
+
+  for (const polygon of source.polygons) {
+    const points: [number, number][] = [];
+    for (const point of polygon.points) {
+      const swapped = swapPointOrder(point);
+      if (!swapped) {
+        return null;
+      }
+      points.push(swapped);
+    }
+
+    polygons.push({
+      id: polygon.id,
+      kind: polygon.kind,
+      points
+    });
+  }
+
+  return {
+    schemaVersion: 1,
+    activePolygonId: source.activePolygonId,
+    polygons
+  };
+};
+
 const derivePolygonSourceFromGeometry = (geometry: QuoteGeometry): PolygonSourcePayload => {
   const polygons: PolygonSourcePolygon[] =
     geometry.type === 'Polygon'
@@ -826,11 +1014,21 @@ const resolvePolygonSourceForEditor = (
   geometry: QuoteGeometry
 ): { polygonSource: PolygonSourcePayload; fallbackUsed: boolean } => {
   const parsed = normalizePolygonSource(polygonSourceJson);
-  if (parsed) {
+  if (parsed && isPolygonSourceConsistentWithGeometry(parsed, geometry)) {
     return {
       polygonSource: clonePolygonSource(parsed),
       fallbackUsed: false
     };
+  }
+
+  if (parsed) {
+    const swapped = trySwapPolygonSourcePointOrder(parsed);
+    if (swapped && isPolygonSourceConsistentWithGeometry(swapped, geometry)) {
+      return {
+        polygonSource: clonePolygonSource(swapped),
+        fallbackUsed: true
+      };
+    }
   }
 
   return {
@@ -930,6 +1128,32 @@ const parseQuoteGeometryJson = (value: string | null): QuoteGeometry | null => {
   }
 
   return null;
+};
+
+const parsePointGeoJson = (value: string | null): { lat: number; lng: number } | null => {
+  if (!value) {
+    return null;
+  }
+
+  try {
+    const parsed = JSON.parse(value) as {
+      type?: unknown;
+      coordinates?: unknown;
+    };
+
+    if (!parsed || parsed.type !== 'Point' || !Array.isArray(parsed.coordinates) || parsed.coordinates.length !== 2) {
+      return null;
+    }
+
+    const [lng, lat] = parsed.coordinates;
+    if (typeof lng !== 'number' || typeof lat !== 'number' || !isValidLngLat(lng, lat)) {
+      return null;
+    }
+
+    return { lng, lat };
+  } catch {
+    return null;
+  }
 };
 
 const parseDateBound = (value?: string) => {
@@ -3754,7 +3978,11 @@ export class DataStore {
       }
 
       const lead = this.memory.leads.get(quote.leadId);
-      const { polygonSource, fallbackUsed } = resolvePolygonSourceForEditor(quote.polygonSourceJson, quote.polygon);
+      const editorGeometry = resolveEditorGeometryForLocation(quote.polygon, quote.location);
+      const { polygonSource, fallbackUsed } = resolvePolygonSourceForEditor(
+        quote.polygonSourceJson,
+        editorGeometry
+      );
       const calculatedPerSessionTotal = computeCalculatedPerSessionTotal(quote.areaM2, quote.perimeterM);
       const calculatedRange = computeSessionRangePricing(calculatedPerSessionTotal, quote.serviceFrequency);
 
@@ -3762,7 +3990,8 @@ export class DataStore {
         .filter((version) => version.quoteId === quote.id)
         .sort((left, right) => right.versionNumber - left.versionNumber)
         .map((version) => {
-          const versionSource = resolvePolygonSourceForEditor(version.polygonSourceJson, version.polygon);
+          const versionGeometry = resolveEditorGeometryForLocation(version.polygon, quote.location);
+          const versionSource = resolvePolygonSourceForEditor(version.polygonSourceJson, versionGeometry);
           return {
             versionNumber: version.versionNumber,
             actorType: version.actorType,
@@ -3845,9 +4074,12 @@ export class DataStore {
       throw new Error('QUOTE_NOT_FOUND');
     }
 
-    const geometryRow = await this.prisma.$queryRaw<Array<{ polygon_geojson: string | null }>>(
+    const geometryRow = await this.prisma.$queryRaw<
+      Array<{ polygon_geojson: string | null; location_geojson: string | null }>
+    >(
       Prisma.sql`
-        SELECT ST_AsGeoJSON("polygon_geom") AS polygon_geojson
+        SELECT ST_AsGeoJSON("polygon_geom") AS polygon_geojson,
+               ST_AsGeoJSON(("location_geog"::geometry)) AS location_geojson
         FROM "quotes"
         WHERE "id" = ${quote.id}
       `
@@ -3856,8 +4088,13 @@ export class DataStore {
     if (!quoteGeometry) {
       throw new Error('QUOTE_EDITOR_GEOMETRY_INVALID');
     }
+    const quoteLocation = parsePointGeoJson(geometryRow[0]?.location_geojson ?? null);
+    const editorGeometry = resolveEditorGeometryForLocation(quoteGeometry, quoteLocation);
 
-    const { polygonSource, fallbackUsed } = resolvePolygonSourceForEditor(quote.polygonSourceJson, quoteGeometry);
+    const { polygonSource, fallbackUsed } = resolvePolygonSourceForEditor(
+      quote.polygonSourceJson,
+      editorGeometry
+    );
     const areaM2 = parseDecimal(quote.areaM2);
     const perimeterM = parseDecimal(quote.perimeterM);
     const calculatedPerSessionTotal = computeCalculatedPerSessionTotal(areaM2, perimeterM);

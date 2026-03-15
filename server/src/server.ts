@@ -877,410 +877,425 @@ export const createServer = (options: CreateServerOptions = {}) => {
       const canMutateQuotes =
         identity.role === 'OWNER' || identity.role === 'ADMIN' || identity.role === 'REVIEWER';
 
-      if (method === 'GET' && pathname === '/api/admin/health') {
-        json(res, 200, {
-          ok: true,
-          role: identity.role,
-          capabilities: {
-            viewPiiFull: hasCapability(identity.role, 'VIEW_PII_FULL'),
-            viewAttribution: hasCapability(identity.role, 'VIEW_ATTRIBUTION'),
-            exportPiiFull: hasCapability(identity.role, 'EXPORT_PII_FULL'),
-            exportMarketingSafe: hasCapability(identity.role, 'EXPORT_MARKETING_SAFE')
+      try {
+        if (method === 'GET' && pathname === '/api/admin/health') {
+          json(res, 200, {
+            ok: true,
+            role: identity.role,
+            capabilities: {
+              viewPiiFull: hasCapability(identity.role, 'VIEW_PII_FULL'),
+              viewAttribution: hasCapability(identity.role, 'VIEW_ATTRIBUTION'),
+              exportPiiFull: hasCapability(identity.role, 'EXPORT_PII_FULL'),
+              exportMarketingSafe: hasCapability(identity.role, 'EXPORT_MARKETING_SAFE')
+            }
+          });
+          return;
+        }
+
+        if (method === 'GET' && pathname === '/api/admin/quotes') {
+          const limit = parseLimit(url.searchParams.get('limit'), 25, 100);
+          const cursor = url.searchParams.get('cursor') ?? undefined;
+          const q = url.searchParams.get('q') ?? undefined;
+          const status = url.searchParams.get('status') ?? undefined;
+          const serviceFrequency = url.searchParams.get('serviceFrequency') ?? undefined;
+          const contactPending = parseBooleanParam(url.searchParams.get('contactPending'));
+          const createdFrom = url.searchParams.get('createdFrom') ?? undefined;
+          const createdTo = url.searchParams.get('createdTo') ?? undefined;
+          const submittedFrom = url.searchParams.get('submittedFrom') ?? undefined;
+          const submittedTo = url.searchParams.get('submittedTo') ?? undefined;
+          const sortBy = (url.searchParams.get('sortBy') ?? undefined) as
+            | 'createdAt'
+            | 'submittedAt'
+            | 'perSessionTotal'
+            | 'seasonalTotalMax'
+            | undefined;
+          const sortDir = parseSortDir(url.searchParams.get('sortDir'));
+
+          const result = await dataStore.listQuotes({
+            limit,
+            cursor,
+            q,
+            status,
+            serviceFrequency: serviceFrequency === 'biweekly' ? 'biweekly' : serviceFrequency === 'weekly' ? 'weekly' : undefined,
+            contactPending,
+            createdFrom,
+            createdTo,
+            submittedFrom,
+            submittedTo,
+            sortBy,
+            sortDir,
+            role: identity.role
+          });
+
+          json(res, 200, result);
+          return;
+        }
+
+        const adminQuoteEditorId = getPathMatch(pathname, /^\/api\/admin\/quotes\/([^/]+)\/editor$/);
+        if (method === 'GET' && adminQuoteEditorId) {
+          if (!canMutateQuotes) {
+            json(res, 403, { error: 'Forbidden.' });
+            return;
           }
-        });
-        return;
-      }
 
-      if (method === 'GET' && pathname === '/api/admin/quotes') {
-        const limit = parseLimit(url.searchParams.get('limit'), 25, 100);
-        const cursor = url.searchParams.get('cursor') ?? undefined;
-        const q = url.searchParams.get('q') ?? undefined;
-        const status = url.searchParams.get('status') ?? undefined;
-        const serviceFrequency = url.searchParams.get('serviceFrequency') ?? undefined;
-        const contactPending = parseBooleanParam(url.searchParams.get('contactPending'));
-        const createdFrom = url.searchParams.get('createdFrom') ?? undefined;
-        const createdTo = url.searchParams.get('createdTo') ?? undefined;
-        const submittedFrom = url.searchParams.get('submittedFrom') ?? undefined;
-        const submittedTo = url.searchParams.get('submittedTo') ?? undefined;
-        const sortBy = (url.searchParams.get('sortBy') ?? undefined) as
-          | 'createdAt'
-          | 'submittedAt'
-          | 'perSessionTotal'
-          | 'seasonalTotalMax'
-          | undefined;
-        const sortDir = parseSortDir(url.searchParams.get('sortDir'));
+          const result = await dataStore.getQuoteEditor({
+            quotePublicId: adminQuoteEditorId,
+            role: identity.role
+          });
 
-        const result = await dataStore.listQuotes({
-          limit,
-          cursor,
-          q,
-          status,
-          serviceFrequency: serviceFrequency === 'biweekly' ? 'biweekly' : serviceFrequency === 'weekly' ? 'weekly' : undefined,
-          contactPending,
-          createdFrom,
-          createdTo,
-          submittedFrom,
-          submittedTo,
-          sortBy,
-          sortDir,
-          role: identity.role
-        });
-
-        json(res, 200, result);
-        return;
-      }
-
-      const adminQuoteEditorId = getPathMatch(pathname, /^\/api\/admin\/quotes\/([^/]+)\/editor$/);
-      if (method === 'GET' && adminQuoteEditorId) {
-        if (!canMutateQuotes) {
-          json(res, 403, { error: 'Forbidden.' });
+          json(res, 200, result);
           return;
         }
 
-        const result = await dataStore.getQuoteEditor({
-          quotePublicId: adminQuoteEditorId,
-          role: identity.role
-        });
+        if (method === 'GET' && pathname === '/api/admin/service-area-requests') {
+          const limit = parseLimit(url.searchParams.get('limit'), 25, 100);
+          const cursor = url.searchParams.get('cursor') ?? undefined;
+          const q = url.searchParams.get('q') ?? undefined;
+          const source = url.searchParams.get('source') ?? undefined;
+          const status = url.searchParams.get('status') ?? undefined;
+          const createdFrom = url.searchParams.get('createdFrom') ?? undefined;
+          const createdTo = url.searchParams.get('createdTo') ?? undefined;
+          const sortBy = (url.searchParams.get('sortBy') ?? undefined) as
+            | 'createdAt'
+            | 'distanceToNearestStationM'
+            | undefined;
+          const sortDir = parseSortDir(url.searchParams.get('sortDir'));
 
-        json(res, 200, result);
-        return;
-      }
+          const result = await dataStore.listServiceAreaRequests({
+            limit,
+            cursor,
+            q,
+            source,
+            status,
+            createdFrom,
+            createdTo,
+            sortBy,
+            sortDir,
+            role: identity.role
+          });
 
-      if (method === 'GET' && pathname === '/api/admin/service-area-requests') {
-        const limit = parseLimit(url.searchParams.get('limit'), 25, 100);
-        const cursor = url.searchParams.get('cursor') ?? undefined;
-        const q = url.searchParams.get('q') ?? undefined;
-        const source = url.searchParams.get('source') ?? undefined;
-        const status = url.searchParams.get('status') ?? undefined;
-        const createdFrom = url.searchParams.get('createdFrom') ?? undefined;
-        const createdTo = url.searchParams.get('createdTo') ?? undefined;
-        const sortBy = (url.searchParams.get('sortBy') ?? undefined) as
-          | 'createdAt'
-          | 'distanceToNearestStationM'
-          | undefined;
-        const sortDir = parseSortDir(url.searchParams.get('sortDir'));
-
-        const result = await dataStore.listServiceAreaRequests({
-          limit,
-          cursor,
-          q,
-          source,
-          status,
-          createdFrom,
-          createdTo,
-          sortBy,
-          sortDir,
-          role: identity.role
-        });
-
-        json(res, 200, result);
-        return;
-      }
-
-      if (method === 'GET' && pathname === '/api/admin/service-area-requests/map') {
-        const q = url.searchParams.get('q') ?? undefined;
-        const source = url.searchParams.get('source') ?? undefined;
-        const status = url.searchParams.get('status') ?? undefined;
-        const createdFrom = url.searchParams.get('createdFrom') ?? undefined;
-        const createdTo = url.searchParams.get('createdTo') ?? undefined;
-        const bbox = parseBbox(url.searchParams.get('bbox'));
-
-        const result = await dataStore.listServiceAreaRequestMap({
-          q,
-          source,
-          status,
-          createdFrom,
-          createdTo,
-          bbox,
-          role: identity.role
-        });
-
-        json(res, 200, result);
-        return;
-      }
-
-      if (method === 'GET' && pathname === '/api/admin/contacts') {
-        const limit = parseLimit(url.searchParams.get('limit'), 25, 100);
-        const cursor = url.searchParams.get('cursor') ?? undefined;
-        const q = url.searchParams.get('q') ?? undefined;
-        const channel = url.searchParams.get('channel');
-        const createdFrom = url.searchParams.get('createdFrom') ?? undefined;
-        const createdTo = url.searchParams.get('createdTo') ?? undefined;
-        const sortBy = (url.searchParams.get('sortBy') ?? undefined) as
-          | 'createdAt'
-          | 'name'
-          | 'email'
-          | undefined;
-        const sortDir = parseSortDir(url.searchParams.get('sortDir'));
-
-        const result = await dataStore.listLeadContacts({
-          limit,
-          cursor,
-          q,
-          channel:
-            channel === 'quote_finalize' || channel === 'contact_form'
-              ? channel
-              : undefined,
-          createdFrom,
-          createdTo,
-          sortBy,
-          sortDir,
-          role: identity.role
-        });
-
-        json(res, 200, result);
-        return;
-      }
-
-      if (method === 'GET' && pathname === '/api/admin/leads') {
-        const limit = parseLimit(url.searchParams.get('limit'), 25, 100);
-        const cursor = url.searchParams.get('cursor') ?? undefined;
-        const q = url.searchParams.get('q') ?? undefined;
-        const consentMarketing = parseBooleanParam(url.searchParams.get('consentMarketing'));
-        const createdFrom = url.searchParams.get('createdFrom') ?? undefined;
-        const createdTo = url.searchParams.get('createdTo') ?? undefined;
-        const sortBy = (url.searchParams.get('sortBy') ?? undefined) as
-          | 'createdAt'
-          | 'firstSeenAt'
-          | 'lastSeenAt'
-          | undefined;
-        const sortDir = parseSortDir(url.searchParams.get('sortDir'));
-
-        const result = await dataStore.listLeads({
-          limit,
-          cursor,
-          q,
-          consentMarketing,
-          createdFrom,
-          createdTo,
-          sortBy,
-          sortDir,
-          role: identity.role
-        });
-
-        json(res, 200, result);
-        return;
-      }
-
-      if (method === 'GET' && pathname === '/api/admin/audit-logs') {
-        const limit = parseLimit(url.searchParams.get('limit'), 25, 100);
-        const cursor = url.searchParams.get('cursor') ?? undefined;
-        const q = url.searchParams.get('q') ?? undefined;
-        const actorRole = url.searchParams.get('actorRole');
-        const entityType = url.searchParams.get('entityType') ?? undefined;
-        const createdFrom = url.searchParams.get('createdFrom') ?? undefined;
-        const createdTo = url.searchParams.get('createdTo') ?? undefined;
-        const sortBy = (url.searchParams.get('sortBy') ?? undefined) as 'createdAt' | 'action' | undefined;
-        const sortDir = parseSortDir(url.searchParams.get('sortDir'));
-
-        const result = await dataStore.listAuditLogs({
-          limit,
-          cursor,
-          q,
-          actorRole:
-            actorRole === 'OWNER' ||
-            actorRole === 'ADMIN' ||
-            actorRole === 'REVIEWER' ||
-            actorRole === 'MARKETING' ||
-            actorRole === 'SYSTEM'
-              ? actorRole
-              : undefined,
-          entityType,
-          createdFrom,
-          createdTo,
-          sortBy,
-          sortDir
-        });
-
-        json(res, 200, result);
-        return;
-      }
-
-      if (method === 'GET' && pathname === '/api/admin/attribution/summary') {
-        if (!hasCapability(identity.role, 'VIEW_ATTRIBUTION')) {
-          json(res, 403, { error: 'Forbidden.' });
+          json(res, 200, result);
           return;
         }
 
-        const launchAtRaw = process.env.SYSTEM_LAUNCH_AT?.trim();
-        const launchAtDate = launchAtRaw ? new Date(launchAtRaw) : undefined;
-        const launchAt = launchAtDate && !Number.isNaN(launchAtDate.valueOf()) ? launchAtDate : undefined;
+        if (method === 'GET' && pathname === '/api/admin/service-area-requests/map') {
+          const q = url.searchParams.get('q') ?? undefined;
+          const source = url.searchParams.get('source') ?? undefined;
+          const status = url.searchParams.get('status') ?? undefined;
+          const createdFrom = url.searchParams.get('createdFrom') ?? undefined;
+          const createdTo = url.searchParams.get('createdTo') ?? undefined;
+          const bbox = parseBbox(url.searchParams.get('bbox'));
 
-        const summary = await dataStore.getAttributionSummary({
-          launchAt
-        });
+          const result = await dataStore.listServiceAreaRequestMap({
+            q,
+            source,
+            status,
+            createdFrom,
+            createdTo,
+            bbox,
+            role: identity.role
+          });
 
-        json(res, 200, summary);
-        return;
-      }
-
-      if (method === 'GET' && pathname === '/api/admin/exports/quotes.csv') {
-        if (!hasCapability(identity.role, 'EXPORT_MARKETING_SAFE')) {
-          json(res, 403, { error: 'Forbidden.' });
+          json(res, 200, result);
           return;
         }
 
-        if (identity.role === 'MARKETING' && !hasCapability(identity.role, 'EXPORT_PII_FULL')) {
+        if (method === 'GET' && pathname === '/api/admin/contacts') {
+          const limit = parseLimit(url.searchParams.get('limit'), 25, 100);
+          const cursor = url.searchParams.get('cursor') ?? undefined;
+          const q = url.searchParams.get('q') ?? undefined;
+          const channel = url.searchParams.get('channel');
+          const createdFrom = url.searchParams.get('createdFrom') ?? undefined;
+          const createdTo = url.searchParams.get('createdTo') ?? undefined;
+          const sortBy = (url.searchParams.get('sortBy') ?? undefined) as
+            | 'createdAt'
+            | 'name'
+            | 'email'
+            | undefined;
+          const sortDir = parseSortDir(url.searchParams.get('sortDir'));
+
+          const result = await dataStore.listLeadContacts({
+            limit,
+            cursor,
+            q,
+            channel:
+              channel === 'quote_finalize' || channel === 'contact_form'
+                ? channel
+                : undefined,
+            createdFrom,
+            createdTo,
+            sortBy,
+            sortDir,
+            role: identity.role
+          });
+
+          json(res, 200, result);
+          return;
+        }
+
+        if (method === 'GET' && pathname === '/api/admin/leads') {
+          const limit = parseLimit(url.searchParams.get('limit'), 25, 100);
+          const cursor = url.searchParams.get('cursor') ?? undefined;
+          const q = url.searchParams.get('q') ?? undefined;
+          const consentMarketing = parseBooleanParam(url.searchParams.get('consentMarketing'));
+          const createdFrom = url.searchParams.get('createdFrom') ?? undefined;
+          const createdTo = url.searchParams.get('createdTo') ?? undefined;
+          const sortBy = (url.searchParams.get('sortBy') ?? undefined) as
+            | 'createdAt'
+            | 'firstSeenAt'
+            | 'lastSeenAt'
+            | undefined;
+          const sortDir = parseSortDir(url.searchParams.get('sortDir'));
+
+          const result = await dataStore.listLeads({
+            limit,
+            cursor,
+            q,
+            consentMarketing,
+            createdFrom,
+            createdTo,
+            sortBy,
+            sortDir,
+            role: identity.role
+          });
+
+          json(res, 200, result);
+          return;
+        }
+
+        if (method === 'GET' && pathname === '/api/admin/audit-logs') {
+          const limit = parseLimit(url.searchParams.get('limit'), 25, 100);
+          const cursor = url.searchParams.get('cursor') ?? undefined;
+          const q = url.searchParams.get('q') ?? undefined;
+          const actorRole = url.searchParams.get('actorRole');
+          const entityType = url.searchParams.get('entityType') ?? undefined;
+          const createdFrom = url.searchParams.get('createdFrom') ?? undefined;
+          const createdTo = url.searchParams.get('createdTo') ?? undefined;
+          const sortBy = (url.searchParams.get('sortBy') ?? undefined) as 'createdAt' | 'action' | undefined;
+          const sortDir = parseSortDir(url.searchParams.get('sortDir'));
+
+          const result = await dataStore.listAuditLogs({
+            limit,
+            cursor,
+            q,
+            actorRole:
+              actorRole === 'OWNER' ||
+              actorRole === 'ADMIN' ||
+              actorRole === 'REVIEWER' ||
+              actorRole === 'MARKETING' ||
+              actorRole === 'SYSTEM'
+                ? actorRole
+                : undefined,
+            entityType,
+            createdFrom,
+            createdTo,
+            sortBy,
+            sortDir
+          });
+
+          json(res, 200, result);
+          return;
+        }
+
+        if (method === 'GET' && pathname === '/api/admin/attribution/summary') {
+          if (!hasCapability(identity.role, 'VIEW_ATTRIBUTION')) {
+            json(res, 403, { error: 'Forbidden.' });
+            return;
+          }
+
+          const launchAtRaw = process.env.SYSTEM_LAUNCH_AT?.trim();
+          const launchAtDate = launchAtRaw ? new Date(launchAtRaw) : undefined;
+          const launchAt = launchAtDate && !Number.isNaN(launchAtDate.valueOf()) ? launchAtDate : undefined;
+
+          const summary = await dataStore.getAttributionSummary({
+            launchAt
+          });
+
+          json(res, 200, summary);
+          return;
+        }
+
+        if (method === 'GET' && pathname === '/api/admin/exports/quotes.csv') {
+          if (!hasCapability(identity.role, 'EXPORT_MARKETING_SAFE')) {
+            json(res, 403, { error: 'Forbidden.' });
+            return;
+          }
+
+          if (identity.role === 'MARKETING' && !hasCapability(identity.role, 'EXPORT_PII_FULL')) {
+            const exportResult = await dataStore.exportQuotesCsv(identity.role);
+            csvResponse(res, 200, 'quotes-marketing-safe.csv', exportResult.csv);
+            return;
+          }
+
           const exportResult = await dataStore.exportQuotesCsv(identity.role);
-          csvResponse(res, 200, 'quotes-marketing-safe.csv', exportResult.csv);
+          csvResponse(res, 200, 'quotes.csv', exportResult.csv);
           return;
         }
 
-        const exportResult = await dataStore.exportQuotesCsv(identity.role);
-        csvResponse(res, 200, 'quotes.csv', exportResult.csv);
-        return;
-      }
+        const adminQuoteStatusId = getPathMatch(pathname, /^\/api\/admin\/quotes\/([^/]+)\/status$/);
+        if (method === 'PATCH' && adminQuoteStatusId) {
+          if (!canMutateQuotes) {
+            json(res, 403, { error: 'Forbidden.' });
+            return;
+          }
 
-      const adminQuoteStatusId = getPathMatch(pathname, /^\/api\/admin\/quotes\/([^/]+)\/status$/);
-      if (method === 'PATCH' && adminQuoteStatusId) {
-        if (!canMutateQuotes) {
-          json(res, 403, { error: 'Forbidden.' });
-          return;
-        }
+          const body = await readJson(req);
+          const parsed = adminQuoteStatusSchema.safeParse(body);
 
-        const body = await readJson(req);
-        const parsed = adminQuoteStatusSchema.safeParse(body);
+          if (!parsed.success) {
+            json(res, 400, {
+              error: 'Invalid status payload.',
+              details: parsed.error.flatten()
+            });
+            return;
+          }
 
-        if (!parsed.success) {
-          json(res, 400, {
-            error: 'Invalid status payload.',
-            details: parsed.error.flatten()
+          const result = await dataStore.updateQuoteStatus({
+            quotePublicId: adminQuoteStatusId,
+            nextStatus: parsed.data.status,
+            actor
           });
+
+          json(res, 200, result);
           return;
         }
 
-        const result = await dataStore.updateQuoteStatus({
-          quotePublicId: adminQuoteStatusId,
-          nextStatus: parsed.data.status,
-          actor
-        });
+        const adminQuoteNoteId = getPathMatch(pathname, /^\/api\/admin\/quotes\/([^/]+)\/notes$/);
+        if (method === 'POST' && adminQuoteNoteId) {
+          if (!canMutateQuotes) {
+            json(res, 403, { error: 'Forbidden.' });
+            return;
+          }
 
-        json(res, 200, result);
-        return;
-      }
+          const body = await readJson(req);
+          const parsed = adminQuoteNoteSchema.safeParse(body);
 
-      const adminQuoteNoteId = getPathMatch(pathname, /^\/api\/admin\/quotes\/([^/]+)\/notes$/);
-      if (method === 'POST' && adminQuoteNoteId) {
-        if (!canMutateQuotes) {
-          json(res, 403, { error: 'Forbidden.' });
-          return;
-        }
+          if (!parsed.success) {
+            json(res, 400, {
+              error: 'Invalid note payload.',
+              details: parsed.error.flatten()
+            });
+            return;
+          }
 
-        const body = await readJson(req);
-        const parsed = adminQuoteNoteSchema.safeParse(body);
-
-        if (!parsed.success) {
-          json(res, 400, {
-            error: 'Invalid note payload.',
-            details: parsed.error.flatten()
+          const result = await dataStore.addQuoteNote({
+            quotePublicId: adminQuoteNoteId,
+            note: parsed.data.note,
+            actor
           });
+
+          json(res, 201, { ok: true, note: result });
           return;
         }
 
-        const result = await dataStore.addQuoteNote({
-          quotePublicId: adminQuoteNoteId,
-          note: parsed.data.note,
-          actor
-        });
+        const adminQuoteRevisionId = getPathMatch(pathname, /^\/api\/admin\/quotes\/([^/]+)\/revise$/);
+        if (method === 'POST' && adminQuoteRevisionId) {
+          if (!canMutateQuotes) {
+            json(res, 403, { error: 'Forbidden.' });
+            return;
+          }
 
-        json(res, 201, { ok: true, note: result });
-        return;
-      }
+          const body = await readJson(req);
+          const parsed = adminQuoteRevisionSchema.safeParse(body);
 
-      const adminQuoteRevisionId = getPathMatch(pathname, /^\/api\/admin\/quotes\/([^/]+)\/revise$/);
-      if (method === 'POST' && adminQuoteRevisionId) {
-        if (!canMutateQuotes) {
-          json(res, 403, { error: 'Forbidden.' });
-          return;
-        }
+          if (!parsed.success) {
+            json(res, 400, {
+              error: 'Invalid revision payload.',
+              details: parsed.error.flatten()
+            });
+            return;
+          }
 
-        const body = await readJson(req);
-        const parsed = adminQuoteRevisionSchema.safeParse(body);
-
-        if (!parsed.success) {
-          json(res, 400, {
-            error: 'Invalid revision payload.',
-            details: parsed.error.flatten()
+          const result = await dataStore.reviseQuote({
+            quotePublicId: adminQuoteRevisionId,
+            perSessionTotal: parsed.data.perSessionTotal ?? parsed.data.finalTotal ?? 0,
+            finalTotal: parsed.data.finalTotal,
+            overrideAmount: parsed.data.overrideAmount,
+            overrideReason: parsed.data.overrideReason,
+            actor
           });
+
+          json(res, 200, result);
           return;
         }
 
-        const result = await dataStore.reviseQuote({
-          quotePublicId: adminQuoteRevisionId,
-          perSessionTotal: parsed.data.perSessionTotal ?? parsed.data.finalTotal ?? 0,
-          finalTotal: parsed.data.finalTotal,
-          overrideAmount: parsed.data.overrideAmount,
-          overrideReason: parsed.data.overrideReason,
-          actor
-        });
+        const adminQuoteVersionId = getPathMatch(pathname, /^\/api\/admin\/quotes\/([^/]+)\/versions$/);
+        if (method === 'POST' && adminQuoteVersionId) {
+          if (!canMutateQuotes) {
+            json(res, 403, { error: 'Forbidden.' });
+            return;
+          }
 
-        json(res, 200, result);
-        return;
-      }
+          const body = await readJson(req);
+          const parsed = adminQuoteVersionCreateSchema.safeParse(body);
 
-      const adminQuoteVersionId = getPathMatch(pathname, /^\/api\/admin\/quotes\/([^/]+)\/versions$/);
-      if (method === 'POST' && adminQuoteVersionId) {
-        if (!canMutateQuotes) {
-          json(res, 403, { error: 'Forbidden.' });
-          return;
-        }
+          if (!parsed.success) {
+            json(res, 400, {
+              error: 'Invalid version payload.',
+              details: parsed.error.flatten()
+            });
+            return;
+          }
 
-        const body = await readJson(req);
-        const parsed = adminQuoteVersionCreateSchema.safeParse(body);
-
-        if (!parsed.success) {
-          json(res, 400, {
-            error: 'Invalid version payload.',
-            details: parsed.error.flatten()
+          const result = await dataStore.createQuoteVersion({
+            quotePublicId: adminQuoteVersionId,
+            polygonSource: {
+              ...parsed.data.polygonSource,
+              activePolygonId: parsed.data.polygonSource.activePolygonId ?? null
+            },
+            serviceFrequency: parsed.data.serviceFrequency,
+            perSessionTotal: parsed.data.perSessionTotal,
+            finalTotal: parsed.data.finalTotal,
+            overrideReason: parsed.data.overrideReason,
+            actor
           });
+
+          json(res, 200, result);
           return;
         }
 
-        const result = await dataStore.createQuoteVersion({
-          quotePublicId: adminQuoteVersionId,
-          polygonSource: {
-            ...parsed.data.polygonSource,
-            activePolygonId: parsed.data.polygonSource.activePolygonId ?? null
-          },
-          serviceFrequency: parsed.data.serviceFrequency,
-          perSessionTotal: parsed.data.perSessionTotal,
-          finalTotal: parsed.data.finalTotal,
-          overrideReason: parsed.data.overrideReason,
-          actor
-        });
+        const adminQuoteVersionSubmitMatch = pathname.match(
+          /^\/api\/admin\/quotes\/([^/]+)\/versions\/(\d+)\/submit$/
+        );
+        if (method === 'POST' && adminQuoteVersionSubmitMatch) {
+          if (!canMutateQuotes) {
+            json(res, 403, { error: 'Forbidden.' });
+            return;
+          }
 
-        json(res, 200, result);
+          const quotePublicId = decodeURIComponent(adminQuoteVersionSubmitMatch[1]);
+          const versionNumber = Number.parseInt(adminQuoteVersionSubmitMatch[2], 10);
+          if (!Number.isFinite(versionNumber) || versionNumber < 1) {
+            json(res, 400, { error: 'Invalid version number.' });
+            return;
+          }
+
+          const result = await dataStore.submitQuoteVersion({
+            quotePublicId,
+            versionNumber,
+            actor
+          });
+
+          json(res, 200, result);
+          return;
+        }
+
+        json(res, 404, { error: `Cannot ${method} ${pathname}` });
+        return;
+      } catch (error) {
+        if (error instanceof SyntaxError) {
+          json(res, 400, { error: 'Invalid JSON body.' });
+          return;
+        }
+        if (error instanceof Error && error.message === 'Payload too large.') {
+          json(res, 413, { error: 'Payload too large.' });
+          return;
+        }
+
+        const mapped = mapStoreError(error);
+        json(res, mapped.statusCode, { error: mapped.message });
         return;
       }
-
-      const adminQuoteVersionSubmitMatch = pathname.match(
-        /^\/api\/admin\/quotes\/([^/]+)\/versions\/(\d+)\/submit$/
-      );
-      if (method === 'POST' && adminQuoteVersionSubmitMatch) {
-        if (!canMutateQuotes) {
-          json(res, 403, { error: 'Forbidden.' });
-          return;
-        }
-
-        const quotePublicId = decodeURIComponent(adminQuoteVersionSubmitMatch[1]);
-        const versionNumber = Number.parseInt(adminQuoteVersionSubmitMatch[2], 10);
-        if (!Number.isFinite(versionNumber) || versionNumber < 1) {
-          json(res, 400, { error: 'Invalid version number.' });
-          return;
-        }
-
-        const result = await dataStore.submitQuoteVersion({
-          quotePublicId,
-          versionNumber,
-          actor
-        });
-
-        json(res, 200, result);
-        return;
-      }
-
-      json(res, 404, { error: `Cannot ${method} ${pathname}` });
-      return;
     }
 
     json(res, 404, { error: `Cannot ${method} ${pathname}` });

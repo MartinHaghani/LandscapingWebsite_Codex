@@ -152,7 +152,15 @@ export const QuoteEditorPage = ({ getToken, quoteId, onBack }: QuoteEditorPagePr
       setEditor(response);
       const initialState = toEditorState(response.polygonSource);
       setPolygonHistory(createPolygonHistory(initialState));
-      setSelection({ kind: 'none' });
+      const defaultPolygonId = initialState.activePolygonId ?? initialState.polygons[0]?.id ?? null;
+      setSelection(
+        defaultPolygonId
+          ? {
+              kind: 'polygon',
+              polygonId: defaultPolygonId
+            }
+          : { kind: 'none' }
+      );
       setDrawing(false);
       setCenter(getCenterFromPolygons(initialState.polygons));
       setServiceFrequency(response.editable.serviceFrequency);
@@ -162,6 +170,8 @@ export const QuoteEditorPage = ({ getToken, quoteId, onBack }: QuoteEditorPagePr
       setSelectedVersionNumber(options?.keepSelectedVersion ?? response.versions[0]?.versionNumber ?? null);
       setInfo(options?.message ?? null);
     } catch (err) {
+      setEditor(null);
+      setInfo(null);
       setError(err instanceof Error ? err.message : 'Unable to load quote editor.');
     } finally {
       setLoading(false);
@@ -321,7 +331,15 @@ export const QuoteEditorPage = ({ getToken, quoteId, onBack }: QuoteEditorPagePr
 
     const nextState = toEditorState(version.polygonSource);
     setPolygonHistory(createPolygonHistory(nextState));
-    setSelection({ kind: 'none' });
+    const defaultPolygonId = nextState.activePolygonId ?? nextState.polygons[0]?.id ?? null;
+    setSelection(
+      defaultPolygonId
+        ? {
+            kind: 'polygon',
+            polygonId: defaultPolygonId
+          }
+        : { kind: 'none' }
+    );
     setDrawing(false);
     setCenter(getCenterFromPolygons(nextState.polygons));
     setServiceFrequency(version.serviceFrequency);
@@ -346,6 +364,30 @@ export const QuoteEditorPage = ({ getToken, quoteId, onBack }: QuoteEditorPagePr
     unitMode === 'metric'
       ? `${formatNumber(metrics.perimeterM)} m`
       : `${formatNumber(toFt(metrics.perimeterM))} ft`;
+
+  if (!loading && !editor) {
+    return (
+      <section className="panel" style={{ gap: '0.9rem' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', gap: '0.75rem', flexWrap: 'wrap' }}>
+          <div>
+            <h2>Quote Editor: {quoteId}</h2>
+            <p className="hint">Unable to load quote data for this ID.</p>
+          </div>
+          <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'flex-start' }}>
+            <button type="button" className="button" onClick={onBack}>
+              Back to Quotes
+            </button>
+          </div>
+        </div>
+
+        {error ? <p className="error-banner">{error}</p> : null}
+        <p className="hint">
+          If the server is running without a database (`DATABASE_URL` not set), quotes are in-memory and are cleared on
+          server restart.
+        </p>
+      </section>
+    );
+  }
 
   return (
     <section className="panel" style={{ gap: '0.9rem' }}>

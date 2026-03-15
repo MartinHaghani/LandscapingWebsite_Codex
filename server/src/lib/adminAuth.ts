@@ -124,6 +124,33 @@ const getClerkClient = () => {
   });
 };
 
+const resolveAdminMembership = async (userId: string, requiredOrgId: string) => {
+  const clerk = getClerkClient();
+  if (!clerk) {
+    return null;
+  }
+
+  const memberships = await clerk.users.getOrganizationMembershipList({
+    userId,
+    limit: 100
+  });
+
+  const current = memberships.data.find((membership) => membership.organization.id === requiredOrgId);
+  if (!current) {
+    return null;
+  }
+
+  const role = normalizeRole(current.role);
+  if (!role) {
+    return null;
+  }
+
+  return {
+    orgId: current.organization.id,
+    role
+  };
+};
+
 const readEmailFromTokenPayload = (payload: JWTPayload) =>
   readStringClaim(payload, 'email') ??
   readStringClaim(payload, 'email_address') ??
@@ -231,21 +258,31 @@ export const resolveAdminIdentity = async (req: http.IncomingMessage): Promise<A
     const payload = await verifyToken(token);
     const userId = readUserId(payload);
     const orgId = readOrgId(payload);
-    const role = normalizeRole(readOrgRole(payload));
+    const orgRoleClaim = readOrgRole(payload);
+    const role = normalizeRole(orgRoleClaim);
     const requiredOrgId = process.env.CLERK_ADMIN_ORG_ID?.trim();
 
     if (!requiredOrgId) {
       throw new Error('AUTH_CONFIG_ERROR');
     }
 
-    if (!orgId || orgId !== requiredOrgId || !role) {
+    if (orgId && orgId === requiredOrgId && role) {
+      return {
+        userId,
+        role,
+        orgId
+      };
+    }
+
+    const membership = await resolveAdminMembership(userId, requiredOrgId);
+    if (!membership) {
       throw new Error('AUTH_FORBIDDEN');
     }
 
     return {
       userId,
-      role,
-      orgId
+      role: membership.role,
+      orgId: membership.orgId
     };
   } catch (error) {
     const code = toAuthErrorCode(error);

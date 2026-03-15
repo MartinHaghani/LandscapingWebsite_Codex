@@ -161,15 +161,20 @@ const App = () => {
   const { user } = useUser();
   const location = useLocation();
   const navigate = useNavigate();
+  const adminOrgId = import.meta.env.VITE_CLERK_ADMIN_ORG_ID?.trim();
   const session = useMemo<AuthTokenProvider | null>(
     () =>
       isSignedIn
         ? async () => {
-            const token = await getToken();
+            const token = adminOrgId
+              ? await getToken({
+                  organizationId: adminOrgId
+                })
+              : await getToken();
             return token;
           }
         : null,
-    [isSignedIn, getToken]
+    [isSignedIn, getToken, adminOrgId]
   );
   const [tab, setTab] = useState<TabKey>('quotes');
   const [themeMode, setThemeMode] = useState<ThemeMode>('system');

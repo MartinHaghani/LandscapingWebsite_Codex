@@ -113,6 +113,8 @@
 
 - open route-based editor `/quotes/:quoteId/edit` for `in_review` quotes
 - full map edit with the same polygon tools used in public quote flow
+  - editor map uses satellite imagery for visual verification
+  - saved quote polygons are rendered immediately when the editor opens
 - save new version (`POST /api/admin/quotes/:id/versions`)
 - submit selected version (`POST /api/admin/quotes/:id/versions/:versionNumber/submit`)
   - sets `status=verified`, `customer_status=awaiting_payment`

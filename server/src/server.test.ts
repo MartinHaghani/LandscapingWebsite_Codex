@@ -491,6 +491,176 @@ describe('admin quote editor workflow', () => {
     assert.equal(editorBody.polygonSource.polygons[0]?.kind, 'service');
   });
 
+  it('repairs lat/lng-swapped polygon source payloads for editor rendering', async () => {
+    const { baseUrl } = await startServer();
+
+    const draftResponse = await fetch(`${baseUrl}/api/quote/draft`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Idempotency-Key': 'quote-editor-draft-swapped-1'
+      },
+      body: JSON.stringify({
+        address: '145 Repair Lane, Vaughan, ON',
+        location: {
+          lat: 43.844147,
+          lng: -79.51962
+        },
+        polygon: {
+          type: 'Polygon',
+          coordinates: [
+            [
+              [-79.5201, 43.8439],
+              [-79.5194, 43.8439],
+              [-79.5194, 43.8444],
+              [-79.5201, 43.8444],
+              [-79.5201, 43.8439]
+            ]
+          ]
+        },
+        polygonSource: {
+          schemaVersion: 1,
+          activePolygonId: 'service-1',
+          polygons: [
+            {
+              id: 'service-1',
+              kind: 'service',
+              points: [
+                [43.8439, -79.5201],
+                [43.8439, -79.5194],
+                [43.8444, -79.5194],
+                [43.8444, -79.5201]
+              ]
+            }
+          ]
+        },
+        plan: 'Starter Autonomy Plan',
+        quoteTotal: 175,
+        serviceFrequency: 'weekly',
+        baseTotal: 49,
+        pricingVersion: 'v1',
+        currency: 'CAD'
+      })
+    });
+    assert.equal(draftResponse.status, 201);
+    const draftBody = (await draftResponse.json()) as { quoteId: string };
+
+    const finalizeResponse = await fetch(`${baseUrl}/api/quote/${draftBody.quoteId}/contact`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Idempotency-Key': 'quote-editor-contact-swapped-1',
+        Authorization: 'Bearer customer-swapped'
+      },
+      body: JSON.stringify({
+        phone: '+1 416 555 1145'
+      })
+    });
+    assert.equal(finalizeResponse.status, 200);
+
+    const editorResponse = await fetch(`${baseUrl}/api/admin/quotes/${draftBody.quoteId}/editor`, {
+      headers: {
+        Authorization: 'Bearer admin-admin'
+      }
+    });
+    assert.equal(editorResponse.status, 200);
+    const editorBody = (await editorResponse.json()) as {
+      polygonSourceFallback: boolean;
+      polygonSource: { polygons: Array<{ points: Array<[number, number]> }> };
+    };
+    assert.equal(editorBody.polygonSourceFallback, true);
+    assert.equal(editorBody.polygonSource.polygons.length > 0, true);
+    const firstPoint = editorBody.polygonSource.polygons[0]?.points[0];
+    assert.ok(firstPoint);
+    assert.equal(firstPoint[0] < -70 && firstPoint[0] > -90, true);
+    assert.equal(firstPoint[1] > 40 && firstPoint[1] < 50, true);
+  });
+
+  it('repairs lat/lng-swapped quote geometry using stored quote location anchor', async () => {
+    const { baseUrl } = await startServer();
+
+    const draftResponse = await fetch(`${baseUrl}/api/quote/draft`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Idempotency-Key': 'quote-editor-draft-swapped-geometry-1'
+      },
+      body: JSON.stringify({
+        address: '222 Geometry Repair Ave, Vaughan, ON',
+        location: {
+          lat: 43.844147,
+          lng: -79.51962
+        },
+        polygon: {
+          type: 'Polygon',
+          coordinates: [
+            [
+              [43.8439, -79.5201],
+              [43.8439, -79.5194],
+              [43.8444, -79.5194],
+              [43.8444, -79.5201],
+              [43.8439, -79.5201]
+            ]
+          ]
+        },
+        polygonSource: {
+          schemaVersion: 1,
+          activePolygonId: 'service-1',
+          polygons: [
+            {
+              id: 'service-1',
+              kind: 'service',
+              points: [
+                [43.8439, -79.5201],
+                [43.8439, -79.5194],
+                [43.8444, -79.5194],
+                [43.8444, -79.5201]
+              ]
+            }
+          ]
+        },
+        plan: 'Starter Autonomy Plan',
+        quoteTotal: 176,
+        serviceFrequency: 'weekly',
+        baseTotal: 49,
+        pricingVersion: 'v1',
+        currency: 'CAD'
+      })
+    });
+    assert.equal(draftResponse.status, 201);
+    const draftBody = (await draftResponse.json()) as { quoteId: string };
+
+    const finalizeResponse = await fetch(`${baseUrl}/api/quote/${draftBody.quoteId}/contact`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Idempotency-Key': 'quote-editor-contact-swapped-geometry-1',
+        Authorization: 'Bearer customer-swapped-geometry'
+      },
+      body: JSON.stringify({
+        phone: '+1 416 555 2288'
+      })
+    });
+    assert.equal(finalizeResponse.status, 200);
+
+    const editorResponse = await fetch(`${baseUrl}/api/admin/quotes/${draftBody.quoteId}/editor`, {
+      headers: {
+        Authorization: 'Bearer admin-admin'
+      }
+    });
+    assert.equal(editorResponse.status, 200);
+    const editorBody = (await editorResponse.json()) as {
+      polygonSourceFallback: boolean;
+      polygonSource: { polygons: Array<{ points: Array<[number, number]> }> };
+    };
+    assert.equal(editorBody.polygonSourceFallback, true);
+    assert.equal(editorBody.polygonSource.polygons.length > 0, true);
+    const firstPoint = editorBody.polygonSource.polygons[0]?.points[0];
+    assert.ok(firstPoint);
+    assert.equal(firstPoint[0] < -70 && firstPoint[0] > -90, true);
+    assert.equal(firstPoint[1] > 40 && firstPoint[1] < 50, true);
+  });
+
   it('supports versioned admin edits and submit to verified awaiting payment', async () => {
     const { baseUrl } = await startServer();
 
@@ -768,6 +938,26 @@ describe('admin quote editor workflow', () => {
       })
     });
     assert.equal(statusUpdate.status, 403);
+  });
+
+  it('returns 404 for missing quote editor without breaking subsequent requests', async () => {
+    const { baseUrl } = await startServer();
+
+    const missingEditor = await fetch(`${baseUrl}/api/admin/quotes/Q-DOES-NOT-EXIST/editor`, {
+      headers: {
+        Authorization: 'Bearer admin-admin'
+      }
+    });
+    assert.equal(missingEditor.status, 404);
+    const missingBody = (await missingEditor.json()) as { error: string };
+    assert.equal(missingBody.error, 'Quote not found.');
+
+    const healthAfter = await fetch(`${baseUrl}/api/admin/health`, {
+      headers: {
+        Authorization: 'Bearer admin-admin'
+      }
+    });
+    assert.equal(healthAfter.status, 200);
   });
 });
 

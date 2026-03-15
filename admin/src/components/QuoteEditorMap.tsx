@@ -8,22 +8,22 @@ import 'maplibre-gl/dist/maplibre-gl.css';
 const styleSpec: StyleSpecification = {
   version: 8,
   sources: {
-    dark_tiles: {
+    satellite_tiles: {
       type: 'raster',
       tiles: [
-        'https://a.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}.png',
-        'https://b.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}.png',
-        'https://c.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}.png',
-        'https://d.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}.png'
+        'https://services.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}'
       ],
-      tileSize: 256
+      tileSize: 256,
+      maxzoom: 19,
+      attribution:
+        'Tiles © Esri — Source: Esri, i-cubed, USDA, USGS, AEX, GeoEye, Getmapping, Aerogrid, IGN, IGP, UPR-EGP, and the GIS User Community'
     }
   },
   layers: [
     {
-      id: 'dark_tiles',
+      id: 'satellite_tiles',
       type: 'raster',
-      source: 'dark_tiles',
+      source: 'satellite_tiles',
       minzoom: 0,
       maxzoom: 22
     }
@@ -76,6 +76,48 @@ const activePathFeatureCollection = (activePolygon: EditablePolygon | undefined)
         ]
       : []
 });
+
+const polygonFeatureCollection = (
+  polygons: EditablePolygon[],
+  selectedPolygonId: string | null
+): FeatureCollection<Polygon> => ({
+  type: 'FeatureCollection',
+  features: polygons
+    .map((polygonState) => {
+      const feature = buildPolygonFeature(polygonState.points);
+      if (!feature) {
+        return null;
+      }
+
+      return {
+        ...feature,
+        properties: {
+          polygonId: polygonState.id,
+          polygonKind: polygonState.kind,
+          selected: polygonState.id === selectedPolygonId
+        }
+      };
+    })
+    .filter((feature): feature is NonNullable<typeof feature> => feature !== null)
+});
+
+const syncPolygonSources = (
+  map: maplibregl.Map,
+  polygons: EditablePolygon[],
+  selectedPolygonId: string | null,
+  activePolygonId: string | null
+) => {
+  const polygonSource = map.getSource(POLYGON_SOURCE_ID) as GeoJSONSource | undefined;
+  if (polygonSource) {
+    polygonSource.setData(polygonFeatureCollection(polygons, selectedPolygonId));
+  }
+
+  const pathSource = map.getSource(PATH_SOURCE_ID) as GeoJSONSource | undefined;
+  if (pathSource) {
+    const activePolygon = polygons.find((polygonState) => polygonState.id === activePolygonId);
+    pathSource.setData(activePathFeatureCollection(activePolygon));
+  }
+};
 
 const markerStyleByKind = (kind: PolygonKind, selected: boolean) => {
   if (kind === 'obstacle') {
@@ -134,6 +176,7 @@ export const QuoteEditorMap = ({
   const onPolygonPointsChangeRef = useRef(onPolygonPointsChange);
   const onSelectionChangeRef = useRef(onSelectionChange);
   const centerRef = useRef(center);
+  const polygonsRef = useRef(polygons);
   const selectedPolygonIdRef = useRef<string | null>(selectedPolygonId);
   const ignoreNextMapClickRef = useRef(false);
   const isMarkerDraggingRef = useRef(false);
@@ -163,6 +206,10 @@ export const QuoteEditorMap = ({
   }, [center]);
 
   useEffect(() => {
+    polygonsRef.current = polygons;
+  }, [polygons]);
+
+  useEffect(() => {
     selectedPolygonIdRef.current = selectedPolygonId;
   }, [selectedPolygonId]);
 
@@ -178,7 +225,8 @@ export const QuoteEditorMap = ({
       zoom: 16,
       pitch: 0,
       bearing: 0,
-      maxPitch: 0
+      maxPitch: 0,
+      maxZoom: 19
     });
 
     map.dragRotate.disable();
@@ -190,6 +238,131 @@ export const QuoteEditorMap = ({
       }),
       'top-right'
     );
+
+    const ensureSourcesAndLayers = () => {
+      if (!map.isStyleLoaded()) {
+        return;
+      }
+
+      if (!map.getSource(POLYGON_SOURCE_ID)) {
+        map.addSource(POLYGON_SOURCE_ID, {
+          type: 'geojson',
+          data: {
+            type: 'FeatureCollection',
+            features: []
+          } as FeatureCollection<Polygon>
+        });
+      }
+
+      if (!map.getSource(PATH_SOURCE_ID)) {
+        map.addSource(PATH_SOURCE_ID, {
+          type: 'geojson',
+          data: {
+            type: 'FeatureCollection',
+            features: []
+          } as FeatureCollection<LineString>
+        });
+      }
+
+      if (!map.getSource(CENTER_SOURCE_ID)) {
+        map.addSource(CENTER_SOURCE_ID, {
+          type: 'geojson',
+          data: {
+            type: 'FeatureCollection',
+            features: [
+              {
+                type: 'Feature',
+                geometry: {
+                  type: 'Point',
+                  coordinates: centerRef.current
+                },
+                properties: {
+                  title: 'Property center'
+                }
+              }
+            ]
+          } as FeatureCollection<Point>
+        });
+      }
+
+      if (!map.getLayer(POLYGON_FILL_LAYER_ID)) {
+        map.addLayer({
+          id: POLYGON_FILL_LAYER_ID,
+          source: POLYGON_SOURCE_ID,
+          type: 'fill',
+          paint: {
+            'fill-color': [
+              'case',
+              ['==', ['get', 'polygonKind'], 'obstacle'],
+              '#DC2626',
+              '#329F5B'
+            ],
+            'fill-opacity': [
+              'case',
+              ['==', ['get', 'polygonKind'], 'obstacle'],
+              ['case', ['==', ['get', 'selected'], true], 0.42, 0.2],
+              ['case', ['==', ['get', 'selected'], true], 0.54, 0.24]
+            ]
+          }
+        });
+      }
+
+      if (!map.getLayer(POLYGON_OUTLINE_LAYER_ID)) {
+        map.addLayer({
+          id: POLYGON_OUTLINE_LAYER_ID,
+          source: POLYGON_SOURCE_ID,
+          type: 'line',
+          paint: {
+            'line-color': [
+              'case',
+              ['==', ['get', 'polygonKind'], 'obstacle'],
+              ['case', ['==', ['get', 'selected'], true], '#FFE4E6', '#FDA4AF'],
+              ['case', ['==', ['get', 'selected'], true], '#FFFFFF', '#BFEBCF']
+            ],
+            'line-width': ['case', ['==', ['get', 'selected'], true], 3.2, 2.1]
+          }
+        });
+      }
+
+      if (!map.getLayer(PATH_LAYER_ID)) {
+        map.addLayer({
+          id: PATH_LAYER_ID,
+          source: PATH_SOURCE_ID,
+          type: 'line',
+          paint: {
+            'line-color': [
+              'case',
+              ['==', ['get', 'polygonKind'], 'obstacle'],
+              '#FDA4AF',
+              '#7DE8A6'
+            ],
+            'line-width': 2,
+            'line-dasharray': [2, 1]
+          }
+        });
+      }
+
+      if (!map.getLayer(CENTER_LAYER_ID)) {
+        map.addLayer({
+          id: CENTER_LAYER_ID,
+          source: CENTER_SOURCE_ID,
+          type: 'circle',
+          paint: {
+            'circle-radius': 6,
+            'circle-color': '#ffffff',
+            'circle-stroke-width': 2,
+            'circle-stroke-color': '#329F5B'
+          }
+        });
+      }
+
+      syncPolygonSources(
+        map,
+        polygonsRef.current,
+        selectedPolygonIdRef.current,
+        activePolygonIdRef.current
+      );
+    };
 
     const handleMapClick = (event: maplibregl.MapMouseEvent) => {
       if (isMarkerDraggingRef.current) {
@@ -229,111 +402,8 @@ export const QuoteEditorMap = ({
 
     map.on('click', handleMapClick);
 
-    map.on('load', () => {
-      const polygonFeatureCollection: FeatureCollection<Polygon> = {
-        type: 'FeatureCollection',
-        features: []
-      };
-
-      const pathFeatureCollection: FeatureCollection<LineString> = {
-        type: 'FeatureCollection',
-        features: []
-      };
-
-      const centerFeature: FeatureCollection<Point> = {
-        type: 'FeatureCollection',
-        features: [
-          {
-            type: 'Feature',
-            geometry: {
-              type: 'Point',
-              coordinates: centerRef.current
-            },
-            properties: {
-              title: 'Property center'
-            }
-          }
-        ]
-      };
-
-      map.addSource(POLYGON_SOURCE_ID, {
-        type: 'geojson',
-        data: polygonFeatureCollection
-      });
-
-      map.addSource(PATH_SOURCE_ID, {
-        type: 'geojson',
-        data: pathFeatureCollection
-      });
-
-      map.addSource(CENTER_SOURCE_ID, {
-        type: 'geojson',
-        data: centerFeature
-      });
-
-      map.addLayer({
-        id: POLYGON_FILL_LAYER_ID,
-        source: POLYGON_SOURCE_ID,
-        type: 'fill',
-        paint: {
-          'fill-color': [
-            'case',
-            ['==', ['get', 'polygonKind'], 'obstacle'],
-            '#DC2626',
-            '#329F5B'
-          ],
-          'fill-opacity': [
-            'case',
-            ['==', ['get', 'polygonKind'], 'obstacle'],
-            ['case', ['==', ['get', 'selected'], true], 0.42, 0.2],
-            ['case', ['==', ['get', 'selected'], true], 0.54, 0.24]
-          ]
-        }
-      });
-
-      map.addLayer({
-        id: POLYGON_OUTLINE_LAYER_ID,
-        source: POLYGON_SOURCE_ID,
-        type: 'line',
-        paint: {
-          'line-color': [
-            'case',
-            ['==', ['get', 'polygonKind'], 'obstacle'],
-            ['case', ['==', ['get', 'selected'], true], '#FFE4E6', '#FDA4AF'],
-            ['case', ['==', ['get', 'selected'], true], '#FFFFFF', '#BFEBCF']
-          ],
-          'line-width': ['case', ['==', ['get', 'selected'], true], 3.2, 2.1]
-        }
-      });
-
-      map.addLayer({
-        id: PATH_LAYER_ID,
-        source: PATH_SOURCE_ID,
-        type: 'line',
-        paint: {
-          'line-color': [
-            'case',
-            ['==', ['get', 'polygonKind'], 'obstacle'],
-            '#FDA4AF',
-            '#7DE8A6'
-          ],
-          'line-width': 2,
-          'line-dasharray': [2, 1]
-        }
-      });
-
-      map.addLayer({
-        id: CENTER_LAYER_ID,
-        source: CENTER_SOURCE_ID,
-        type: 'circle',
-        paint: {
-          'circle-radius': 6,
-          'circle-color': '#ffffff',
-          'circle-stroke-width': 2,
-          'circle-stroke-color': '#329F5B'
-        }
-      });
-    });
+    map.on('load', ensureSourcesAndLayers);
+    map.on('styledata', ensureSourcesAndLayers);
 
     mapRef.current = map;
 
@@ -382,39 +452,35 @@ export const QuoteEditorMap = ({
 
   useEffect(() => {
     const map = mapRef.current;
+    if (!map || polygons.length === 0) {
+      return;
+    }
+
+    const points = polygons.flatMap((polygonState) => polygonState.points);
+    if (points.length === 0) {
+      return;
+    }
+
+    const bounds = points.slice(1).reduce(
+      (currentBounds, point) => currentBounds.extend(point),
+      new maplibregl.LngLatBounds(points[0], points[0])
+    );
+
+    map.fitBounds(bounds, {
+      padding: 72,
+      maxZoom: 18.5,
+      duration: 0,
+      essential: true
+    });
+  }, [polygons]);
+
+  useEffect(() => {
+    const map = mapRef.current;
     if (!map) {
       return;
     }
 
-    const polygonSource = map.getSource(POLYGON_SOURCE_ID) as GeoJSONSource | undefined;
-    if (polygonSource) {
-      polygonSource.setData({
-        type: 'FeatureCollection',
-        features: polygons
-          .map((polygonState) => {
-            const feature = buildPolygonFeature(polygonState.points);
-            if (!feature) {
-              return null;
-            }
-
-            return {
-              ...feature,
-              properties: {
-                polygonId: polygonState.id,
-                polygonKind: polygonState.kind,
-                selected: polygonState.id === selectedPolygonId
-              }
-            };
-          })
-          .filter((feature): feature is NonNullable<typeof feature> => feature !== null)
-      });
-    }
-
-    const pathSource = map.getSource(PATH_SOURCE_ID) as GeoJSONSource | undefined;
-    if (pathSource) {
-      const activePolygon = polygons.find((polygonState) => polygonState.id === activePolygonId);
-      pathSource.setData(activePathFeatureCollection(activePolygon));
-    }
+    syncPolygonSources(map, polygons, selectedPolygonId, activePolygonId);
   }, [polygons, selectedPolygonId, activePolygonId]);
 
   useEffect(() => {
