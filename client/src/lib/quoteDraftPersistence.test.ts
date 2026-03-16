@@ -73,6 +73,8 @@ describe('quoteDraftPersistence', () => {
         future: []
       },
       serviceFrequency: 'weekly' as const,
+      billingMode: 'seasonal' as const,
+      distanceToNearestStationKm: 2.345,
       unitMode: 'metric' as const
     };
 
@@ -95,6 +97,8 @@ describe('quoteDraftPersistence', () => {
           currentStep: 'map',
           polygonHistory: { past: [], present: {}, future: [] },
           serviceFrequency: 'weekly',
+          billingMode: 'seasonal',
+          distanceToNearestStationKm: -2,
           unitMode: 'metric'
         }
       })
@@ -114,6 +118,35 @@ describe('quoteDraftPersistence', () => {
     );
 
     expect(loadQuoteDraftState(storage)).toBeNull();
+  });
+
+  it('loads legacy snapshots and applies billing defaults', () => {
+    const storage = createStorageMock();
+    storage.setItem(
+      quoteDraftStorageKey,
+      JSON.stringify({
+        version: 1,
+        savedAt: new Date().toISOString(),
+        state: {
+          addressInput: '123 Greenway Blvd',
+          selectedAddress: '123 Greenway Blvd, Vaughan, ON',
+          selectedAddressKey: 'mapbox:place.123',
+          center: [-79.52, 43.84],
+          currentStep: 'map',
+          polygonHistory: {
+            past: [],
+            present: { polygons: [], activePolygonId: null },
+            future: []
+          },
+          serviceFrequency: 'weekly',
+          unitMode: 'metric'
+        }
+      })
+    );
+
+    const restored = loadQuoteDraftState(storage);
+    expect(restored?.billingMode).toBe('seasonal');
+    expect(restored?.distanceToNearestStationKm).toBe(0);
   });
 
   it('clears the stored snapshot', () => {

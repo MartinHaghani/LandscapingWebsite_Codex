@@ -38,6 +38,11 @@ enum ServiceFrequency {
   biweekly
 }
 
+enum BillingMode {
+  seasonal
+  per_session
+}
+
 enum QuoteVersionChangeType {
   initial
   admin_revision
@@ -140,10 +145,13 @@ model Quote {
   currency            String                @default("CAD") @db.VarChar(8)
   serviceFrequency    ServiceFrequency      @default(weekly) @map("service_frequency")
   sessionsMin         Int                   @default(26) @map("sessions_min")
-  sessionsMax         Int                   @default(30) @map("sessions_max")
+  sessionsMax         Int                   @default(26) @map("sessions_max")
   perSessionTotal     Decimal               @map("per_session_total") @db.Decimal(14, 2)
   seasonalTotalMin    Decimal               @map("seasonal_total_min") @db.Decimal(14, 2)
   seasonalTotalMax    Decimal               @map("seasonal_total_max") @db.Decimal(14, 2)
+  billingMode         BillingMode           @default(seasonal) @map("billing_mode")
+  seasonalDiscountRate Decimal              @default(0.2) @map("seasonal_discount_rate") @db.Decimal(6, 4)
+  distanceToNearestStationKm Decimal        @default(0) @map("distance_to_nearest_station_km") @db.Decimal(14, 3)
   baseTotal           Decimal               @map("base_total") @db.Decimal(14, 2)
   finalTotal          Decimal               @map("final_total") @db.Decimal(14, 2)
   overrideAmount      Decimal?              @map("override_amount") @db.Decimal(14, 2)
@@ -184,7 +192,7 @@ model QuoteVersion {
   recommendedPlan     String                 @map("recommended_plan") @db.VarChar(120)
   serviceFrequency    ServiceFrequency       @default(weekly) @map("service_frequency")
   sessionsMin         Int                    @default(26) @map("sessions_min")
-  sessionsMax         Int                    @default(30) @map("sessions_max")
+  sessionsMax         Int                    @default(26) @map("sessions_max")
   perSessionTotal     Decimal                @map("per_session_total") @db.Decimal(14, 2)
   seasonalTotalMin    Decimal                @map("seasonal_total_min") @db.Decimal(14, 2)
   seasonalTotalMax    Decimal                @map("seasonal_total_max") @db.Decimal(14, 2)

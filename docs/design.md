@@ -138,24 +138,29 @@ Implementation:
 
 - `SYSTEM_LAUNCH_AT` cutoff applied to attribution summary queries
 
-## 12) Session-Range Pricing Model
+## 12) Distance-Aware Seasonal Pricing Model
 
 Decision:
 
-- expose quote value in two forms: per-session and seasonal planning range.
+- expose quote value in two forms: per-session and seasonal discounted billing.
 
 Implementation:
 
 - cadence selector in public quote flow: `weekly` or `biweekly`
-- session windows:
-  - weekly: `26-30`
-  - bi-weekly: `13-15`
-- persistence fields on quotes and quote_versions:
+- session counts:
+  - weekly: `26`
+  - bi-weekly: `14`
+- pricing formula: `max(20 + 0.05*A + 0.10*P + 1.0*D, 50)`
+  - `D` uses nearest active base-station distance in km
+- seasonal billing defaults to a 20% discount and can be configured later
+- persistence fields on quotes:
   - `service_frequency`
   - `per_session_total`
   - `sessions_min`, `sessions_max`
   - `seasonal_total_min`, `seasonal_total_max`
-  - `actor_type` on `quote_versions`
+  - `billing_mode`
+  - `seasonal_discount_rate`
+  - `distance_to_nearest_station_km` (internal-only)
 - `quoteTotal` kept as compatibility alias for per-session value
 
 ## 13) Admin Usability-First Redesign

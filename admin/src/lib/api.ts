@@ -140,6 +140,7 @@ export interface AdminQuoteEditorResponse {
     perimeterM: number;
     recommendedPlan: string;
     baseTotal: number;
+    distanceToNearestStationKm?: number;
     perSessionTotal: number;
     sessionsMin: number;
     sessionsMax: number;

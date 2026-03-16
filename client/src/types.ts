@@ -1,5 +1,6 @@
 export type LngLat = [number, number];
 export type ServiceFrequency = 'weekly' | 'biweekly';
+export type BillingMode = 'seasonal' | 'per_session';
 
 export interface MapboxSuggestion {
   id: string;
@@ -62,6 +63,7 @@ export interface QuotePayload {
   plan: string;
   quoteTotal: number;
   serviceFrequency?: ServiceFrequency;
+  billingMode?: BillingMode;
   baseTotal?: number;
   pricingVersion?: string;
   currency?: string;
@@ -92,6 +94,11 @@ export interface QuoteLookupResponse {
   perSessionTotal: number;
   seasonalTotalMin: number;
   seasonalTotalMax: number;
+  fullSeasonTotal?: number;
+  seasonalDiscountedTotal?: number;
+  seasonalSavingsTotal?: number;
+  seasonalDiscountRate?: number;
+  billingMode?: BillingMode;
   quoteTotal: number;
   status: string;
   contactPending: boolean;
@@ -142,6 +149,11 @@ export interface AccountQuoteListItem {
   perSessionTotal: number;
   seasonalTotalMin: number;
   seasonalTotalMax: number;
+  fullSeasonTotal?: number;
+  seasonalDiscountedTotal?: number;
+  seasonalSavingsTotal?: number;
+  seasonalDiscountRate?: number;
+  billingMode?: BillingMode;
   submittedAt: string | null;
 }
 
@@ -214,6 +226,7 @@ export interface ServiceAreaResponse {
 
 export interface ServiceAreaCheckResponse {
   inServiceArea: boolean;
+  distanceToNearestStationKm?: number;
   approximate: boolean;
   disclaimer: string;
   updatedAt: string;

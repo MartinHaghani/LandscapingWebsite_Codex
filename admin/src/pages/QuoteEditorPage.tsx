@@ -98,6 +98,7 @@ export const QuoteEditorPage = ({ getToken, quoteId, onBack }: QuoteEditorPagePr
   const [unitMode, setUnitMode] = useState<'metric' | 'imperial'>('metric');
   const [center, setCenter] = useState<LngLat>([-79.51962, 43.844147]);
   const [serviceFrequency, setServiceFrequency] = useState<'weekly' | 'biweekly'>('weekly');
+  const [distanceToNearestStationKm, setDistanceToNearestStationKm] = useState(0);
   const [perSessionTotalText, setPerSessionTotalText] = useState('0');
   const [finalTotalText, setFinalTotalText] = useState('0');
   const [overrideReason, setOverrideReason] = useState('');
@@ -109,8 +110,8 @@ export const QuoteEditorPage = ({ getToken, quoteId, onBack }: QuoteEditorPagePr
   const activePolygon = polygons.find((polygon) => polygon.id === activePolygonId) ?? null;
   const metrics = useMemo(() => computeMultiPolygonMetrics(polygons), [polygons]);
   const calculatedPerSessionTotal = useMemo(
-    () => getCalculatedPerSession(metrics.areaM2, metrics.perimeterM),
-    [metrics.areaM2, metrics.perimeterM]
+    () => getCalculatedPerSession(metrics.areaM2, metrics.perimeterM, distanceToNearestStationKm),
+    [metrics.areaM2, metrics.perimeterM, distanceToNearestStationKm]
   );
   const calculatedSeasonalRange = useMemo(
     () => getSeasonalTotalRange(calculatedPerSessionTotal, serviceFrequency),
@@ -164,6 +165,7 @@ export const QuoteEditorPage = ({ getToken, quoteId, onBack }: QuoteEditorPagePr
       setDrawing(false);
       setCenter(getCenterFromPolygons(initialState.polygons));
       setServiceFrequency(response.editable.serviceFrequency);
+      setDistanceToNearestStationKm(response.calculated.distanceToNearestStationKm ?? 0);
       setPerSessionTotalText(String(response.editable.perSessionTotal));
       setFinalTotalText(String(response.editable.finalTotal));
       setOverrideReason(response.editable.overrideReason ?? '');

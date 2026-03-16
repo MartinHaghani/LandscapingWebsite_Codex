@@ -24,14 +24,18 @@
 
 1. User draws service polygons and optional obstacles.
 2. User can clear all geometry, undo/redo edits, and delete selected polygon/vertex.
-3. User selects cadence (`Weekly` or `Bi-weekly`).
-4. Client auto-saves draft state in browser local storage (address + step + geometry + cadence + unit mode).
-5. Client computes effective geometry, per-session pricing, and seasonal range.
+3. User selects cadence (`Weekly` or `Bi-weekly`) and billing mode (`Seasonal` default or `Per Session`).
+4. Client auto-saves draft state in browser local storage (address + step + geometry + cadence + billing mode + unit mode).
+5. Client computes effective geometry and pricing with:
+   - `perSession = max(20 + 0.05*A + 0.10*P + 1.0*D, 50)`
+   - `D` from `POST /api/service-area/check` (`distanceToNearestStationKm`)
+   - fixed sessions: weekly=26, bi-weekly=14
+   - seasonal default discount: 20%
 6. Client submits idempotent draft:
 
 - `POST /api/quote/draft`
 - header: `Idempotency-Key`
-- payload includes `serviceFrequency`
+- payload includes `serviceFrequency` + `billingMode`
 
 7. Server validates geometry and stores draft quote + v1 version.
 8. If request is authenticated, server records draft address to Clerk account metadata (`addressHistory`, latest as `defaultAddress`).

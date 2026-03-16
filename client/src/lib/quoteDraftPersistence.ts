@@ -1,5 +1,11 @@
 import type { PolygonHistoryState } from './polygonHistory';
-import type { LngLat, PolygonEditorState, PolygonKind, ServiceFrequency } from '../types';
+import type {
+  BillingMode,
+  LngLat,
+  PolygonEditorState,
+  PolygonKind,
+  ServiceFrequency
+} from '../types';
 
 export type QuoteDraftUnitMode = 'metric' | 'imperial';
 export type QuoteDraftStep = 'address' | 'map';
@@ -12,6 +18,8 @@ export interface QuoteDraftPersistedState {
   currentStep: QuoteDraftStep;
   polygonHistory: PolygonHistoryState;
   serviceFrequency: ServiceFrequency;
+  billingMode: BillingMode;
+  distanceToNearestStationKm: number;
   unitMode: QuoteDraftUnitMode;
 }
 
@@ -160,7 +168,27 @@ export const loadQuoteDraftState = (storage: Storage): QuoteDraftPersistedState 
       return null;
     }
 
-    return parsed.state;
+    const state = parsed.state as QuoteDraftPersistedState & {
+      billingMode?: unknown;
+      distanceToNearestStationKm?: unknown;
+    };
+
+    const billingMode =
+      state.billingMode === 'per_session' || state.billingMode === 'seasonal'
+        ? state.billingMode
+        : 'seasonal';
+    const distanceToNearestStationKm =
+      typeof state.distanceToNearestStationKm === 'number' &&
+      Number.isFinite(state.distanceToNearestStationKm) &&
+      state.distanceToNearestStationKm >= 0
+        ? state.distanceToNearestStationKm
+        : 0;
+
+    return {
+      ...state,
+      billingMode,
+      distanceToNearestStationKm
+    };
   } catch {
     return null;
   }

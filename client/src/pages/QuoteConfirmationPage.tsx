@@ -5,6 +5,7 @@ import { Card } from '../components/ui/Card';
 import { Button } from '../components/ui/Button';
 import { api, ApiError } from '../lib/api';
 import { formatNumber } from '../lib/geometry';
+import type { BillingMode } from '../types';
 
 interface QuoteResult {
   id: string;
@@ -16,16 +17,27 @@ interface QuoteResult {
   };
   plan: string;
   serviceFrequency: 'weekly' | 'biweekly';
+  billingMode: BillingMode;
   sessionsMin: number;
   sessionsMax: number;
   perSessionTotal: number;
   seasonalTotalMin: number;
   seasonalTotalMax: number;
+  fullSeasonTotal: number;
+  seasonalDiscountedTotal: number;
+  seasonalSavingsTotal: number;
+  seasonalDiscountRate: number;
   quoteTotal: number;
   status: string;
   contactPending: boolean;
   submittedAt: string | null;
 }
+
+const toMoney = (value: number | undefined, fallback = 0) =>
+  typeof value === 'number' && Number.isFinite(value) ? value : fallback;
+
+const toRate = (value: number | undefined, fallback = 0.2) =>
+  typeof value === 'number' && Number.isFinite(value) ? Math.min(1, Math.max(0, value)) : fallback;
 
 export const QuoteConfirmationPage = () => {
   const { quoteId } = useParams();
@@ -61,7 +73,29 @@ export const QuoteConfirmationPage = () => {
           throw new ApiError('Authentication is required.', 401);
         }
         const response = await api.getQuote(quoteId, token);
-        setQuote(response);
+        const perSessionTotal = toMoney(response.perSessionTotal);
+        const fullSeasonTotal = toMoney(response.fullSeasonTotal, toMoney(response.seasonalTotalMax));
+        const seasonalDiscountRate = toRate(response.seasonalDiscountRate);
+        const seasonalDiscountedTotal = toMoney(
+          response.seasonalDiscountedTotal,
+          Number((fullSeasonTotal * (1 - seasonalDiscountRate)).toFixed(2))
+        );
+        const seasonalSavingsTotal = toMoney(
+          response.seasonalSavingsTotal,
+          Number((fullSeasonTotal - seasonalDiscountedTotal).toFixed(2))
+        );
+
+        setQuote({
+          ...response,
+          billingMode: response.billingMode === 'per_session' ? 'per_session' : 'seasonal',
+          perSessionTotal,
+          seasonalTotalMin: toMoney(response.seasonalTotalMin, fullSeasonTotal),
+          seasonalTotalMax: toMoney(response.seasonalTotalMax, fullSeasonTotal),
+          fullSeasonTotal,
+          seasonalDiscountRate,
+          seasonalDiscountedTotal,
+          seasonalSavingsTotal
+        });
       } catch (err) {
         setError(err instanceof ApiError ? err.message : 'Unable to load quote.');
       } finally {
@@ -96,8 +130,11 @@ export const QuoteConfirmationPage = () => {
             </p>
             <p>Per-session estimate: ${quote.perSessionTotal.toFixed(2)}</p>
             <p>
-              Seasonal estimate: ${quote.seasonalTotalMin.toFixed(2)} - ${quote.seasonalTotalMax.toFixed(2)}
+              Seasonal discounted total: ${quote.seasonalDiscountedTotal.toFixed(2)} (
+              {(quote.seasonalDiscountRate * 100).toFixed(0)}% off)
             </p>
+            <p>Full season price: ${quote.fullSeasonTotal.toFixed(2)} · Savings: ${quote.seasonalSavingsTotal.toFixed(2)}</p>
+            <p>Selected billing mode: {quote.billingMode === 'seasonal' ? 'Seasonal (charged once)' : 'Per session'}</p>
             <p>Status: {quote.status}</p>
             <p>Contact finalized: {quote.contactPending ? 'No' : 'Yes'}</p>
             <p>Draft created: {new Date(quote.createdAt).toLocaleString()}</p>

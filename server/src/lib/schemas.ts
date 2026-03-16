@@ -40,7 +40,8 @@ export const quotePayloadSchema = z.object({
   }),
   plan: z.string().trim().min(3).max(120),
   quoteTotal: z.number().nonnegative(),
-  serviceFrequency: z.enum(['weekly', 'biweekly']).optional()
+  serviceFrequency: z.enum(['weekly', 'biweekly']).optional(),
+  billingMode: z.enum(['seasonal', 'per_session']).optional()
 });
 
 export const attributionSchema = z
@@ -80,6 +81,7 @@ export const quoteDraftPayloadSchema = z.object({
   plan: z.string().trim().min(3).max(120),
   quoteTotal: z.number().nonnegative(),
   serviceFrequency: z.enum(['weekly', 'biweekly']).optional(),
+  billingMode: z.enum(['seasonal', 'per_session']).optional(),
   baseTotal: z.number().nonnegative().optional(),
   pricingVersion: z.string().trim().min(1).max(40).optional(),
   currency: z.string().trim().min(1).max(8).optional(),

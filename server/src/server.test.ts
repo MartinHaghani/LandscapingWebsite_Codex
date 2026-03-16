@@ -185,8 +185,13 @@ describe('/api/service-area', () => {
     });
 
     assert.equal(inAreaResponse.status, 200);
-    const inArea = (await inAreaResponse.json()) as { inServiceArea: boolean };
+    const inArea = (await inAreaResponse.json()) as {
+      inServiceArea: boolean;
+      distanceToNearestStationKm: number;
+    };
     assert.equal(inArea.inServiceArea, true);
+    assert.equal(typeof inArea.distanceToNearestStationKm, 'number');
+    assert.ok(inArea.distanceToNearestStationKm < 0.05);
 
     const outAreaResponse = await fetch(`${baseUrl}/api/service-area/check`, {
       method: 'POST',
@@ -200,8 +205,13 @@ describe('/api/service-area', () => {
     });
 
     assert.equal(outAreaResponse.status, 200);
-    const outArea = (await outAreaResponse.json()) as { inServiceArea: boolean };
+    const outArea = (await outAreaResponse.json()) as {
+      inServiceArea: boolean;
+      distanceToNearestStationKm: number;
+    };
     assert.equal(outArea.inServiceArea, false);
+    assert.equal(typeof outArea.distanceToNearestStationKm, 'number');
+    assert.ok(outArea.distanceToNearestStationKm > 100);
   });
 });
 
@@ -326,22 +336,38 @@ describe('quote draft + contact finalize flow', () => {
       contactPending: boolean;
       submittedAt: string | null;
       serviceFrequency: string;
+      billingMode: string;
       sessionsMin: number;
       sessionsMax: number;
       perSessionTotal: number;
       seasonalTotalMin: number;
       seasonalTotalMax: number;
+      fullSeasonTotal: number;
+      seasonalDiscountedTotal: number;
+      seasonalSavingsTotal: number;
+      seasonalDiscountRate: number;
     };
 
     assert.equal(quote.id, firstDraftBody.quoteId);
     assert.equal(quote.status, 'in_review');
     assert.equal(quote.contactPending, false);
     assert.equal(quote.serviceFrequency, 'biweekly');
-    assert.equal(quote.sessionsMin, 13);
-    assert.equal(quote.sessionsMax, 15);
-    assert.equal(quote.perSessionTotal, 245.55);
-    assert.equal(quote.seasonalTotalMin, 3192.15);
-    assert.equal(quote.seasonalTotalMax, 3683.25);
+    assert.equal(quote.billingMode, 'seasonal');
+    assert.equal(quote.sessionsMin, 14);
+    assert.equal(quote.sessionsMax, 14);
+    assert.notEqual(quote.perSessionTotal, draftPayload.quoteTotal);
+    assert.equal(quote.seasonalTotalMin, Number((quote.perSessionTotal * 14).toFixed(2)));
+    assert.equal(quote.seasonalTotalMax, quote.seasonalTotalMin);
+    assert.equal(quote.fullSeasonTotal, quote.seasonalTotalMax);
+    assert.equal(quote.seasonalDiscountRate, 0.2);
+    assert.equal(
+      quote.seasonalDiscountedTotal,
+      Number((quote.fullSeasonTotal * (1 - quote.seasonalDiscountRate)).toFixed(2))
+    );
+    assert.equal(
+      quote.seasonalSavingsTotal,
+      Number((quote.fullSeasonTotal - quote.seasonalDiscountedTotal).toFixed(2))
+    );
     assert.ok(typeof quote.submittedAt === 'string' && quote.submittedAt.length > 0);
 
     const contactsResponse = await fetch(`${baseUrl}/api/admin/contacts?limit=10`, {

@@ -11,6 +11,12 @@ const defaultForm = {
   message: ''
 };
 
+const toMoney = (value: number | undefined, fallback = 0) =>
+  typeof value === 'number' && Number.isFinite(value) ? value : fallback;
+
+const toRate = (value: number | undefined, fallback = 0.2) =>
+  typeof value === 'number' && Number.isFinite(value) ? Math.min(1, Math.max(0, value)) : fallback;
+
 export const QuoteContactPage = () => {
   const { quoteId } = useParams();
   const location = useLocation();
@@ -24,11 +30,16 @@ export const QuoteContactPage = () => {
     id: string;
     address: string;
     serviceFrequency: 'weekly' | 'biweekly';
+    billingMode: 'seasonal' | 'per_session';
     perSessionTotal: number;
     sessionsMin: number;
     sessionsMax: number;
     seasonalTotalMin: number;
     seasonalTotalMax: number;
+    fullSeasonTotal: number;
+    seasonalDiscountedTotal: number;
+    seasonalSavingsTotal: number;
+    seasonalDiscountRate: number;
     plan: string;
     contactPending: boolean;
     status: string;
@@ -64,15 +75,32 @@ export const QuoteContactPage = () => {
           return;
         }
 
+        const perSessionTotal = toMoney(result.perSessionTotal);
+        const fullSeasonTotal = toMoney(result.fullSeasonTotal, toMoney(result.seasonalTotalMax));
+        const seasonalDiscountRate = toRate(result.seasonalDiscountRate);
+        const seasonalDiscountedTotal = toMoney(
+          result.seasonalDiscountedTotal,
+          Number((fullSeasonTotal * (1 - seasonalDiscountRate)).toFixed(2))
+        );
+        const seasonalSavingsTotal = toMoney(
+          result.seasonalSavingsTotal,
+          Number((fullSeasonTotal - seasonalDiscountedTotal).toFixed(2))
+        );
+
         setQuote({
           id: result.id,
           address: result.address,
           serviceFrequency: result.serviceFrequency,
-          perSessionTotal: result.perSessionTotal,
+          billingMode: result.billingMode === 'per_session' ? 'per_session' : 'seasonal',
+          perSessionTotal,
           sessionsMin: result.sessionsMin,
           sessionsMax: result.sessionsMax,
-          seasonalTotalMin: result.seasonalTotalMin,
-          seasonalTotalMax: result.seasonalTotalMax,
+          seasonalTotalMin: toMoney(result.seasonalTotalMin, fullSeasonTotal),
+          seasonalTotalMax: toMoney(result.seasonalTotalMax, fullSeasonTotal),
+          fullSeasonTotal,
+          seasonalDiscountedTotal,
+          seasonalSavingsTotal,
+          seasonalDiscountRate,
           plan: result.plan,
           contactPending: result.contactPending,
           status: result.status
@@ -212,9 +240,16 @@ export const QuoteContactPage = () => {
               Cadence: {quote.serviceFrequency === 'weekly' ? 'Weekly' : 'Bi-weekly'} ({quote.sessionsMin}-{quote.sessionsMax}{' '}
               sessions)
             </p>
-            <p className="mt-2 text-sm text-white/75">Per-session estimate: ${quote.perSessionTotal.toFixed(2)}</p>
             <p className="mt-2 text-sm text-white/75">
-              Seasonal estimate: ${quote.seasonalTotalMin.toFixed(2)} - ${quote.seasonalTotalMax.toFixed(2)}
+              Per-session estimate: ${quote.perSessionTotal.toFixed(2)} · Full season: $
+              {quote.fullSeasonTotal.toFixed(2)}
+            </p>
+            <p className="mt-2 text-sm text-white/75">
+              Seasonal discounted total: ${quote.seasonalDiscountedTotal.toFixed(2)} (
+              {(quote.seasonalDiscountRate * 100).toFixed(0)}% off, save ${quote.seasonalSavingsTotal.toFixed(2)})
+            </p>
+            <p className="mt-2 text-sm text-white/75">
+              Selected billing mode: {quote.billingMode === 'seasonal' ? 'Seasonal (charged once)' : 'Per session'}
             </p>
             <p className="mt-2 text-sm text-white/75">Status: {quote.status}</p>
 

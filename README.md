@@ -91,9 +91,14 @@ Default local URLs:
 - Marketing pages now use launch-ready production copy (no placeholder content) with mobile navigation and footer quick links.
 - Instant Quote flow is now draft-first:
   - cadence selector supports `weekly` and `bi-weekly`
-  - quote outputs include per-session price plus seasonal total range
+    - `weekly` = 26 sessions/season
+    - `bi-weekly` = 14 sessions/season
+  - pricing formula: `max(20 + 0.05*A + 0.10*P + 1.0*D, 50)`
+    - `D` = nearest active base-station distance in km (internal-only)
+  - quote outputs include per-session, full-season, and discounted seasonal totals
+  - billing modes: `seasonal` (default, 20% discount) and `per_session`
   - address suggestions support keyboard navigation (`ArrowUp/ArrowDown/Enter/Escape`)
-  - browser-local draft persistence auto-saves address, step state, polygons, units, and cadence
+  - browser-local draft persistence auto-saves address, step state, polygons, units, cadence, and billing mode
   - users can clear geometry or reset saved draft from the quote UI
   1. `POST /api/quote/draft`
   2. Sign in/sign up required at `/quote-contact/:quoteId`

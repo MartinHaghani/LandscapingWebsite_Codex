@@ -26,8 +26,12 @@ Autoscape provides:
 2. Coverage gate (`POST /api/service-area/check`) before entering map step.
 3. Step 2 geometry drawing with service + obstacle polygons.
    - Includes `Clear All`, `Undo`, `Redo`, and delete controls.
-4. Cadence selection (`weekly` or `biweekly`) updates seasonal session window + pricing range.
-   - Browser-local draft autosave stores address/map/cadence/unit state.
+4. Cadence selection (`weekly` or `biweekly`) updates fixed seasonal session counts and totals.
+   - `weekly` uses 26 sessions/season; `biweekly` uses 14 sessions/season.
+   - Pricing formula: `max(20 + 0.05*A + 0.10*P + 1.0*D, 50)`.
+   - `D` is nearest active base-station distance in km (internal-only, not customer-visible).
+   - Billing modes: `seasonal` (default, 20% discount) and `per_session`.
+   - Browser-local draft autosave stores address/map/cadence/billing/unit state.
    - Saved draft can be reset from address or map panels.
 5. Draft save (`POST /api/quote/draft`) after geometry submit.
 6. Required auth gate at `/quote-contact/:quoteId` (Clerk sign-in/sign-up, Google enabled).

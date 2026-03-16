@@ -15,12 +15,12 @@ export const HowRateCalculatedPage = () => (
         <h2 className="text-xl font-semibold text-white">Formula</h2>
         <p className="mt-3 text-sm text-white/75">
           <code className="rounded bg-white/10 px-2 py-1 text-xs text-white">
-            perSession = baseFee + (areaM2 * areaRate) + (perimeterM * perimeterRate)
+            perSession = max(20 + 0.05*A + 0.10*P + 1.0*D, 50)
           </code>
         </p>
         <p className="mt-2 text-sm text-white/75">
           <code className="rounded bg-white/10 px-2 py-1 text-xs text-white">
-            seasonalMin = perSession * sessionsMin, seasonalMax = perSession * sessionsMax
+            fullSeason = perSession * sessions, seasonalDiscounted = fullSeason * (1 - discountRate)
           </code>
         </p>
       </div>
@@ -36,6 +36,13 @@ export const HowRateCalculatedPage = () => (
           <span className="font-semibold text-white">Perimeter rate:</span> $
           {quotePricing.perimeterRate.toFixed(2)} per m
         </p>
+        <p>
+          <span className="font-semibold text-white">Distance rate:</span> ${quotePricing.distanceRate.toFixed(2)} per km
+        </p>
+        <p>
+          <span className="font-semibold text-white">Seasonal discount (default):</span>{' '}
+          {(quotePricing.defaultSeasonalDiscountRate * 100).toFixed(0)}%
+        </p>
       </div>
 
       <div className="space-y-3 text-sm text-white/75">
@@ -44,12 +51,15 @@ export const HowRateCalculatedPage = () => (
           in metric or imperial.
         </p>
         <p>
-          Session windows by cadence: weekly uses 26-30 sessions and bi-weekly uses 13-15 sessions for annual planning
-          ranges.
+          Sessions per season by cadence: weekly uses 26 sessions and bi-weekly uses 14 sessions.
         </p>
         <p>
           Service polygons define where work is performed. Obstacle polygons are subtracted from the service geometry.
           Only the final effective service footprint is billed.
+        </p>
+        <p>
+          <code className="rounded bg-white/10 px-2 py-1 text-xs text-white">D</code> is the nearest active base-station distance in
+          kilometers and is used internally for pricing only.
         </p>
         <p>
           Perimeter is measured on the final cutout geometry, including hole boundaries created by interior obstacles.

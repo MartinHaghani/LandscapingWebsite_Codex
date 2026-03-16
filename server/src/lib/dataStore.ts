@@ -9,8 +9,12 @@ import type { Feature, MultiPolygon, Polygon } from 'geojson';
 import { validateAndMeasureGeometry } from './geometry.js';
 import { hashJson } from './hash.js';
 import {
+  computePerSessionTotal,
   computeSessionRangePricing,
+  normalizeBillingMode,
   normalizeServiceFrequency,
+  PRICING_CONSTANTS,
+  type BillingMode,
   type ServiceFrequency
 } from './pricing.js';
 import { getPrisma } from './prisma.js';
@@ -58,6 +62,7 @@ interface QuoteDraftInput {
   pricingVersion: string;
   currency: string;
   serviceFrequency: ServiceFrequency;
+  billingMode: BillingMode;
   baseTotal: number;
   finalTotal: number;
   attribution?: AttributionInput;
@@ -122,6 +127,11 @@ interface QuotePublicRecord {
   perSessionTotal: number;
   seasonalTotalMin: number;
   seasonalTotalMax: number;
+  fullSeasonTotal: number;
+  seasonalDiscountedTotal: number;
+  seasonalSavingsTotal: number;
+  seasonalDiscountRate: number;
+  billingMode: BillingMode;
   quoteTotal: number;
   status: string;
   contactPending: boolean;
@@ -319,6 +329,9 @@ interface MemoryQuote {
   perSessionTotal: number;
   seasonalTotalMin: number;
   seasonalTotalMax: number;
+  billingMode: BillingMode;
+  seasonalDiscountRate: number;
+  distanceToNearestStationKm: number;
   baseTotal: number;
   finalTotal: number;
   overrideAmount: number | null;
@@ -440,9 +453,6 @@ interface MemoryIdempotencyRecord {
 }
 
 const METRIC_DRIFT_TOLERANCE = 0.03;
-const BASE_FEE = 49;
-const AREA_RATE = 0.085;
-const PERIMETER_RATE = 0.38;
 const EARTH_RADIUS_M = 6_371_008.8;
 
 const toRadians = (value: number) => (value * Math.PI) / 180;
@@ -480,6 +490,9 @@ const getDistanceToNearestStationM = (point: [number, number], stations: BaseSta
 
   return Number.isFinite(nearest) ? nearest : 0;
 };
+
+const getDistanceToNearestStationKm = (point: [number, number], stations: BaseStationConfig[]) =>
+  Number((getDistanceToNearestStationM(point, stations) / 1000).toFixed(3));
 
 const firstCharacter = (value: string) => value.trim().charAt(0);
 
@@ -647,7 +660,27 @@ const swapQuoteGeometryPointOrder = (geometry: QuoteGeometry): QuoteGeometry | n
   };
 };
 
-const roundMoney = (value: number) => Number(value.toFixed(2));
+const toFiniteNumber = (value: number, fallback = 0) =>
+  Number.isFinite(value) ? value : fallback;
+const roundMoney = (value: number) => Number(toFiniteNumber(value).toFixed(2));
+const roundRate = (value: number) => Number(toFiniteNumber(value).toFixed(4));
+
+const deriveBillingAmounts = (
+  seasonalTotalMax: number,
+  seasonalDiscountRate: number
+) => {
+  const fullSeasonTotal = roundMoney(seasonalTotalMax);
+  const normalizedDiscountRate = roundRate(Math.min(1, Math.max(0, seasonalDiscountRate)));
+  const seasonalDiscountedTotal = roundMoney(fullSeasonTotal * (1 - normalizedDiscountRate));
+  const seasonalSavingsTotal = roundMoney(fullSeasonTotal - seasonalDiscountedTotal);
+
+  return {
+    fullSeasonTotal,
+    seasonalDiscountRate: normalizedDiscountRate,
+    seasonalDiscountedTotal,
+    seasonalSavingsTotal
+  };
+};
 
 const getRecommendedPlanFromArea = (areaM2: number) => {
   if (areaM2 < 450) {
@@ -661,8 +694,11 @@ const getRecommendedPlanFromArea = (areaM2: number) => {
   return 'Estate Coverage Plan';
 };
 
-const computeCalculatedPerSessionTotal = (areaM2: number, perimeterM: number) =>
-  roundMoney(BASE_FEE + areaM2 * AREA_RATE + perimeterM * PERIMETER_RATE);
+const computeCalculatedPerSessionTotal = (
+  areaM2: number,
+  perimeterM: number,
+  distanceToNearestStationKm: number
+) => computePerSessionTotal(areaM2, perimeterM, distanceToNearestStationKm);
 
 const closePolygonRing = (points: [number, number][]) => {
   if (points.length < 3) {
@@ -1077,7 +1113,7 @@ const assertAllowedTransition = (current: QuoteStatus, next: QuoteStatus) => {
 
 const parseDecimal = (value: unknown) => {
   if (typeof value === 'number') {
-    return value;
+    return Number.isFinite(value) ? value : 0;
   }
 
   if (typeof value === 'string') {
@@ -1086,7 +1122,8 @@ const parseDecimal = (value: unknown) => {
   }
 
   if (value instanceof Prisma.Decimal) {
-    return value.toNumber();
+    const parsed = value.toNumber();
+    return Number.isFinite(parsed) ? parsed : 0;
   }
 
   return 0;
@@ -1568,16 +1605,32 @@ export class DataStore {
         pricingVersion: input.pricingVersion,
         currency: input.currency,
         serviceFrequency: input.serviceFrequency,
+        billingMode: normalizeBillingMode(input.billingMode),
         baseTotal: input.baseTotal,
         finalTotal: input.finalTotal,
         attribution: cleanAttribution(input.attribution)
       },
       async () => {
         const measured = validateAndMeasureGeometry(input.polygon);
+        const billingMode = normalizeBillingMode(input.billingMode);
+        const seasonalDiscountRate = PRICING_CONSTANTS.defaultSeasonalDiscountRate;
+        const distanceToNearestStationKm = getDistanceToNearestStationKm(
+          [input.location.lng, input.location.lat],
+          this.baseStations
+        );
+        const calculatedPerSessionTotal = computeCalculatedPerSessionTotal(
+          measured.areaM2,
+          measured.perimeterM,
+          distanceToNearestStationKm
+        );
 
         const normalized = toMultiPolygonGeometry(measured.normalizedGeometry);
         const centroid = getCentroidFromGeometry(normalized);
-        const sessionPricing = computeSessionRangePricing(input.finalTotal, input.serviceFrequency);
+        const sessionPricing = computeSessionRangePricing(
+          calculatedPerSessionTotal,
+          input.serviceFrequency,
+          seasonalDiscountRate
+        );
 
         if (!this.prisma) {
           const leadId = nanoid(14);
@@ -1620,7 +1673,10 @@ export class DataStore {
             perSessionTotal: sessionPricing.perSessionTotal,
             seasonalTotalMin: sessionPricing.seasonalTotalMin,
             seasonalTotalMax: sessionPricing.seasonalTotalMax,
-            baseTotal: input.baseTotal,
+            billingMode,
+            seasonalDiscountRate,
+            distanceToNearestStationKm,
+            baseTotal: PRICING_CONSTANTS.baseFee,
             finalTotal: sessionPricing.perSessionTotal,
             overrideAmount: null,
             overrideReason: null,
@@ -1654,7 +1710,7 @@ export class DataStore {
             perSessionTotal: sessionPricing.perSessionTotal,
             seasonalTotalMin: sessionPricing.seasonalTotalMin,
             seasonalTotalMax: sessionPricing.seasonalTotalMax,
-            baseTotal: input.baseTotal,
+            baseTotal: PRICING_CONSTANTS.baseFee,
             finalTotal: sessionPricing.perSessionTotal,
             overrideAmount: null,
             overrideReason: null,
@@ -1735,6 +1791,17 @@ export class DataStore {
             throw new Error('Submitted geometry metrics differ from server measurement.');
           }
 
+          const dbCalculatedPerSessionTotal = computeCalculatedPerSessionTotal(
+            measuredDb.area_m2,
+            measuredDb.perimeter_m,
+            distanceToNearestStationKm
+          );
+          const dbSessionPricing = computeSessionRangePricing(
+            dbCalculatedPerSessionTotal,
+            input.serviceFrequency,
+            seasonalDiscountRate
+          );
+
           await tx.$executeRaw(
             Prisma.sql`
               INSERT INTO "quotes" (
@@ -1759,6 +1826,9 @@ export class DataStore {
                 "per_session_total",
                 "seasonal_total_min",
                 "seasonal_total_max",
+                "billing_mode",
+                "seasonal_discount_rate",
+                "distance_to_nearest_station_km",
                 "base_total",
                 "final_total",
                 "status",
@@ -1783,14 +1853,17 @@ export class DataStore {
                 ${input.recommendedPlan},
                 ${input.pricingVersion},
                 ${input.currency},
-                ${sessionPricing.serviceFrequency}::"ServiceFrequency",
-                ${sessionPricing.sessionsMin},
-                ${sessionPricing.sessionsMax},
-                ${sessionPricing.perSessionTotal},
-                ${sessionPricing.seasonalTotalMin},
-                ${sessionPricing.seasonalTotalMax},
-                ${input.baseTotal},
-                ${sessionPricing.perSessionTotal},
+                ${dbSessionPricing.serviceFrequency}::"ServiceFrequency",
+                ${dbSessionPricing.sessionsMin},
+                ${dbSessionPricing.sessionsMax},
+                ${dbSessionPricing.perSessionTotal},
+                ${dbSessionPricing.seasonalTotalMin},
+                ${dbSessionPricing.seasonalTotalMax},
+                ${billingMode}::"BillingMode",
+                ${seasonalDiscountRate},
+                ${distanceToNearestStationKm},
+                ${PRICING_CONSTANTS.baseFee},
+                ${dbSessionPricing.perSessionTotal},
                 'draft'::"QuoteStatus",
                 'pending'::"CustomerStatus",
                 true,
@@ -1837,14 +1910,14 @@ export class DataStore {
                 ${measuredDb.area_m2},
                 ${measuredDb.perimeter_m},
                 ${input.recommendedPlan},
-                ${sessionPricing.serviceFrequency}::"ServiceFrequency",
-                ${sessionPricing.sessionsMin},
-                ${sessionPricing.sessionsMax},
-                ${sessionPricing.perSessionTotal},
-                ${sessionPricing.seasonalTotalMin},
-                ${sessionPricing.seasonalTotalMax},
-                ${input.baseTotal},
-                ${sessionPricing.perSessionTotal},
+                ${dbSessionPricing.serviceFrequency}::"ServiceFrequency",
+                ${dbSessionPricing.sessionsMin},
+                ${dbSessionPricing.sessionsMax},
+                ${dbSessionPricing.perSessionTotal},
+                ${dbSessionPricing.seasonalTotalMin},
+                ${dbSessionPricing.seasonalTotalMax},
+                ${PRICING_CONSTANTS.baseFee},
+                ${dbSessionPricing.perSessionTotal},
                 'system',
                 now()
               )
@@ -2483,6 +2556,11 @@ export class DataStore {
         throw new Error('QUOTE_FORBIDDEN');
       }
 
+      const billing = deriveBillingAmounts(
+        quote.seasonalTotalMax,
+        quote.seasonalDiscountRate ?? PRICING_CONSTANTS.defaultSeasonalDiscountRate
+      );
+
       return {
         id: quote.publicQuoteId,
         createdAt: quote.createdAt,
@@ -2498,6 +2576,11 @@ export class DataStore {
         perSessionTotal: quote.perSessionTotal,
         seasonalTotalMin: quote.seasonalTotalMin,
         seasonalTotalMax: quote.seasonalTotalMax,
+        fullSeasonTotal: billing.fullSeasonTotal,
+        seasonalDiscountedTotal: billing.seasonalDiscountedTotal,
+        seasonalSavingsTotal: billing.seasonalSavingsTotal,
+        seasonalDiscountRate: billing.seasonalDiscountRate,
+        billingMode: normalizeBillingMode(quote.billingMode),
         quoteTotal: quote.finalTotal,
         status: quote.status,
         contactPending: quote.contactPending,
@@ -2519,6 +2602,11 @@ export class DataStore {
       throw new Error('QUOTE_FORBIDDEN');
     }
 
+    const billing = deriveBillingAmounts(
+      parseDecimal(quote.seasonalTotalMax),
+      parseDecimal(quote.seasonalDiscountRate)
+    );
+
     return {
       id: quote.publicQuoteId,
       createdAt: quote.createdAt.toISOString(),
@@ -2534,6 +2622,11 @@ export class DataStore {
       perSessionTotal: parseDecimal(quote.perSessionTotal),
       seasonalTotalMin: parseDecimal(quote.seasonalTotalMin),
       seasonalTotalMax: parseDecimal(quote.seasonalTotalMax),
+      fullSeasonTotal: billing.fullSeasonTotal,
+      seasonalDiscountedTotal: billing.seasonalDiscountedTotal,
+      seasonalSavingsTotal: billing.seasonalSavingsTotal,
+      seasonalDiscountRate: billing.seasonalDiscountRate,
+      billingMode: normalizeBillingMode(quote.billingMode),
       quoteTotal: parseDecimal(quote.finalTotal),
       status: quote.status,
       contactPending: quote.contactPending,
@@ -2556,18 +2649,30 @@ export class DataStore {
       const startIndex = cursorIndex >= 0 ? cursorIndex + 1 : 0;
       const window = filtered.slice(startIndex, startIndex + input.limit + 1);
       const hasNext = window.length > input.limit;
-      const items = window.slice(0, input.limit).map((quote) => ({
-        id: quote.publicQuoteId,
-        createdAt: quote.createdAt,
-        address: quote.addressText,
-        status: quote.status,
-        contactPending: quote.contactPending,
-        serviceFrequency: quote.serviceFrequency,
-        perSessionTotal: quote.perSessionTotal,
-        seasonalTotalMin: quote.seasonalTotalMin,
-        seasonalTotalMax: quote.seasonalTotalMax,
-        submittedAt: quote.submittedAt
-      }));
+      const items = window.slice(0, input.limit).map((quote) => {
+        const billing = deriveBillingAmounts(
+          quote.seasonalTotalMax,
+          quote.seasonalDiscountRate ?? PRICING_CONSTANTS.defaultSeasonalDiscountRate
+        );
+
+        return {
+          id: quote.publicQuoteId,
+          createdAt: quote.createdAt,
+          address: quote.addressText,
+          status: quote.status,
+          contactPending: quote.contactPending,
+          serviceFrequency: quote.serviceFrequency,
+          perSessionTotal: quote.perSessionTotal,
+          seasonalTotalMin: quote.seasonalTotalMin,
+          seasonalTotalMax: quote.seasonalTotalMax,
+          fullSeasonTotal: billing.fullSeasonTotal,
+          seasonalDiscountedTotal: billing.seasonalDiscountedTotal,
+          seasonalSavingsTotal: billing.seasonalSavingsTotal,
+          seasonalDiscountRate: billing.seasonalDiscountRate,
+          billingMode: normalizeBillingMode(quote.billingMode),
+          submittedAt: quote.submittedAt
+        };
+      });
 
       const nextCursor = hasNext
         ? encodeCursor(window[input.limit].createdAt, window[input.limit].id)
@@ -2614,18 +2719,30 @@ export class DataStore {
       : null;
 
     return {
-      items: pageRows.map((row) => ({
-        id: row.publicQuoteId,
-        createdAt: row.createdAt.toISOString(),
-        address: row.addressText,
-        status: row.status,
-        contactPending: row.contactPending,
-        serviceFrequency: normalizeServiceFrequency(row.serviceFrequency),
-        perSessionTotal: parseDecimal(row.perSessionTotal),
-        seasonalTotalMin: parseDecimal(row.seasonalTotalMin),
-        seasonalTotalMax: parseDecimal(row.seasonalTotalMax),
-        submittedAt: row.submittedAt ? row.submittedAt.toISOString() : null
-      })),
+      items: pageRows.map((row) => {
+        const billing = deriveBillingAmounts(
+          parseDecimal(row.seasonalTotalMax),
+          parseDecimal(row.seasonalDiscountRate)
+        );
+
+        return {
+          id: row.publicQuoteId,
+          createdAt: row.createdAt.toISOString(),
+          address: row.addressText,
+          status: row.status,
+          contactPending: row.contactPending,
+          serviceFrequency: normalizeServiceFrequency(row.serviceFrequency),
+          perSessionTotal: parseDecimal(row.perSessionTotal),
+          seasonalTotalMin: parseDecimal(row.seasonalTotalMin),
+          seasonalTotalMax: parseDecimal(row.seasonalTotalMax),
+          fullSeasonTotal: billing.fullSeasonTotal,
+          seasonalDiscountedTotal: billing.seasonalDiscountedTotal,
+          seasonalSavingsTotal: billing.seasonalSavingsTotal,
+          seasonalDiscountRate: billing.seasonalDiscountRate,
+          billingMode: normalizeBillingMode(row.billingMode),
+          submittedAt: row.submittedAt ? row.submittedAt.toISOString() : null
+        };
+      }),
       nextCursor,
       meta: {
         generatedAt: nowIso(),
@@ -3981,7 +4098,11 @@ export class DataStore {
         quote.polygonSourceJson,
         editorGeometry
       );
-      const calculatedPerSessionTotal = computeCalculatedPerSessionTotal(quote.areaM2, quote.perimeterM);
+      const calculatedPerSessionTotal = computeCalculatedPerSessionTotal(
+        quote.areaM2,
+        quote.perimeterM,
+        quote.distanceToNearestStationKm
+      );
       const calculatedRange = computeSessionRangePricing(calculatedPerSessionTotal, quote.serviceFrequency);
 
       const versions = this.memory.quoteVersions
@@ -4042,6 +4163,7 @@ export class DataStore {
           perimeterM: quote.perimeterM,
           recommendedPlan: quote.recommendedPlan,
           baseTotal: quote.baseTotal,
+          distanceToNearestStationKm: quote.distanceToNearestStationKm,
           perSessionTotal: calculatedPerSessionTotal,
           sessionsMin: calculatedRange.sessionsMin,
           sessionsMax: calculatedRange.sessionsMax,
@@ -4095,7 +4217,12 @@ export class DataStore {
     );
     const areaM2 = parseDecimal(quote.areaM2);
     const perimeterM = parseDecimal(quote.perimeterM);
-    const calculatedPerSessionTotal = computeCalculatedPerSessionTotal(areaM2, perimeterM);
+    const distanceToNearestStationKm = parseDecimal(quote.distanceToNearestStationKm);
+    const calculatedPerSessionTotal = computeCalculatedPerSessionTotal(
+      areaM2,
+      perimeterM,
+      distanceToNearestStationKm
+    );
     const calculatedRange = computeSessionRangePricing(
       calculatedPerSessionTotal,
       normalizeServiceFrequency(quote.serviceFrequency)
@@ -4158,6 +4285,7 @@ export class DataStore {
         perimeterM,
         recommendedPlan: quote.recommendedPlan,
         baseTotal: parseDecimal(quote.baseTotal),
+        distanceToNearestStationKm,
         perSessionTotal: calculatedPerSessionTotal,
         sessionsMin: calculatedRange.sessionsMin,
         sessionsMax: calculatedRange.sessionsMax,
@@ -4183,8 +4311,6 @@ export class DataStore {
     const recommendedPlan = getRecommendedPlanFromArea(measured.areaM2);
     const sessionPricing = computeSessionRangePricing(input.perSessionTotal, input.serviceFrequency);
     const finalTotal = roundMoney(input.finalTotal);
-    const calculatedPerSessionTotal = computeCalculatedPerSessionTotal(measured.areaM2, measured.perimeterM);
-    const overrideAmount = Math.max(0, roundMoney(calculatedPerSessionTotal - sessionPricing.perSessionTotal));
 
     if (!this.prisma) {
       const quote = [...this.memory.quotes.values()].find((item) => item.publicQuoteId === input.quotePublicId);
@@ -4195,6 +4321,13 @@ export class DataStore {
       if (quote.status !== 'in_review') {
         throw new Error('QUOTE_NOT_IN_REVIEW');
       }
+
+      const calculatedPerSessionTotal = computeCalculatedPerSessionTotal(
+        measured.areaM2,
+        measured.perimeterM,
+        quote.distanceToNearestStationKm
+      );
+      const overrideAmount = Math.max(0, roundMoney(calculatedPerSessionTotal - sessionPricing.perSessionTotal));
 
       const before = {
         serviceFrequency: quote.serviceFrequency,
@@ -4306,6 +4439,13 @@ export class DataStore {
     if (quote.status !== 'in_review') {
       throw new Error('QUOTE_NOT_IN_REVIEW');
     }
+
+    const calculatedPerSessionTotal = computeCalculatedPerSessionTotal(
+      measured.areaM2,
+      measured.perimeterM,
+      parseDecimal(quote.distanceToNearestStationKm)
+    );
+    const overrideAmount = Math.max(0, roundMoney(calculatedPerSessionTotal - sessionPricing.perSessionTotal));
 
     const polygonGeoJson = JSON.stringify(normalizedGeometry);
     const polygonSourceJson = JSON.stringify(clonePolygonSource(normalizedSource));

@@ -13,6 +13,9 @@ const formatStatus = (status: string) =>
     .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
     .join(' ');
 
+const toMoney = (value: number | undefined, fallback = 0) =>
+  typeof value === 'number' && Number.isFinite(value) ? value : fallback;
+
 export const DashboardPage = () => {
   const { isLoaded, isSignedIn, getToken } = useAuth();
   const { user } = useUser();
@@ -144,9 +147,24 @@ export const DashboardPage = () => {
                 <article className="rounded-xl border border-white/15 bg-black/40 p-4 transition-colors hover:border-brand/70">
                   <p className="text-xs uppercase tracking-[0.12em] text-brand">{quote.id}</p>
                   <p className="mt-2 text-sm text-white/80">{quote.address}</p>
-                  <p className="mt-1 text-sm text-white/65">
-                    Status: {formatStatus(quote.status)} · Per session ${quote.perSessionTotal.toFixed(2)}
-                  </p>
+                  {(() => {
+                    const perSessionTotal = toMoney(quote.perSessionTotal);
+                    const fullSeasonTotal = toMoney(
+                      quote.seasonalTotalMax,
+                      toMoney(quote.fullSeasonTotal, perSessionTotal)
+                    );
+                    const seasonalDiscountedTotal =
+                      typeof quote.seasonalDiscountedTotal === 'number' && Number.isFinite(quote.seasonalDiscountedTotal)
+                        ? quote.seasonalDiscountedTotal
+                        : fullSeasonTotal;
+
+                    return (
+                      <p className="mt-1 text-sm text-white/65">
+                        Status: {formatStatus(quote.status)} · Per session ${perSessionTotal.toFixed(2)} · Seasonal $
+                        {seasonalDiscountedTotal.toFixed(2)}
+                      </p>
+                    );
+                  })()}
                 </article>
               </Link>
             ))}

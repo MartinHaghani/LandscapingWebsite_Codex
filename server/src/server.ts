@@ -60,6 +60,43 @@ const writeLimit = 30;
 const serviceAreaWindowMs = 60_000;
 const serviceAreaLimit = 40;
 const defaultServiceAreaCacheTtlMs = 60 * 60 * 1_000;
+const EARTH_RADIUS_M = 6_371_008.8;
+
+const toRadians = (value: number) => (value * Math.PI) / 180;
+
+const haversineDistanceM = (from: [number, number], to: [number, number]) => {
+  const [fromLng, fromLat] = from;
+  const [toLng, toLat] = to;
+
+  const dLat = toRadians(toLat - fromLat);
+  const dLng = toRadians(toLng - fromLng);
+  const lat1 = toRadians(fromLat);
+  const lat2 = toRadians(toLat);
+
+  const hav =
+    Math.sin(dLat / 2) ** 2 + Math.cos(lat1) * Math.cos(lat2) * Math.sin(dLng / 2) ** 2;
+
+  return 2 * EARTH_RADIUS_M * Math.asin(Math.min(1, Math.sqrt(hav)));
+};
+
+const getDistanceToNearestStationKm = (point: [number, number], stations: BaseStationConfig[]) => {
+  let nearestM = Infinity;
+
+  stations.forEach((station) => {
+    if (station.active === false) {
+      return;
+    }
+
+    const distanceM = haversineDistanceM(point, [station.lng, station.lat]);
+    nearestM = Math.min(nearestM, distanceM);
+  });
+
+  if (!Number.isFinite(nearestM)) {
+    return 0;
+  }
+
+  return Number((nearestM / 1000).toFixed(3));
+};
 
 const getClientIp = (req: http.IncomingMessage) => {
   const forwarded = req.headers['x-forwarded-for'];
@@ -483,9 +520,11 @@ export const createServer = (options: CreateServerOptions = {}) => {
         const inServiceArea = cached.payload.features.some((feature) =>
           pointInGeometry(point, feature.geometry)
         );
+        const distanceToNearestStationKm = getDistanceToNearestStationKm(point, baseStations);
 
         json(res, 200, {
           inServiceArea,
+          distanceToNearestStationKm,
           approximate: true,
           disclaimer: cached.payload.metadata.disclaimer,
           updatedAt: cached.payload.metadata.updatedAt
@@ -638,6 +677,7 @@ export const createServer = (options: CreateServerOptions = {}) => {
             pricingVersion: 'legacy-v1',
             currency: 'CAD',
             serviceFrequency: legacy.serviceFrequency ?? 'weekly',
+            billingMode: legacy.billingMode ?? 'seasonal',
             baseTotal: legacy.quoteTotal,
             finalTotal: legacy.quoteTotal,
             authUserId: customerIdentity?.userId
@@ -671,6 +711,7 @@ export const createServer = (options: CreateServerOptions = {}) => {
           pricingVersion: payload.pricingVersion ?? 'v1',
           currency: payload.currency ?? 'CAD',
           serviceFrequency: payload.serviceFrequency ?? 'weekly',
+          billingMode: payload.billingMode ?? 'seasonal',
           baseTotal: payload.baseTotal ?? payload.quoteTotal,
           finalTotal: payload.quoteTotal,
           attribution: payload.attribution,

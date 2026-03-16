@@ -72,13 +72,23 @@ Client-side quote draft resilience:
   - address input + selected address metadata
   - map center + step state
   - polygon history (past/present/future)
-  - unit mode + service frequency
+  - unit mode + service frequency + billing mode
+  - internal `distanceToNearestStationKm` from service-area check
 - Reset/clear controls are UI-level only and do not mutate server quote records.
 
 Quote pricing contract:
 
 - `quoteTotal` remains compatibility alias for per-session total
-- canonical fields: `serviceFrequency`, `perSessionTotal`, `sessionsMin`, `sessionsMax`, `seasonalTotalMin`, `seasonalTotalMax`
+- formula: `max(20 + 0.05*A + 0.10*P + 1.0*D, 50)`
+  - `D` = nearest active base-station distance in km
+- canonical fields:
+  - `serviceFrequency`, `perSessionTotal`, `sessionsMin`, `sessionsMax`
+  - `seasonalTotalMin`, `seasonalTotalMax` (compatibility alias pair, now fixed to one total)
+  - `fullSeasonTotal`, `seasonalDiscountedTotal`, `seasonalSavingsTotal`
+  - `seasonalDiscountRate`, `billingMode`
+- cadence session counts are fixed:
+  - `weekly` => `26`
+  - `biweekly` => `14`
 
 Customer profile sync contract:
 
@@ -95,7 +105,7 @@ Customer profile sync contract:
 ### Service Area
 
 - `GET /api/service-area` (ETag + cache)
-- `POST /api/service-area/check`
+- `POST /api/service-area/check` (includes `distanceToNearestStationKm`)
 - `POST /api/service-area/request` (idempotent)
 
 Idempotency behavior:

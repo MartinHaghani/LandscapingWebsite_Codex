@@ -24,7 +24,7 @@ import {
 import {
   getQuoteTotal,
   getRecommendedPlan,
-  getSeasonalTotalRange,
+  getSeasonalPricing,
   quotePricing
 } from '../lib/quote';
 import {
@@ -33,6 +33,7 @@ import {
   saveQuoteDraftState
 } from '../lib/quoteDraftPersistence';
 import type {
+  BillingMode,
   LngLat,
   MapboxSuggestion,
   OutOfServiceAreaRouteState,
@@ -93,6 +94,8 @@ export const InstantQuotePage = () => {
   const [selection, setSelection] = useState<SelectionTarget>({ kind: 'none' });
   const [unitMode, setUnitMode] = useState<UnitMode>('metric');
   const [serviceFrequency, setServiceFrequency] = useState<ServiceFrequency>('weekly');
+  const [billingMode, setBillingMode] = useState<BillingMode>('seasonal');
+  const [distanceToNearestStationKm, setDistanceToNearestStationKm] = useState(0);
   const [submitting, setSubmitting] = useState(false);
   const [statusMessage, setStatusMessage] = useState<{
     type: 'error' | 'info';
@@ -106,9 +109,15 @@ export const InstantQuotePage = () => {
 
   const metrics = useMemo(() => computeMultiPolygonMetrics(polygons), [polygons]);
   const recommendedPlan = useMemo(() => getRecommendedPlan(metrics.areaM2), [metrics.areaM2]);
-  const quoteTotal = useMemo(() => getQuoteTotal(metrics), [metrics]);
-  const seasonalRange = useMemo(
-    () => getSeasonalTotalRange(quoteTotal, serviceFrequency),
+  const safeDistanceToNearestStationKm = Number.isFinite(distanceToNearestStationKm)
+    ? distanceToNearestStationKm
+    : 0;
+  const quoteTotal = useMemo(
+    () => getQuoteTotal(metrics, safeDistanceToNearestStationKm),
+    [metrics, safeDistanceToNearestStationKm]
+  );
+  const seasonalPricing = useMemo(
+    () => getSeasonalPricing(quoteTotal, serviceFrequency),
     [quoteTotal, serviceFrequency]
   );
   const canUndo = polygonHistory.past.length > 0;
@@ -213,6 +222,8 @@ export const InstantQuotePage = () => {
     setCurrentStep(restoredState.currentStep);
     setPolygonHistory(restoredState.polygonHistory);
     setServiceFrequency(restoredState.serviceFrequency);
+    setBillingMode(restoredState.billingMode);
+    setDistanceToNearestStationKm(restoredState.distanceToNearestStationKm);
     setUnitMode(restoredState.unitMode);
     setDrawing(false);
     setSelection({ kind: 'none' });
@@ -236,6 +247,8 @@ export const InstantQuotePage = () => {
       currentStep,
       polygonHistory,
       serviceFrequency,
+      billingMode,
+      distanceToNearestStationKm,
       unitMode
     });
   }, [
@@ -246,6 +259,8 @@ export const InstantQuotePage = () => {
     currentStep,
     polygonHistory,
     serviceFrequency,
+    billingMode,
+    distanceToNearestStationKm,
     unitMode
   ]);
 
@@ -263,6 +278,7 @@ export const InstantQuotePage = () => {
     setPolygonHistory(createPolygonHistory(EMPTY_EDITOR_STATE));
     setDrawing(false);
     setSelection({ kind: 'none' });
+    setDistanceToNearestStationKm(0);
   };
 
   const selectSuggestion = (suggestion: MapboxSuggestion) => {
@@ -362,6 +378,14 @@ export const InstantQuotePage = () => {
         });
         return;
       }
+
+      const nextDistanceToNearestStationKm =
+        typeof coverage.distanceToNearestStationKm === 'number' &&
+        Number.isFinite(coverage.distanceToNearestStationKm)
+          ? coverage.distanceToNearestStationKm
+          : 0;
+
+      setDistanceToNearestStationKm(nextDistanceToNearestStationKm);
     } catch {
       navigate(getCoverageGateDestination('check-failed'));
       return;
@@ -440,6 +464,8 @@ export const InstantQuotePage = () => {
     setSelection({ kind: 'none' });
     setUnitMode('metric');
     setServiceFrequency('weekly');
+    setBillingMode('seasonal');
+    setDistanceToNearestStationKm(0);
     polygonCounterRef.current = 0;
 
     if (typeof window !== 'undefined') {
@@ -612,6 +638,7 @@ export const InstantQuotePage = () => {
           pricingVersion: 'v1',
           currency: 'CAD',
           serviceFrequency,
+          billingMode,
           attribution: attributionRef.current
         },
         createIdempotencyKey(),
@@ -984,6 +1011,34 @@ export const InstantQuotePage = () => {
                   </div>
                 </div>
 
+                <div className="mt-5">
+                  <p className="text-xs uppercase tracking-[0.12em] text-white/65">Billing plan</p>
+                  <div className="mt-2 grid grid-cols-2 gap-2 rounded-xl border border-white/20 bg-black/30 p-1">
+                    <button
+                      type="button"
+                      onClick={() => setBillingMode('seasonal')}
+                      className={`rounded-lg px-3 py-2 text-xs font-semibold uppercase tracking-[0.1em] transition-colors ${
+                        billingMode === 'seasonal'
+                          ? 'bg-brand text-black'
+                          : 'text-white/75 hover:bg-white/10'
+                      }`}
+                    >
+                      Seasonal
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setBillingMode('per_session')}
+                      className={`rounded-lg px-3 py-2 text-xs font-semibold uppercase tracking-[0.1em] transition-colors ${
+                        billingMode === 'per_session'
+                          ? 'bg-brand text-black'
+                          : 'text-white/75 hover:bg-white/10'
+                      }`}
+                    >
+                      Per Session
+                    </button>
+                  </div>
+                </div>
+
                 <a
                   href="/how-rate-is-calculated"
                   target="_blank"
@@ -993,21 +1048,62 @@ export const InstantQuotePage = () => {
                   How the rate is calculated
                 </a>
 
-                <div className="mt-6 rounded-xl border border-brand/40 bg-brand/10 px-4 py-3">
+                <div
+                  className={`mt-6 rounded-2xl border px-4 py-4 ${
+                    billingMode === 'seasonal'
+                      ? 'border-brand/60 bg-brand/15 shadow-[0_0_0_1px_rgba(50,159,91,0.35)]'
+                      : 'border-white/20 bg-black/40'
+                  }`}
+                >
+                  <div className="flex items-center justify-between gap-3">
+                    <p className="text-xs uppercase tracking-[0.15em] text-brand">Seasonal (Default)</p>
+                    <span className="rounded-full border border-brand/50 bg-brand/10 px-2 py-1 text-[11px] font-semibold text-brand">
+                      20% OFF
+                    </span>
+                  </div>
+                  <p className="mt-2 text-3xl font-bold text-white">
+                    ${seasonalPricing.seasonalDiscountedTotal.toFixed(2)}
+                  </p>
+                  <p className="mt-1 text-sm text-white/70">
+                    <span className="line-through">${seasonalPricing.fullSeasonTotal.toFixed(2)}</span>{' '}
+                    full season price
+                  </p>
+                  <p className="mt-1 text-sm text-brand">
+                    You save ${seasonalPricing.seasonalSavingsTotal.toFixed(2)} this season
+                  </p>
+                  <p className="mt-2 text-xs text-white/65">
+                    {seasonalPricing.sessionsMax} sessions per season ({serviceFrequency === 'weekly' ? 'weekly service' : 'bi-weekly service'}).
+                  </p>
+                  <p className="mt-1 text-xs text-white/65">
+                    Charged once for the full season after confirmation. Full refund available up to 24h after your first session.
+                  </p>
+                </div>
+
+                <div
+                  className={`mt-3 rounded-2xl border px-4 py-4 ${
+                    billingMode === 'per_session'
+                      ? 'border-brand/60 bg-brand/15 shadow-[0_0_0_1px_rgba(50,159,91,0.35)]'
+                      : 'border-white/20 bg-black/40'
+                  }`}
+                >
                   <p className="text-xs uppercase tracking-[0.15em] text-brand">Per Session</p>
-                  <p className="mt-1 text-3xl font-bold text-white">${quoteTotal.toFixed(2)}</p>
-                  <p className="mt-2 text-sm text-white/80">
-                    Estimated seasonal total: ${seasonalRange.seasonalTotalMin.toFixed(2)} - $
-                    {seasonalRange.seasonalTotalMax.toFixed(2)}
+                  <p className="mt-2 text-2xl font-semibold text-white">${quoteTotal.toFixed(2)}</p>
+                  <p className="mt-1 text-sm text-white/70">
+                    Full season total: ${seasonalPricing.fullSeasonTotal.toFixed(2)} ({seasonalPricing.sessionsMax} sessions)
                   </p>
-                  <p className="mt-1 text-xs text-white/60">
-                    {seasonalRange.sessionsMin}-{seasonalRange.sessionsMax} sessions
+                  <p className="mt-1 text-xs text-white/65">
+                    Billed after each completed visit at the per-session rate.
                   </p>
+                  <p className="mt-1 text-xs text-white/65">Cancel anytime on the per-session plan.</p>
                 </div>
 
                 <div className="mt-6 space-y-3 text-sm text-white/72">
                   <p>Address: {selectedAddress}</p>
                   <p>Cadence: {serviceFrequency === 'weekly' ? 'Weekly' : 'Bi-weekly'}</p>
+                  <p>
+                    Seasonal price shown above includes a {(seasonalPricing.seasonalDiscountRate * 100).toFixed(0)}%
+                    {' '}discount from full season pricing.
+                  </p>
                   <p>
                     Service polygons: {metrics.validServicePolygonCount} valid /{' '}
                     {servicePolygons.length} total
