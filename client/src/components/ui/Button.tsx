@@ -8,12 +8,12 @@ interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
 }
 
 const baseStyles =
-  'inline-flex items-center justify-center rounded-full px-5 py-2.5 text-sm font-semibold transition-all duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand focus-visible:ring-offset-2 focus-visible:ring-offset-black disabled:cursor-not-allowed disabled:opacity-50';
+  'inline-flex min-h-[44px] items-center justify-center rounded-full px-5 py-2.5 text-sm font-semibold transition-all duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand focus-visible:ring-offset-2 focus-visible:ring-offset-canvas disabled:cursor-not-allowed disabled:opacity-50';
 
 const variants: Record<ButtonVariant, string> = {
-  primary: 'bg-brand text-black shadow-soft hover:bg-brand/90',
-  secondary: 'border border-white/35 bg-transparent text-white hover:border-brand hover:text-brand',
-  ghost: 'bg-transparent text-white hover:bg-white/10'
+  primary: 'bg-brand text-ink shadow-soft hover:bg-brand-muted',
+  secondary: 'border border-stroke bg-surface text-ink hover:border-brand hover:text-ink',
+  ghost: 'bg-transparent text-copy-muted hover:bg-brand/10 hover:text-ink'
 };
 
 export const Button = ({

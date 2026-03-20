@@ -4,11 +4,11 @@ import { Navbar } from './Navbar';
 import { ScrollToTop } from './ScrollToTop';
 
 export const SiteLayout = () => (
-  <div className="min-h-screen bg-ink">
+  <div className="min-h-screen bg-canvas text-ink">
     <ScrollToTop />
     <a
       href="#main-content"
-      className="sr-only focus:not-sr-only focus:absolute focus:left-4 focus:top-4 focus:z-50 focus:rounded-md focus:bg-brand focus:px-3 focus:py-2 focus:text-sm focus:font-semibold focus:text-black"
+      className="sr-only focus:not-sr-only focus:absolute focus:left-4 focus:top-4 focus:z-50 focus:rounded-md focus:bg-brand focus:px-3 focus:py-2 focus:text-sm focus:font-semibold focus:text-ink"
     >
       Skip to content
     </a>

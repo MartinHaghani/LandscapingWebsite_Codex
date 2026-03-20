@@ -86,9 +86,10 @@ Default local URLs:
 ## Public Flow Highlights
 
 - `/services` starts with the Service Area map card.
-- Coverage overlay is dark-map + green `#329F5B` and privacy-hardened.
+- Coverage overlay now uses a light basemap + green `#329F5B` polygon treatment and remains privacy-hardened.
 - Services page uses CTA-only handoff to `/instant-quote`.
-- Marketing pages now use launch-ready production copy (no placeholder content) with mobile navigation and footer quick links.
+- Marketing pages now use launch-ready production copy (no placeholder content), warm-light visual tokens, and readability-first spacing/contrast with mobile navigation and footer quick links.
+- Home hero now uses a balanced desktop split: left-side headline and CTA group with `No sign-up required.`, right-side animated transparent lawn parcel with a mower fade-in that traces the inset perimeter counter-clockwise, reveals CAD-style dimensions segment-by-segment after passing them, and keeps a compact `learning your lawn...` status capsule inside the graphic.
 - Instant Quote flow is now draft-first:
   - cadence selector supports `weekly` and `bi-weekly`
     - `weekly` = 26 sessions/season
@@ -97,6 +98,7 @@ Default local URLs:
     - `D` = nearest active base-station distance in km (internal-only)
   - quote outputs include per-session, full-season, and discounted seasonal totals
   - billing modes: `seasonal` (default, 20% discount) and `per_session`
+  - quote drawing map keeps satellite basemap by default, with warm-light control panels for readability
   - address suggestions support keyboard navigation (`ArrowUp/ArrowDown/Enter/Escape`)
   - browser-local draft persistence auto-saves address, step state, polygons, units, cadence, and billing mode
   - users can clear geometry or reset saved draft from the quote UI

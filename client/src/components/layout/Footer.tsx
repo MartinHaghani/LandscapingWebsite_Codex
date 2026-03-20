@@ -8,18 +8,18 @@ const quickLinks = [
 ];
 
 export const Footer = () => (
-  <footer className="border-t border-white/10 bg-black/95">
+  <footer className="mt-16 border-t border-stroke bg-surface-muted/70">
     <div className="mx-auto grid w-full max-w-7xl gap-8 px-4 py-10 md:grid-cols-3 md:px-8">
       <div>
-        <p className="font-display text-lg font-semibold text-white">Autoscape</p>
-        <p className="mt-2 max-w-md text-sm text-white/65">
+        <p className="font-display text-lg font-semibold text-ink">Autoscape</p>
+        <p className="mt-2 max-w-md text-sm text-copy-muted">
           Autonomous lawn care with deterministic quote measurement, route precision, and dependable
           recurring service.
         </p>
       </div>
 
       <div>
-        <p className="text-xs font-semibold uppercase tracking-[0.14em] text-white/60">
+        <p className="text-xs font-semibold uppercase tracking-[0.14em] text-copy-soft">
           Quick Links
         </p>
         <div className="mt-3 flex flex-col gap-2">
@@ -27,7 +27,7 @@ export const Footer = () => (
             <Link
               key={link.to}
               to={link.to}
-              className="text-sm text-white/75 transition-colors hover:text-brand"
+              className="text-sm text-copy-muted transition-colors hover:text-brand"
             >
               {link.label}
             </Link>
@@ -35,8 +35,8 @@ export const Footer = () => (
         </div>
       </div>
 
-      <div className="text-sm text-white/60">
-        <p className="text-xs font-semibold uppercase tracking-[0.14em] text-white/60">Contact</p>
+      <div className="text-sm text-copy-muted">
+        <p className="text-xs font-semibold uppercase tracking-[0.14em] text-copy-soft">Contact</p>
         <p className="mt-3">Greater Toronto Area, Ontario</p>
         <p className="mt-2">
           <a className="transition-colors hover:text-brand" href="tel:+14168482841">
@@ -48,7 +48,7 @@ export const Footer = () => (
             contact@autoscape.ca
           </a>
         </p>
-        <p className="mt-3 text-xs text-white/45">Mon-Sat 7:00 AM - 7:00 PM</p>
+        <p className="mt-3 text-xs text-copy-soft">Mon-Sat 7:00 AM - 7:00 PM</p>
       </div>
     </div>
   </footer>

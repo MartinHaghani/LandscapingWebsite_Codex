@@ -12,40 +12,40 @@ export const HowRateCalculatedPage = () => (
 
     <Card className="mt-10 space-y-6">
       <div>
-        <h2 className="text-xl font-semibold text-white">Formula</h2>
-        <p className="mt-3 text-sm text-white/75">
-          <code className="rounded bg-white/10 px-2 py-1 text-xs text-white">
+        <h2 className="text-xl font-semibold text-ink">Formula</h2>
+        <p className="mt-3 text-sm text-copy-muted">
+          <code className="rounded bg-surface-muted px-2 py-1 text-xs text-ink">
             perSession = max(20 + 0.05*A + 0.10*P + 1.0*D, 50)
           </code>
         </p>
-        <p className="mt-2 text-sm text-white/75">
-          <code className="rounded bg-white/10 px-2 py-1 text-xs text-white">
+        <p className="mt-2 text-sm text-copy-muted">
+          <code className="rounded bg-surface-muted px-2 py-1 text-xs text-ink">
             fullSeason = perSession * sessions, seasonalDiscounted = fullSeason * (1 - discountRate)
           </code>
         </p>
       </div>
 
-      <div className="space-y-2 text-sm text-white/80">
+      <div className="space-y-2 text-sm text-copy-muted">
         <p>
-          <span className="font-semibold text-white">Base fee:</span> ${quotePricing.baseFee.toFixed(2)}
+          <span className="font-semibold text-ink">Base fee:</span> ${quotePricing.baseFee.toFixed(2)}
         </p>
         <p>
-          <span className="font-semibold text-white">Area rate:</span> ${quotePricing.areaRate.toFixed(3)} per m2
+          <span className="font-semibold text-ink">Area rate:</span> ${quotePricing.areaRate.toFixed(3)} per m2
         </p>
         <p>
-          <span className="font-semibold text-white">Perimeter rate:</span> $
+          <span className="font-semibold text-ink">Perimeter rate:</span> $
           {quotePricing.perimeterRate.toFixed(2)} per m
         </p>
         <p>
-          <span className="font-semibold text-white">Distance rate:</span> ${quotePricing.distanceRate.toFixed(2)} per km
+          <span className="font-semibold text-ink">Distance rate:</span> ${quotePricing.distanceRate.toFixed(2)} per km
         </p>
         <p>
-          <span className="font-semibold text-white">Seasonal discount (default):</span>{' '}
+          <span className="font-semibold text-ink">Seasonal discount (default):</span>{' '}
           {(quotePricing.defaultSeasonalDiscountRate * 100).toFixed(0)}%
         </p>
       </div>
 
-      <div className="space-y-3 text-sm text-white/75">
+      <div className="space-y-3 text-sm text-copy-muted">
         <p>
           Pricing is computed in metric units internally. The instant quote page can still display area and perimeter
           in metric or imperial.
@@ -58,7 +58,7 @@ export const HowRateCalculatedPage = () => (
           Only the final effective service footprint is billed.
         </p>
         <p>
-          <code className="rounded bg-white/10 px-2 py-1 text-xs text-white">D</code> is the nearest active base-station distance in
+          <code className="rounded bg-surface-muted px-2 py-1 text-xs text-ink">D</code> is the nearest active base-station distance in
           kilometers and is used internally for pricing only.
         </p>
         <p>

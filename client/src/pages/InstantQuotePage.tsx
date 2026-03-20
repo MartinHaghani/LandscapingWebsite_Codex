@@ -681,26 +681,26 @@ export const InstantQuotePage = () => {
         <Card
           className={`border transition-all ${
             currentStep === 'address'
-              ? 'border-brand bg-brand/20 ring-2 ring-brand/90'
-              : 'border-white/15 bg-black/35 text-white/65'
+              ? 'border-brand/70 bg-brand/15 ring-2 ring-brand/30'
+              : 'border-stroke bg-surface text-copy-muted'
           }`}
         >
-          <p className="text-xs uppercase tracking-[0.14em] text-white/70">Step 1</p>
-          <p className="mt-2 text-lg font-semibold text-white">Enter address</p>
-          <p className="mt-1 text-sm text-white/70">
+          <p className="text-xs uppercase tracking-[0.14em] text-copy-muted">Step 1</p>
+          <p className="mt-2 text-lg font-semibold text-ink">Enter address</p>
+          <p className="mt-1 text-sm text-copy-muted">
             Select a property address to lock the map center.
           </p>
         </Card>
         <Card
           className={`border transition-all ${
             currentStep === 'map'
-              ? 'border-brand bg-brand/20 ring-2 ring-brand/90'
-              : 'border-white/15 bg-black/35 text-white/65'
+              ? 'border-brand/70 bg-brand/15 ring-2 ring-brand/30'
+              : 'border-stroke bg-surface text-copy-muted'
           }`}
         >
-          <p className="text-xs uppercase tracking-[0.14em] text-white/70">Step 2</p>
-          <p className="mt-2 text-lg font-semibold text-white">Map your lawn</p>
-          <p className="mt-1 text-sm text-white/70">
+          <p className="text-xs uppercase tracking-[0.14em] text-copy-muted">Step 2</p>
+          <p className="mt-2 text-lg font-semibold text-ink">Map your lawn</p>
+          <p className="mt-1 text-sm text-copy-muted">
             Draw service polygons and obstacles, then request your quote.
           </p>
         </Card>
@@ -708,9 +708,9 @@ export const InstantQuotePage = () => {
 
       {currentStep === 'address' ? (
         <div className="relative isolate z-50 mt-8 grid gap-6">
-          <Card className="relative z-20 overflow-visible bg-black/65">
+          <Card className="relative z-20 overflow-visible bg-surface">
             <form onSubmit={handleAddressSubmit} className="flex flex-col gap-3">
-              <label htmlFor="address" className="block text-sm text-white/80">
+              <label htmlFor="address" className="form-label">
                 Enter your address
               </label>
               <div className="flex items-start gap-3">
@@ -726,13 +726,13 @@ export const InstantQuotePage = () => {
                     }}
                     onKeyDown={handleAddressInputKeyDown}
                     placeholder="123 Greenway Blvd, Vaughan, ON"
-                    className="w-full rounded-xl border border-white/20 bg-black/60 px-4 py-3 text-white placeholder:text-white/35 focus:border-brand focus:outline-none"
+                    className="form-input"
                     aria-autocomplete="list"
                     aria-expanded={suggestions.length > 0}
                     aria-controls="address-suggestions"
                   />
                   {loadingSuggestions ? (
-                    <p className="absolute -bottom-6 left-0 text-xs text-white/60">
+                    <p className="absolute -bottom-6 left-0 text-xs text-copy-muted">
                       Searching addresses...
                     </p>
                   ) : null}
@@ -740,7 +740,7 @@ export const InstantQuotePage = () => {
                     <div
                       id="address-suggestions"
                       role="listbox"
-                      className="absolute left-0 top-full z-[9999] mt-2 w-full overflow-hidden rounded-xl border border-white/20 bg-black/95 shadow-soft"
+                      className="absolute left-0 top-full z-[9999] mt-2 w-full overflow-hidden rounded-xl border border-stroke bg-surface shadow-soft"
                     >
                       {suggestions.map((suggestion, index) => (
                         <button
@@ -748,10 +748,10 @@ export const InstantQuotePage = () => {
                           type="button"
                           onClick={() => selectSuggestion(suggestion)}
                           onMouseEnter={() => setHighlightedSuggestionIndex(index)}
-                          className={`block w-full border-b border-white/10 px-4 py-3 text-left text-sm transition-colors last:border-0 ${
+                          className={`block w-full border-b border-stroke px-4 py-3 text-left text-sm transition-colors last:border-0 ${
                             highlightedSuggestionIndex === index
-                              ? 'bg-white/15 text-white'
-                              : 'text-white/85 hover:bg-white/10'
+                              ? 'bg-brand/10 text-ink'
+                              : 'text-copy-muted hover:bg-brand/10'
                           }`}
                           role="option"
                           aria-selected={highlightedSuggestionIndex === index}
@@ -776,8 +776,8 @@ export const InstantQuotePage = () => {
               <p
                 className={
                   statusMessage.type === 'error'
-                    ? 'mt-4 text-sm text-red-300'
-                    : 'mt-4 text-sm text-white/75'
+                    ? 'mt-4 text-sm text-red-700'
+                    : 'mt-4 text-sm text-copy-muted'
                 }
               >
                 {statusMessage.text}
@@ -787,15 +787,15 @@ export const InstantQuotePage = () => {
             <button
               type="button"
               onClick={resetQuoteDraft}
-              className="mt-4 inline-flex items-center text-xs font-semibold uppercase tracking-[0.12em] text-white/55 transition-colors hover:text-brand"
+              className="mt-4 inline-flex items-center text-xs font-semibold uppercase tracking-[0.12em] text-copy-muted transition-colors hover:text-brand"
             >
               Reset Saved Draft
             </button>
           </Card>
 
           {!MAPBOX_TOKEN ? (
-            <Card className="border-red-300/40 bg-red-950/30">
-              <p className="text-sm text-red-200">
+            <Card className="border-red-300/70 bg-red-50">
+              <p className="text-sm text-red-700">
                 `VITE_MAPBOX_TOKEN` is missing. Add your Mapbox public token to `client/.env`.
               </p>
             </Card>
@@ -803,13 +803,13 @@ export const InstantQuotePage = () => {
         </div>
       ) : (
         <div ref={mapStepRef} className="mt-8 grid gap-6">
-          <Card className="flex flex-col gap-4 bg-black/65 md:flex-row md:items-center md:justify-between">
+          <Card className="flex flex-col gap-4 bg-surface md:flex-row md:items-center md:justify-between">
             <div>
               <p className="text-xs uppercase tracking-[0.14em] text-brand">
                 Step 2: Map your lawn
               </p>
-              <p className="mt-2 text-sm text-white/78">Address locked to map center:</p>
-              <p className="mt-1 text-base text-white">{selectedAddress}</p>
+              <p className="mt-2 text-sm text-copy-muted">Address locked to map center:</p>
+              <p className="mt-1 text-base text-ink">{selectedAddress}</p>
             </div>
             <Button type="button" variant="secondary" onClick={goToAddressStep}>
               Change Address
@@ -817,29 +817,29 @@ export const InstantQuotePage = () => {
           </Card>
 
           {!MAPBOX_TOKEN ? (
-            <Card className="border-red-300/40 bg-red-950/30">
-              <p className="text-sm text-red-200">
+            <Card className="border-red-300/70 bg-red-50">
+              <p className="text-sm text-red-700">
                 `VITE_MAPBOX_TOKEN` is missing. Add your Mapbox public token to `client/.env`.
               </p>
             </Card>
           ) : (
             <div className="grid gap-6 xl:grid-cols-[1.35fr_0.65fr]">
               <div className="space-y-4">
-                <Card className="bg-black/45">
-                  <p className="text-sm text-white/78">
+                <Card className="bg-surface">
+                  <p className="text-sm text-copy-muted">
                     Click to add points around the area you want serviced. Drag any vertex at any
                     time to refine the boundary, then use on-map tools to add service polygons, add
                     obstacles, undo, redo, or delete selected geometry.
                   </p>
 
                   {metrics.selfIntersecting ? (
-                    <p className="mt-4 rounded-lg border border-red-300/40 bg-red-950/30 px-3 py-2 text-sm text-red-200">
+                    <p className="status-error mt-4">
                       Overlapping boundary edges detected. Adjust vertices to continue.
                     </p>
                   ) : null}
 
                   {metrics.effectiveGeometryEmpty ? (
-                    <p className="mt-4 rounded-lg border border-red-300/40 bg-red-950/30 px-3 py-2 text-sm text-red-200">
+                    <p className="status-error mt-4">
                       Obstacles remove the entire service area. Adjust boundaries to continue.
                     </p>
                   ) : null}
@@ -881,7 +881,7 @@ export const InstantQuotePage = () => {
                     }}
                   >
                     <div
-                      className="mx-auto flex flex-wrap items-center justify-center gap-2 rounded-2xl border border-white/20 bg-black/80 px-3 py-2 shadow-soft backdrop-blur-sm"
+                      className="mx-auto flex flex-wrap items-center justify-center gap-2 rounded-2xl border border-stroke bg-surface/95 px-3 py-2 shadow-soft backdrop-blur-sm"
                       style={{
                         width: 'max-content',
                         maxWidth: '100%',
@@ -901,7 +901,7 @@ export const InstantQuotePage = () => {
                       <Button
                         variant="secondary"
                         onClick={addObstaclePolygon}
-                        className="border-red-300/50 text-red-100 hover:border-red-300/80 hover:text-red-50"
+                        className="border-red-300/70 text-red-700 hover:border-red-400 hover:text-red-800"
                       >
                         Add Obstacle
                       </Button>
@@ -924,11 +924,11 @@ export const InstantQuotePage = () => {
                         disabled={selection.kind === 'none'}
                         className={
                           selection.kind === 'none'
-                            ? 'border-white/20 text-white/40 hover:border-white/20 hover:text-white/40'
-                            : 'border-red-300/40 text-red-200 hover:border-red-300/60 hover:text-red-100'
+                            ? 'border-stroke text-copy-muted hover:border-stroke hover:text-copy-muted'
+                            : 'border-red-300/70 text-red-700 hover:border-red-400 hover:text-red-800'
                         }
                       >
-                        <span className="mr-2 inline-flex h-5 w-5 items-center justify-center rounded-full border border-red-300/40 bg-red-500/20 text-xs font-bold leading-none text-red-200">
+                        <span className="mr-2 inline-flex h-5 w-5 items-center justify-center rounded-full border border-red-300/70 bg-red-100 text-xs font-bold leading-none text-red-700">
                           X
                         </span>
                         Delete
@@ -938,17 +938,17 @@ export const InstantQuotePage = () => {
                 </div>
               </div>
 
-              <Card className="h-fit bg-black/70 xl:sticky xl:top-24">
+              <Card className="h-fit bg-surface xl:sticky xl:top-24">
                 <p className="text-xs uppercase tracking-[0.17em] text-brand">Quote Summary</p>
-                <h3 className="mt-2 text-2xl font-semibold text-white">Recommended Plan</h3>
-                <p className="mt-2 text-sm text-white/72">{recommendedPlan}</p>
+                <h3 className="mt-2 text-2xl font-semibold text-ink">Recommended Plan</h3>
+                <p className="mt-2 text-sm text-copy-muted">{recommendedPlan}</p>
 
-                <div className="mt-5 inline-flex overflow-hidden rounded-full border border-white/20">
+                <div className="mt-5 inline-flex overflow-hidden rounded-full border border-stroke">
                   <button
                     type="button"
                     onClick={() => setUnitMode('metric')}
                     className={`px-4 py-2 text-xs font-semibold uppercase tracking-[0.12em] transition-colors ${
-                      unitMode === 'metric' ? 'bg-brand text-black' : 'bg-transparent text-white/75'
+                      unitMode === 'metric' ? 'bg-brand text-ink' : 'bg-transparent text-copy-muted'
                     }`}
                   >
                     Metric
@@ -958,15 +958,15 @@ export const InstantQuotePage = () => {
                     onClick={() => setUnitMode('imperial')}
                     className={`px-4 py-2 text-xs font-semibold uppercase tracking-[0.12em] transition-colors ${
                       unitMode === 'imperial'
-                        ? 'bg-brand text-black'
-                        : 'bg-transparent text-white/75'
+                        ? 'bg-brand text-ink'
+                        : 'bg-transparent text-copy-muted'
                     }`}
                   >
                     Imperial
                   </button>
                 </div>
 
-                <div className="mt-6 space-y-3 text-sm text-white/80">
+                <div className="mt-6 space-y-3 text-sm text-copy-muted">
                   <div className="flex items-center justify-between">
                     <span>Area</span>
                     <span>{areaValue}</span>
@@ -982,17 +982,17 @@ export const InstantQuotePage = () => {
                 </div>
 
                 <div className="mt-5">
-                  <p className="text-xs uppercase tracking-[0.12em] text-white/65">
+                  <p className="text-xs uppercase tracking-[0.12em] text-copy-muted">
                     Service frequency
                   </p>
-                  <div className="mt-2 inline-flex overflow-hidden rounded-full border border-white/20">
+                  <div className="mt-2 inline-flex overflow-hidden rounded-full border border-stroke">
                     <button
                       type="button"
                       onClick={() => setServiceFrequency('weekly')}
                       className={`px-4 py-2 text-xs font-semibold uppercase tracking-[0.12em] transition-colors ${
                         serviceFrequency === 'weekly'
-                          ? 'bg-brand text-black'
-                          : 'bg-transparent text-white/75'
+                          ? 'bg-brand text-ink'
+                          : 'bg-transparent text-copy-muted'
                       }`}
                     >
                       Weekly
@@ -1002,8 +1002,8 @@ export const InstantQuotePage = () => {
                       onClick={() => setServiceFrequency('biweekly')}
                       className={`px-4 py-2 text-xs font-semibold uppercase tracking-[0.12em] transition-colors ${
                         serviceFrequency === 'biweekly'
-                          ? 'bg-brand text-black'
-                          : 'bg-transparent text-white/75'
+                          ? 'bg-brand text-ink'
+                          : 'bg-transparent text-copy-muted'
                       }`}
                     >
                       Bi-weekly
@@ -1012,15 +1012,15 @@ export const InstantQuotePage = () => {
                 </div>
 
                 <div className="mt-5">
-                  <p className="text-xs uppercase tracking-[0.12em] text-white/65">Billing plan</p>
-                  <div className="mt-2 grid grid-cols-2 gap-2 rounded-xl border border-white/20 bg-black/30 p-1">
+                  <p className="text-xs uppercase tracking-[0.12em] text-copy-muted">Billing plan</p>
+                  <div className="mt-2 grid grid-cols-2 gap-2 rounded-xl border border-stroke bg-surface p-1">
                     <button
                       type="button"
                       onClick={() => setBillingMode('seasonal')}
                       className={`rounded-lg px-3 py-2 text-xs font-semibold uppercase tracking-[0.1em] transition-colors ${
                         billingMode === 'seasonal'
-                          ? 'bg-brand text-black'
-                          : 'text-white/75 hover:bg-white/10'
+                          ? 'bg-brand text-ink'
+                          : 'text-copy-muted hover:bg-brand/10'
                       }`}
                     >
                       Seasonal
@@ -1030,8 +1030,8 @@ export const InstantQuotePage = () => {
                       onClick={() => setBillingMode('per_session')}
                       className={`rounded-lg px-3 py-2 text-xs font-semibold uppercase tracking-[0.1em] transition-colors ${
                         billingMode === 'per_session'
-                          ? 'bg-brand text-black'
-                          : 'text-white/75 hover:bg-white/10'
+                          ? 'bg-brand text-ink'
+                          : 'text-copy-muted hover:bg-brand/10'
                       }`}
                     >
                       Per Session
@@ -1052,7 +1052,7 @@ export const InstantQuotePage = () => {
                   className={`mt-6 rounded-2xl border px-4 py-4 ${
                     billingMode === 'seasonal'
                       ? 'border-brand/60 bg-brand/15 shadow-[0_0_0_1px_rgba(50,159,91,0.35)]'
-                      : 'border-white/20 bg-black/40'
+                      : 'border-stroke bg-surface'
                   }`}
                 >
                   <div className="flex items-center justify-between gap-3">
@@ -1061,20 +1061,20 @@ export const InstantQuotePage = () => {
                       20% OFF
                     </span>
                   </div>
-                  <p className="mt-2 text-3xl font-bold text-white">
+                  <p className="mt-2 text-3xl font-bold text-ink">
                     ${seasonalPricing.seasonalDiscountedTotal.toFixed(2)}
                   </p>
-                  <p className="mt-1 text-sm text-white/70">
+                  <p className="mt-1 text-sm text-copy-muted">
                     <span className="line-through">${seasonalPricing.fullSeasonTotal.toFixed(2)}</span>{' '}
                     full season price
                   </p>
                   <p className="mt-1 text-sm text-brand">
                     You save ${seasonalPricing.seasonalSavingsTotal.toFixed(2)} this season
                   </p>
-                  <p className="mt-2 text-xs text-white/65">
+                  <p className="mt-2 text-xs text-copy-muted">
                     {seasonalPricing.sessionsMax} sessions per season ({serviceFrequency === 'weekly' ? 'weekly service' : 'bi-weekly service'}).
                   </p>
-                  <p className="mt-1 text-xs text-white/65">
+                  <p className="mt-1 text-xs text-copy-muted">
                     Charged once for the full season after confirmation. Full refund available up to 24h after your first session.
                   </p>
                 </div>
@@ -1083,21 +1083,21 @@ export const InstantQuotePage = () => {
                   className={`mt-3 rounded-2xl border px-4 py-4 ${
                     billingMode === 'per_session'
                       ? 'border-brand/60 bg-brand/15 shadow-[0_0_0_1px_rgba(50,159,91,0.35)]'
-                      : 'border-white/20 bg-black/40'
+                      : 'border-stroke bg-surface'
                   }`}
                 >
                   <p className="text-xs uppercase tracking-[0.15em] text-brand">Per Session</p>
-                  <p className="mt-2 text-2xl font-semibold text-white">${quoteTotal.toFixed(2)}</p>
-                  <p className="mt-1 text-sm text-white/70">
+                  <p className="mt-2 text-2xl font-semibold text-ink">${quoteTotal.toFixed(2)}</p>
+                  <p className="mt-1 text-sm text-copy-muted">
                     Full season total: ${seasonalPricing.fullSeasonTotal.toFixed(2)} ({seasonalPricing.sessionsMax} sessions)
                   </p>
-                  <p className="mt-1 text-xs text-white/65">
+                  <p className="mt-1 text-xs text-copy-muted">
                     Billed after each completed visit at the per-session rate.
                   </p>
-                  <p className="mt-1 text-xs text-white/65">Cancel anytime on the per-session plan.</p>
+                  <p className="mt-1 text-xs text-copy-muted">Cancel anytime on the per-session plan.</p>
                 </div>
 
-                <div className="mt-6 space-y-3 text-sm text-white/72">
+                <div className="mt-6 space-y-3 text-sm text-copy-muted">
                   <p>Address: {selectedAddress}</p>
                   <p>Cadence: {serviceFrequency === 'weekly' ? 'Weekly' : 'Bi-weekly'}</p>
                   <p>
@@ -1116,13 +1116,13 @@ export const InstantQuotePage = () => {
                   <p>Submission status: {submissionStatus}</p>
                 </div>
 
-                <p className="mt-4 text-xs text-white/55">
+                <p className="mt-4 text-xs text-copy-muted">
                   Draft progress is auto-saved in this browser.
                 </p>
                 <button
                   type="button"
                   onClick={resetQuoteDraft}
-                  className="mt-2 inline-flex items-center text-xs font-semibold uppercase tracking-[0.12em] text-white/55 transition-colors hover:text-brand"
+                  className="mt-2 inline-flex items-center text-xs font-semibold uppercase tracking-[0.12em] text-copy-muted transition-colors hover:text-brand"
                 >
                   Reset Saved Draft
                 </button>
@@ -1131,8 +1131,8 @@ export const InstantQuotePage = () => {
                   <p
                     className={
                       statusMessage.type === 'error'
-                        ? 'mt-4 text-sm text-red-300'
-                        : 'mt-4 text-sm text-white/75'
+                        ? 'mt-4 text-sm text-red-700'
+                        : 'mt-4 text-sm text-copy-muted'
                     }
                   >
                     {statusMessage.text}

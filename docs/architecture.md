@@ -21,6 +21,8 @@ Primary domains:
 - Admin app routes/state: `admin/src/App.tsx`
 - Admin quote editor map module: `admin/src/components/QuoteEditorMap.tsx` (satellite raster basemap + immediate polygon source hydration)
 - Public layout shell: `client/src/components/layout/SiteLayout.tsx` (`Navbar`, `Footer`, `ScrollToTop`)
+- Public theming system: `client/tailwind.config.ts` + `client/src/index.css` (warm-light semantic tokens, shared form/focus/map-control styling)
+- Home hero system: `client/src/pages/HomePage.tsx` + `client/src/components/home/HomeHeroLawnGraphic.tsx` + `client/src/lib/homeHeroLawn.ts` (true desktop 50/50 split, CTA helper copy, fixed parcel geometry constants, inset mower track metadata, single-pass mower fade/trace animation, sequential measurement reveal timing, slightly heavier white outline, and in-graphic status capsule)
 
 ## 3) Persistence Layer
 

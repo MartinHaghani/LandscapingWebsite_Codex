@@ -108,15 +108,15 @@ export const QuoteConfirmationPage = () => {
 
   return (
     <div className="mx-auto flex w-full max-w-4xl flex-col px-4 py-16 md:px-8 md:py-24">
-      <Card className="bg-black/75 p-8">
+      <Card className="bg-surface p-8">
         <p className="text-xs uppercase tracking-[0.16em] text-brand">Quote Requested</p>
-        <h1 className="mt-3 font-display text-4xl font-bold text-white">Instant Quote Confirmation</h1>
+        <h1 className="mt-3 font-display text-4xl font-bold text-ink">Instant Quote Confirmation</h1>
 
-        {loading ? <p className="mt-6 text-sm text-white/70">Loading quote details...</p> : null}
-        {error ? <p className="mt-6 text-sm text-red-300">{error}</p> : null}
+        {loading ? <p className="mt-6 text-sm text-copy-muted">Loading quote details...</p> : null}
+        {error ? <p className="mt-6 text-sm text-red-700">{error}</p> : null}
 
         {quote ? (
-          <div className="mt-8 space-y-4 text-sm text-white/80">
+          <div className="mt-8 space-y-4 text-sm text-copy-muted">
             <p>
               Quote ID: <span className="font-semibold text-brand">{quote.id}</span>
             </p>

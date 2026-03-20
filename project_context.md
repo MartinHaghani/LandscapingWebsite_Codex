@@ -13,11 +13,12 @@ Autoscape provides:
 ### Public App (`client/`)
 
 - `Services` page starts with Service Area map + large `Check my address` CTA.
-- Service map is dark themed with green `#329F5B` overlay.
+- Service map uses a light basemap with green `#329F5B` overlay for coverage clarity.
 - Coverage is explicitly approximate and privacy-hardened.
 - Navigation includes mobile menu support and quote CTA.
 - Footer includes production contact details and internal quick links.
-- Marketing pages (home/services/about/contact) now use non-placeholder production copy.
+- Marketing pages (home/services/about/contact) use non-placeholder production copy and a warm-light readability-first design system.
+- Home hero uses a symmetric desktop split with copy/CTAs on the left, `No sign-up required.` helper text under the CTA row, and a responsive animated lawn parcel on the right with a mower fade-in, counter-clockwise inset trace path, sequential CAD-style dimension reveals, a restrained under-shadow, and an in-graphic `learning your lawn...` status capsule.
 
 ### Instant Quote Flow
 
@@ -26,6 +27,8 @@ Autoscape provides:
 2. Coverage gate (`POST /api/service-area/check`) before entering map step.
 3. Step 2 geometry drawing with service + obstacle polygons.
    - Includes `Clear All`, `Undo`, `Redo`, and delete controls.
+   - Satellite basemap remains default in quote mapping for boundary accuracy.
+   - Drawing controls/panels use warm-light surfaces and high-contrast action states.
 4. Cadence selection (`weekly` or `biweekly`) updates fixed seasonal session counts and totals.
    - `weekly` uses 26 sessions/season; `biweekly` uses 14 sessions/season.
    - Pricing formula: `max(20 + 0.05*A + 0.10*P + 1.0*D, 50)`.

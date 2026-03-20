@@ -111,27 +111,27 @@ export const OutOfServiceAreaPage = () => {
 
   return (
     <div className="mx-auto w-full max-w-6xl px-4 py-14 md:px-8 md:py-20">
-      <Card className="space-y-7 border-white/20 bg-black/70 p-7 md:p-10">
+      <Card className="space-y-7 border-stroke bg-surface p-7 md:p-10">
         <div className="max-w-4xl">
           <p className="text-xs uppercase tracking-[0.15em] text-brand">Service Availability</p>
-          <h1 className="mt-3 font-display text-4xl font-bold leading-tight text-white md:text-6xl">
+          <h1 className="mt-3 font-display text-4xl font-bold leading-tight text-ink md:text-6xl">
             Sorry, we are not in your area yet.
           </h1>
-          <p className="mt-4 text-base text-white/75 md:text-lg">
+          <p className="mt-4 text-base text-copy-muted md:text-lg">
             The address you entered is currently outside our active service area. We are expanding quickly and would
             still love to hear from you.
           </p>
-          <p className="mt-2 text-sm text-white/65">Entered address: {state.address}</p>
+          <p className="mt-2 text-sm text-copy-muted">Entered address: {state.address}</p>
         </div>
 
         {!MAPBOX_TOKEN ? (
-          <p className="rounded-xl border border-red-300/40 bg-red-950/30 px-4 py-3 text-sm text-red-200">
+          <p className="status-error">
             `VITE_MAPBOX_TOKEN` is missing, so the map preview is unavailable.
           </p>
         ) : loadError ? (
-          <p className="rounded-xl border border-red-300/40 bg-red-950/30 px-4 py-3 text-sm text-red-200">{loadError}</p>
+          <p className="status-error">{loadError}</p>
         ) : !serviceArea ? (
-          <div className="flex h-[440px] items-center justify-center rounded-2xl border border-white/15 bg-black/45 text-sm text-white/65 md:h-[360px]">
+          <div className="flex h-[440px] items-center justify-center rounded-2xl border border-stroke bg-surface text-sm text-copy-muted md:h-[360px]">
             Loading coverage map...
           </div>
         ) : (
@@ -144,12 +144,12 @@ export const OutOfServiceAreaPage = () => {
           />
         )}
 
-        {loading ? <p className="text-sm text-white/65">Loading coverage map...</p> : null}
+        {loading ? <p className="text-sm text-copy-muted">Loading coverage map...</p> : null}
         {requestStatus === 'saved' ? (
-          <p className="text-sm text-white/65">We logged this location to help prioritize future expansion.</p>
+          <p className="text-sm text-copy-muted">We logged this location to help prioritize future expansion.</p>
         ) : null}
         {requestStatus === 'error' ? (
-          <p className="text-sm text-red-300">We could not log this location right now, but you can still request service expansion.</p>
+          <p className="text-sm text-red-700">We could not log this location right now, but you can still request service expansion.</p>
         ) : null}
 
         <div className="flex flex-col gap-3 sm:flex-row">
