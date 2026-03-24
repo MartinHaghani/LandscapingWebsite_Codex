@@ -3,8 +3,20 @@
 ## Services: Coverage-First Entry
 
 1. User opens `/services`.
-2. Page loads `GET /api/service-area` and renders approximate coverage overlay.
+2. Page loads `GET /api/service-area` and renders approximate coverage overlay on a light basemap.
 3. User clicks `Check my address` CTA to start Instant Quote.
+
+## Home: Transparent Hero Graphic
+
+1. User opens `/`.
+2. Hero opens as a balanced desktop split: left side for headline, subhead, CTA buttons, and `No sign-up required.` helper copy; right side for the oversized lawn graphic.
+3. Hero media renders a transparent lawn parcel directly over the existing page background and occupies most of the right half.
+4. The parcel silhouette follows one fixed curated path made from four straight runs and four circular corner arcs at a locked hero-only scale.
+5. Hero animation phases loop in order:
+   - `learning your lawn...`: mower fades in and traces the inset perimeter walls while dimensions reveal after each cleared segment
+   - `Generating path`: a 2-second infill build phase draws a subtle 11-pass horizontal boustrophedon coverage pattern with softer rounded U-turns and denser direction arrows across the lawn interior
+   - `Mowing...`: mower appears directly at the first scanline point, follows the full generated infill path, then the mower/path fade out before the next learning cycle
+6. The status capsule is stacked directly beneath the lawn shape, resizes to the active label width, and uses a ticker-flip transition with no separate stats strip beneath the two-column hero.
 
 ## Instant Quote: Draft + Finalize
 
@@ -24,22 +36,23 @@
 
 1. User draws service polygons and optional obstacles.
 2. User can clear all geometry, undo/redo edits, and delete selected polygon/vertex.
-3. User selects cadence (`Weekly` or `Bi-weekly`) and billing mode (`Seasonal` default or `Per Session`).
-4. Client auto-saves draft state in browser local storage (address + step + geometry + cadence + billing mode + unit mode).
-5. Client computes effective geometry and pricing with:
+3. Quote map stays on satellite basemap by default; controls and quote summary panels use warm-light, high-contrast UI surfaces.
+4. User selects cadence (`Weekly` or `Bi-weekly`) and billing mode (`Seasonal` default or `Per Session`).
+5. Client auto-saves draft state in browser local storage (address + step + geometry + cadence + billing mode + unit mode).
+6. Client computes effective geometry and pricing with:
    - `perSession = max(20 + 0.05*A + 0.10*P + 1.0*D, 50)`
    - `D` from `POST /api/service-area/check` (`distanceToNearestStationKm`)
    - fixed sessions: weekly=26, bi-weekly=14
    - seasonal default discount: 20%
-6. Client submits idempotent draft:
+7. Client submits idempotent draft:
 
 - `POST /api/quote/draft`
 - header: `Idempotency-Key`
 - payload includes `serviceFrequency` + `billingMode`
 
-7. Server validates geometry and stores draft quote + v1 version.
-8. If request is authenticated, server records draft address to Clerk account metadata (`addressHistory`, latest as `defaultAddress`).
-9. Client clears local draft snapshot and routes to `/quote-contact/:quoteId`.
+8. Server validates geometry and stores draft quote + v1 version.
+9. If request is authenticated, server records draft address to Clerk account metadata (`addressHistory`, latest as `defaultAddress`).
+10. Client clears local draft snapshot and routes to `/quote-contact/:quoteId`.
 
 ### Contact Finalize (Required)
 

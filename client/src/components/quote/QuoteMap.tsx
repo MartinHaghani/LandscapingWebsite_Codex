@@ -59,16 +59,16 @@ const markerStyleByKind = (kind: PolygonKind, selected: boolean) => {
       ? {
           width: '20px',
           height: '20px',
-          borderColor: '#FFE4E6',
+          borderColor: '#FFF7F7',
           backgroundColor: '#DC2626',
-          boxShadow: '0 0 26px rgba(239,68,68,0.9), 0 0 0 2px rgba(255,255,255,0.75)'
+          boxShadow: '0 0 0 2px rgba(255,255,255,0.85), 0 8px 16px rgba(220,38,38,0.45)'
         }
       : {
           width: '16px',
           height: '16px',
           borderColor: '#FFFFFF',
           backgroundColor: '#DC2626',
-          boxShadow: '0 0 18px rgba(239,68,68,0.55)'
+          boxShadow: '0 5px 12px rgba(220,38,38,0.45)'
         };
   }
 
@@ -76,16 +76,16 @@ const markerStyleByKind = (kind: PolygonKind, selected: boolean) => {
     ? {
         width: '20px',
         height: '20px',
-        borderColor: '#9FF0BD',
+        borderColor: '#D1FAE1',
         backgroundColor: '#329F5B',
-        boxShadow: '0 0 26px rgba(50,159,91,0.9), 0 0 0 2px rgba(255,255,255,0.7)'
+        boxShadow: '0 0 0 2px rgba(255,255,255,0.85), 0 8px 16px rgba(50,159,91,0.45)'
       }
     : {
         width: '16px',
         height: '16px',
         borderColor: '#FFFFFF',
         backgroundColor: '#329F5B',
-        boxShadow: '0 0 18px rgba(50,159,91,0.55)'
+        boxShadow: '0 5px 12px rgba(50,159,91,0.45)'
       };
 };
 
@@ -485,11 +485,11 @@ export const QuoteMap = ({
       : polygons.find((polygonState) => polygonState.id === selectedPolygonId)?.points.length ?? 0;
 
   return (
-    <div className="relative h-[430px] w-full overflow-hidden rounded-2xl border border-white/15 shadow-soft md:h-[580px]">
+    <div className="relative h-[430px] w-full overflow-hidden rounded-2xl border border-stroke shadow-soft md:h-[580px]">
       <div ref={containerRef} className="h-full w-full" />
 
       {selectedPolygonPointCount > 2 ? (
-        <div className="pointer-events-none absolute bottom-4 left-4 rounded-lg border border-white/20 bg-black/80 px-3 py-2 text-xs text-white/75">
+        <div className="pointer-events-none absolute bottom-4 left-4 rounded-lg border border-stroke bg-surface/92 px-3 py-2 text-xs text-copy-muted">
           Polygon closes automatically for geodesic calculations.
         </div>
       ) : null}

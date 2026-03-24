@@ -71,28 +71,28 @@ export const ContactPage = () => {
       />
 
       <div className="mt-10 grid gap-8 lg:grid-cols-[0.95fr_1.05fr]">
-        <Card className="bg-black/45">
-          <h3 className="text-xl font-semibold text-white">Autoscape HQ</h3>
-          <p className="mt-3 text-sm text-white/70">Service region: Greater Toronto Area</p>
-          <p className="mt-2 text-sm text-white/70">
+        <Card className="border-brand/20 bg-surface-raised">
+          <h3 className="text-xl font-semibold text-ink">Autoscape HQ</h3>
+          <p className="mt-3 text-sm text-copy-muted">Service region: Greater Toronto Area</p>
+          <p className="mt-2 text-sm text-copy-muted">
             Phone:{' '}
             <a href="tel:+14168482841" className="transition-colors hover:text-brand">
               +1 (416) 848-2841
             </a>
           </p>
-          <p className="mt-2 text-sm text-white/70">
+          <p className="mt-2 text-sm text-copy-muted">
             Email:{' '}
             <a href="mailto:contact@autoscape.ca" className="transition-colors hover:text-brand">
               contact@autoscape.ca
             </a>
           </p>
-          <p className="mt-5 text-xs text-white/55">Mon-Sat 7:00 AM - 7:00 PM</p>
+          <p className="mt-5 text-xs text-copy-muted">Mon-Sat 7:00 AM - 7:00 PM</p>
         </Card>
 
         <Card>
           <form className="space-y-4" onSubmit={handleSubmit}>
             <div>
-              <label htmlFor="name" className="mb-2 block text-sm text-white/80">
+              <label htmlFor="name" className="form-label">
                 Name
               </label>
               <input
@@ -103,13 +103,13 @@ export const ContactPage = () => {
                   setForm((current) => ({ ...current, name: event.target.value }))
                 }
                 autoComplete="name"
-                className="w-full rounded-xl border border-white/20 bg-black/50 px-4 py-3 text-white placeholder:text-white/35 focus:border-brand focus:outline-none"
+                className="form-input"
                 placeholder="Jane Doe"
               />
             </div>
 
             <div>
-              <label htmlFor="email" className="mb-2 block text-sm text-white/80">
+              <label htmlFor="email" className="form-label">
                 Email
               </label>
               <input
@@ -121,13 +121,13 @@ export const ContactPage = () => {
                   setForm((current) => ({ ...current, email: event.target.value }))
                 }
                 autoComplete="email"
-                className="w-full rounded-xl border border-white/20 bg-black/50 px-4 py-3 text-white placeholder:text-white/35 focus:border-brand focus:outline-none"
+                className="form-input"
                 placeholder="jane@example.com"
               />
             </div>
 
             <div>
-              <label htmlFor="phone" className="mb-2 block text-sm text-white/80">
+              <label htmlFor="phone" className="form-label">
                 Phone
               </label>
               <input
@@ -139,13 +139,13 @@ export const ContactPage = () => {
                   setForm((current) => ({ ...current, phone: event.target.value }))
                 }
                 autoComplete="tel"
-                className="w-full rounded-xl border border-white/20 bg-black/50 px-4 py-3 text-white placeholder:text-white/35 focus:border-brand focus:outline-none"
+                className="form-input"
                 placeholder="+1 416 000 0000"
               />
             </div>
 
             <div>
-              <label htmlFor="address" className="mb-2 block text-sm text-white/80">
+              <label htmlFor="address" className="form-label">
                 Address (optional)
               </label>
               <input
@@ -155,13 +155,13 @@ export const ContactPage = () => {
                   setForm((current) => ({ ...current, address: event.target.value }))
                 }
                 autoComplete="street-address"
-                className="w-full rounded-xl border border-white/20 bg-black/50 px-4 py-3 text-white placeholder:text-white/35 focus:border-brand focus:outline-none"
+                className="form-input"
                 placeholder="123 Greenway Blvd, Vaughan, ON"
               />
             </div>
 
             <div>
-              <label htmlFor="message" className="mb-2 block text-sm text-white/80">
+              <label htmlFor="message" className="form-label">
                 Message
               </label>
               <textarea
@@ -172,7 +172,7 @@ export const ContactPage = () => {
                 onChange={(event) =>
                   setForm((current) => ({ ...current, message: event.target.value }))
                 }
-                className="w-full rounded-xl border border-white/20 bg-black/50 px-4 py-3 text-white placeholder:text-white/35 focus:border-brand focus:outline-none"
+                className="form-input min-h-[140px]"
                 placeholder="Tell us about your property, service goals, or any timeline requirements."
               />
             </div>
@@ -180,7 +180,7 @@ export const ContactPage = () => {
             {result ? (
               <p
                 className={
-                  result.type === 'success' ? 'text-sm text-brand' : 'text-sm text-red-300'
+                  result.type === 'success' ? 'text-sm text-brand' : 'text-sm text-red-700'
                 }
               >
                 {result.message}
@@ -190,7 +190,7 @@ export const ContactPage = () => {
             <Button type="submit" disabled={!canSubmit || loading}>
               {loading ? 'Submitting...' : 'Send message'}
             </Button>
-            <p className="text-xs text-white/60">
+            <p className="form-help">
               Name, email, phone, and message are required. Address is optional, but it helps us
               answer your query better.
             </p>

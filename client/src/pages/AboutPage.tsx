@@ -16,13 +16,13 @@ export const AboutPage = () => (
     />
 
     <div className="mt-10 grid gap-8 md:grid-cols-[1.2fr_0.8fr]">
-      <Card className="bg-black/45">
-        <h3 className="text-xl font-semibold text-white">Our Story</h3>
-        <p className="mt-4 text-sm leading-relaxed text-white/72">
+      <Card className="bg-surface">
+        <h3 className="text-xl font-semibold text-ink">Our Story</h3>
+        <p className="mt-4 text-sm leading-relaxed text-copy-muted">
           Autoscape began as a field pilot focused on one question: can residential lawn care be
           measured and delivered with the same consistency as a modern logistics system?
         </p>
-        <p className="mt-4 text-sm leading-relaxed text-white/72">
+        <p className="mt-4 text-sm leading-relaxed text-copy-muted">
           Today, our intake flow starts with service coverage, then uses geodesic-safe boundary
           mapping to generate deterministic quote data. Each request moves into an operations
           workflow designed for accountability and long-term quality.
@@ -34,13 +34,13 @@ export const AboutPage = () => (
           <p className="text-xs font-semibold uppercase tracking-[0.14em] text-brand">
             Operating Principles
           </p>
-          <ul className="mt-4 list-disc space-y-3 pl-5 text-sm text-white/80">
+          <ul className="mt-4 list-disc space-y-3 pl-5 text-sm text-copy-muted">
             <li>Geometry correctness before pricing.</li>
             <li>Low-noise electric operations where possible.</li>
             <li>Transparent quote IDs and follow-through after submission.</li>
           </ul>
         </div>
-        <p className="mt-6 text-xs text-white/60">
+        <p className="mt-6 text-xs text-copy-muted">
           Serving modern residential properties in the Greater Toronto Area.
         </p>
       </Card>
@@ -62,8 +62,8 @@ export const AboutPage = () => (
                 .map((token) => token[0])
                 .join('')}
             </div>
-            <p className="mt-4 text-lg font-semibold text-white">{member.name}</p>
-            <p className="text-sm text-white/65">{member.role}</p>
+            <p className="mt-4 text-lg font-semibold text-ink">{member.name}</p>
+            <p className="text-sm text-copy-muted">{member.role}</p>
           </Card>
         ))}
       </div>

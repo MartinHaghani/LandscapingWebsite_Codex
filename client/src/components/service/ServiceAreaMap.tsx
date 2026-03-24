@@ -11,7 +11,7 @@ interface ServiceAreaMapProps {
   highlightedLabel?: string;
 }
 
-const MAP_STYLE = 'mapbox://styles/mapbox/dark-v11';
+const MAP_STYLE = 'mapbox://styles/mapbox/light-v11';
 const SOURCE_ID = 'service-area-source';
 const FILL_LAYER_ID = 'service-area-fill-layer';
 const LINE_LAYER_ID = 'service-area-line-layer';
@@ -208,7 +208,7 @@ export const ServiceAreaMap = ({
         source: SOURCE_ID,
         paint: {
           'fill-color': '#329F5B',
-          'fill-opacity': 0.28
+          'fill-opacity': 0.22
         }
       });
 
@@ -218,8 +218,8 @@ export const ServiceAreaMap = ({
         source: SOURCE_ID,
         paint: {
           'line-color': '#329F5B',
-          'line-width': 2.4,
-          'line-opacity': 0.82
+          'line-width': 2.8,
+          'line-opacity': 0.88
         }
       });
 
@@ -315,7 +315,7 @@ export const ServiceAreaMap = ({
 
     const markerElement = document.createElement('div');
     markerElement.className =
-      'h-5 w-5 rounded-full border-2 border-white bg-red-500 shadow-[0_0_0_6px_rgba(239,68,68,0.2)]';
+      'h-5 w-5 rounded-full border-2 border-surface bg-red-500 shadow-[0_0_0_6px_rgba(239,68,68,0.18)]';
 
     const marker = new mapboxgl.Marker({ element: markerElement })
       .setLngLat(highlightedLocation)
@@ -326,7 +326,7 @@ export const ServiceAreaMap = ({
   }, [highlightedLocation, highlightedLabel]);
 
   return (
-    <div className="relative h-[440px] w-full overflow-hidden rounded-2xl border border-white/15 shadow-soft md:h-[360px]">
+    <div className="relative h-[440px] w-full overflow-hidden rounded-2xl border border-stroke shadow-soft md:h-[360px]">
       <div
         ref={containerRef}
         className="h-full w-full"
@@ -334,7 +334,7 @@ export const ServiceAreaMap = ({
         aria-label="Approximate service coverage map"
       />
       {!showOverlay ? (
-        <div className="pointer-events-none absolute bottom-4 left-4 rounded-full border border-white/20 bg-black/80 px-3 py-1 text-xs text-white/70">
+        <div className="pointer-events-none absolute bottom-4 left-4 rounded-full border border-stroke bg-surface/95 px-3 py-1 text-xs text-copy-muted">
           Service area overlay hidden
         </div>
       ) : null}

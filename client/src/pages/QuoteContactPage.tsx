@@ -167,13 +167,13 @@ export const QuoteContactPage = () => {
     const redirectPath = encodeURIComponent(location.pathname + location.search);
     return (
       <div className="mx-auto w-full max-w-4xl px-4 py-16 md:px-8 md:py-20">
-        <Card className="space-y-6 bg-black/70 p-7 md:p-10">
+        <Card className="space-y-6 bg-surface p-7 md:p-10">
           <div>
             <p className="text-xs uppercase tracking-[0.15em] text-brand">Account Required</p>
-            <h1 className="mt-3 text-3xl font-semibold text-white md:text-4xl">
+            <h1 className="mt-3 text-3xl font-semibold text-ink md:text-4xl">
               Sign in or create an account to finalize your quote
             </h1>
-            <p className="mt-3 text-sm text-white/75">
+            <p className="mt-3 text-sm text-copy-muted">
               Your draft quote is saved. Continue after signing in.
             </p>
           </div>
@@ -194,11 +194,11 @@ export const QuoteContactPage = () => {
     const redirectPath = encodeURIComponent(location.pathname + location.search);
     return (
       <div className="mx-auto w-full max-w-4xl px-4 py-16 md:px-8 md:py-20">
-        <Card className="space-y-6 bg-black/70 p-7 md:p-10">
+        <Card className="space-y-6 bg-surface p-7 md:p-10">
           <div>
             <p className="text-xs uppercase tracking-[0.15em] text-brand">Phone Number Required</p>
-            <h1 className="mt-3 text-3xl font-semibold text-white md:text-4xl">Add your phone number to continue</h1>
-            <p className="mt-3 text-sm text-white/75">
+            <h1 className="mt-3 text-3xl font-semibold text-ink md:text-4xl">Add your phone number to continue</h1>
+            <p className="mt-3 text-sm text-copy-muted">
               Your account must include a phone number before finalizing quotes.
             </p>
           </div>
@@ -217,41 +217,41 @@ export const QuoteContactPage = () => {
 
   return (
     <div className="mx-auto w-full max-w-5xl px-4 py-16 md:px-8 md:py-20">
-      <Card className="space-y-6 bg-black/70 p-7 md:p-10">
+      <Card className="space-y-6 bg-surface p-7 md:p-10">
         <div>
           <p className="text-xs uppercase tracking-[0.15em] text-brand">Quote Contact</p>
-          <h1 className="mt-3 text-3xl font-semibold text-white md:text-4xl">Finalize your instant quote request</h1>
-          <p className="mt-3 text-sm text-white/75">
+          <h1 className="mt-3 text-3xl font-semibold text-ink md:text-4xl">Finalize your instant quote request</h1>
+          <p className="mt-3 text-sm text-copy-muted">
             One final step. We use your account profile for name, email, and phone, and your quote draft address.
           </p>
-          <p className="mt-2 text-xs text-white/60">
+          <p className="mt-2 text-xs text-copy-muted">
             Signed in as {user?.primaryEmailAddress?.emailAddress ?? 'your account'}
           </p>
         </div>
 
-        {loadingQuote ? <p className="text-sm text-white/70">Loading quote details...</p> : null}
+        {loadingQuote ? <p className="text-sm text-copy-muted">Loading quote details...</p> : null}
 
         {quote ? (
-          <Card className="border-white/20 bg-black/45">
-            <p className="text-sm text-white/75">Quote ID: {quote.id}</p>
-            <p className="mt-2 text-sm text-white/75">Address: {quote.address}</p>
-            <p className="mt-2 text-sm text-white/75">Plan: {quote.plan}</p>
-            <p className="mt-2 text-sm text-white/75">
+          <Card className="border-stroke bg-surface">
+            <p className="text-sm text-copy-muted">Quote ID: {quote.id}</p>
+            <p className="mt-2 text-sm text-copy-muted">Address: {quote.address}</p>
+            <p className="mt-2 text-sm text-copy-muted">Plan: {quote.plan}</p>
+            <p className="mt-2 text-sm text-copy-muted">
               Cadence: {quote.serviceFrequency === 'weekly' ? 'Weekly' : 'Bi-weekly'} ({quote.sessionsMin}-{quote.sessionsMax}{' '}
               sessions)
             </p>
-            <p className="mt-2 text-sm text-white/75">
+            <p className="mt-2 text-sm text-copy-muted">
               Per-session estimate: ${quote.perSessionTotal.toFixed(2)} · Full season: $
               {quote.fullSeasonTotal.toFixed(2)}
             </p>
-            <p className="mt-2 text-sm text-white/75">
+            <p className="mt-2 text-sm text-copy-muted">
               Seasonal discounted total: ${quote.seasonalDiscountedTotal.toFixed(2)} (
               {(quote.seasonalDiscountRate * 100).toFixed(0)}% off, save ${quote.seasonalSavingsTotal.toFixed(2)})
             </p>
-            <p className="mt-2 text-sm text-white/75">
+            <p className="mt-2 text-sm text-copy-muted">
               Selected billing mode: {quote.billingMode === 'seasonal' ? 'Seasonal (charged once)' : 'Per session'}
             </p>
-            <p className="mt-2 text-sm text-white/75">Status: {quote.status}</p>
+            <p className="mt-2 text-sm text-copy-muted">Status: {quote.status}</p>
 
             {!quote.contactPending ? (
               <div className="mt-4 flex flex-wrap gap-3">
@@ -269,7 +269,7 @@ export const QuoteContactPage = () => {
         {quote && quote.contactPending ? (
           <form onSubmit={handleSubmit} className="space-y-4">
             <div>
-              <label htmlFor="quote-message" className="mb-2 block text-sm text-white/80">
+              <label htmlFor="quote-message" className="form-label">
                 Notes (optional)
               </label>
               <textarea
@@ -277,12 +277,12 @@ export const QuoteContactPage = () => {
                 rows={4}
                 value={form.message}
                 onChange={(event) => setForm((current) => ({ ...current, message: event.target.value }))}
-                className="w-full rounded-xl border border-white/20 bg-black/50 px-4 py-3 text-white placeholder:text-white/35 focus:border-brand focus:outline-none"
+                className="form-input min-h-[120px]"
                 placeholder="Access notes, scheduling constraints, or anything else we should know."
               />
             </div>
 
-            {error ? <p className="text-sm text-red-300">{error}</p> : null}
+            {error ? <p className="text-sm text-red-700">{error}</p> : null}
 
             <div className="flex flex-wrap gap-3">
               <Button type="submit" disabled={!canSubmit}>

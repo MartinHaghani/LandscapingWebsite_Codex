@@ -9,7 +9,7 @@ Decision:
 Implementation:
 
 - Service Area section at top of `/services`
-- dark basemap + green `#329F5B` coverage overlay
+- light basemap (`mapbox/light-v11`) + green `#329F5B` coverage overlay
 - primary CTA to `/instant-quote`
 
 ## 2) Privacy Over Precision for Coverage Visualization
@@ -238,7 +238,27 @@ Implementation:
   - verifies bearer JWT via Clerk issuer/JWKS
   - derives customer profile identity (name/email/phone) for quote finalize actions
 
-## 17) Quote Ownership + Account Dashboard
+## 17) Home Hero Visual Language
+
+Decision:
+
+- Evolve the home hero into a calm, premium parcel animation that keeps restrained CAD dimensioning while pairing a wall-learning pass with a generated mowing infill.
+
+Implementation:
+
+- transparent hero module with no backdrop box or opaque background fill
+- hero uses a true desktop 50/50 split with the content block on the left and the lawn graphic on the right
+- CTA group keeps a small `No sign-up required.` helper line directly beneath the buttons
+- one curated parcel silhouette anchors the hero, with a mower that first learns the perimeter walls, then follows a generated 11-pass horizontal boustrophedon infill with rounded U-turns before fading out and restarting
+- parcel geometry is a fixed luxury-plan drawing made from four straight runs plus four true circular arcs, with displayed labels derived from the same geometry constants
+- overlay uses eight thin CAD-style perimeter annotations outside the lawn: four close-set dashed metric linear lengths and four straight radius leaders that reveal only after the mower clears their segment and remain visible during path generation/mowing
+- generated infill path uses a subtle, light sage raster line set inside the lawn so the pattern reads like a premium 3D-printer-style coverage plan rather than a harsh technical overlay, with denser directional arrows that clarify travel without cluttering the shape
+- primary fill stays anchored to the brand green (`#329F5B`) with no texture, blueprint panel, or heavy gradient treatment
+- a slightly heavier white outline and restrained under-shadow keep the parcel crisp over the page background
+- the mower status cycles through `learning your lawn...`, `Generating path`, and `Mowing...` inside a compact glass-like capsule stacked immediately beneath the lawn, with width that follows the active label and a ticker-flip transition for state changes
+- no separate stats strip sits beneath the hero; the lawn animation and under-lawn status capsule carry the right-side emphasis on their own
+
+## 18) Quote Ownership + Account Dashboard
 
 Decision:
 
@@ -261,3 +281,17 @@ Implementation:
   - `/complete-profile/*`
   - `/dashboard`
   - `/dashboard/quotes/:quoteId`
+
+## 19) Warm-Light Premium Public Refresh
+
+Decision:
+
+- Move public frontend from dark-first styling to a warm-light, readability-first design system while preserving all quote behavior.
+
+Implementation:
+
+- semantic token families in `tailwind.config.ts` + `client/src/index.css` (`canvas`, `surface`, `copy`, `line`, `brand`)
+- larger default reading scale, higher text contrast, and clearer spacing rhythm for older homeowners
+- standardized focus-visible treatment and form primitives (`form-label`, `form-input`, `status-*`)
+- service-area map remains privacy-hardened but now uses light-compatible controls/popup treatment
+- instant-quote mapping keeps satellite basemap default for property precision, with warm-light control and summary panels

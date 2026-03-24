@@ -123,19 +123,19 @@ export const DashboardQuoteDetailPage = () => {
 
   return (
     <div className="mx-auto w-full max-w-4xl px-4 py-14 md:px-8 md:py-20">
-      <Card className="bg-black/70 p-8">
+      <Card className="bg-surface p-8">
         <div className="flex flex-wrap items-center justify-between gap-3">
-          <h1 className="text-3xl font-semibold text-white">Quote Details</h1>
+          <h1 className="text-3xl font-semibold text-ink">Quote Details</h1>
           <Link to="/dashboard">
             <Button variant="secondary">Back to Dashboard</Button>
           </Link>
         </div>
 
-        {loading ? <p className="mt-4 text-sm text-white/70">Loading quote...</p> : null}
-        {error ? <p className="mt-4 text-sm text-red-300">{error}</p> : null}
+        {loading ? <p className="mt-4 text-sm text-copy-muted">Loading quote...</p> : null}
+        {error ? <p className="mt-4 text-sm text-red-700">{error}</p> : null}
 
         {quote ? (
-          <div className="mt-6 space-y-3 text-sm text-white/80">
+          <div className="mt-6 space-y-3 text-sm text-copy-muted">
             <p>
               Quote ID: <span className="text-brand">{quote.id}</span>
             </p>

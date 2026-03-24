@@ -42,7 +42,7 @@ const CompleteProfilePage = lazy(() =>
 const App = () => (
   <Suspense
     fallback={
-      <div className="mx-auto flex min-h-[45vh] w-full max-w-7xl items-center justify-center px-4 text-sm text-white/70">
+      <div className="mx-auto flex min-h-[45vh] w-full max-w-7xl items-center justify-center px-4 text-sm font-medium text-copy-muted">
         Loading...
       </div>
     }

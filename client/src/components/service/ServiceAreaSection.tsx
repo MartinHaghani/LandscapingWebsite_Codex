@@ -56,13 +56,13 @@ export const ServiceAreaSection = () => {
 
   return (
     <section className="mt-10" aria-labelledby="service-area-title">
-      <Card className="space-y-6 border-white/20 bg-black/65">
+      <Card className="space-y-6 border-brand/20 bg-surface-raised">
         <div className="flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
           <div className="max-w-2xl">
-            <h3 id="service-area-title" className="text-2xl font-semibold text-white md:text-3xl">
+            <h3 id="service-area-title" className="text-2xl font-semibold text-ink md:text-3xl">
               Service Area
             </h3>
-            <p className="mt-2 text-sm text-white/75 md:text-base">
+            <p className="mt-2 text-sm text-copy-muted md:text-base">
               We currently service properties within the highlighted regions.
             </p>
           </div>
@@ -73,13 +73,13 @@ export const ServiceAreaSection = () => {
         </div>
 
         {loadingError ? (
-          <p className="rounded-xl border border-red-300/40 bg-red-950/30 px-4 py-3 text-sm text-red-200">
+          <p className="status-error">
             {loadingError}
           </p>
         ) : null}
 
         {!MAPBOX_TOKEN ? (
-          <p className="rounded-xl border border-red-300/40 bg-red-950/30 px-4 py-3 text-sm text-red-200">
+          <p className="status-error">
             `VITE_MAPBOX_TOKEN` is missing. Add your Mapbox public token in `client/.env` to enable the service area
             map.
           </p>
@@ -89,7 +89,7 @@ export const ServiceAreaSection = () => {
           {MAPBOX_TOKEN && !loadingError ? (
             <Suspense
               fallback={
-                <div className="flex h-[440px] items-center justify-center rounded-2xl border border-white/15 bg-black/45 text-sm text-white/65 md:h-[360px]">
+                <div className="flex h-[440px] items-center justify-center rounded-2xl border border-stroke bg-surface-muted text-sm text-copy-muted md:h-[360px]">
                   Loading service area map...
                 </div>
               }
@@ -97,21 +97,21 @@ export const ServiceAreaSection = () => {
               <LazyServiceAreaMap token={MAPBOX_TOKEN} serviceArea={serviceArea} showOverlay={true} />
             </Suspense>
           ) : (
-            <div className="flex h-[220px] items-center justify-center rounded-2xl border border-white/15 bg-black/45 text-sm text-white/65">
+            <div className="flex h-[220px] items-center justify-center rounded-2xl border border-stroke bg-surface-muted text-sm text-copy-muted">
               Interactive map unavailable. Use Instant Quote for service-area confirmation.
             </div>
           )}
         </div>
 
-        {loadingMapData ? <p className="text-sm text-white/65">Loading service coverage metadata...</p> : null}
+        {loadingMapData ? <p className="text-sm text-copy-muted">Loading service coverage metadata...</p> : null}
 
         <div className="space-y-3">
-          <p className="text-xs font-semibold uppercase tracking-[0.14em] text-white/70">High-level regions served</p>
+          <p className="text-xs font-semibold uppercase tracking-[0.14em] text-copy-soft">High-level regions served</p>
           <div className="flex flex-wrap gap-2">
             {servedRegions.map((region) => (
               <span
                 key={region}
-                className="rounded-full border border-white/25 bg-black/45 px-3 py-1 text-xs text-white/75"
+                className="rounded-full border border-stroke bg-surface px-3 py-1 text-xs text-ink"
               >
                 {region}
               </span>
@@ -119,7 +119,7 @@ export const ServiceAreaSection = () => {
           </div>
         </div>
 
-        {serviceArea?.metadata.disclaimer ? <p className="text-xs text-white/55">{serviceArea.metadata.disclaimer}</p> : null}
+        {serviceArea?.metadata.disclaimer ? <p className="text-xs text-copy-soft">{serviceArea.metadata.disclaimer}</p> : null}
       </Card>
     </section>
   );

@@ -54,8 +54,8 @@ export const ServicesPage = () => (
 
     <Suspense
       fallback={
-        <Card className="mt-14 bg-black/55">
-          <p className="text-sm text-white/70">Loading service area...</p>
+        <Card className="mt-14 bg-surface">
+          <p className="text-sm text-copy-muted">Loading service area...</p>
         </Card>
       }
     >
@@ -69,18 +69,18 @@ export const ServicesPage = () => (
             <img
               src={service.imageSrc}
               alt={service.title}
-              className="h-44 w-full rounded-2xl border border-white/20 object-cover"
+              className="h-44 w-full rounded-2xl border border-stroke object-cover"
               loading="lazy"
             />
           ) : (
-            <div className="flex h-44 items-center justify-center rounded-2xl border border-white/20 bg-black/45">
+            <div className="flex h-44 items-center justify-center rounded-2xl border border-stroke bg-surface">
               <span className="text-sm font-semibold uppercase tracking-[0.12em] text-brand">
                 {service.title}
               </span>
             </div>
           )}
-          <h3 className="mt-5 text-xl font-semibold text-white">{service.title}</h3>
-          <p className="mt-3 text-sm text-white/70">{service.description}</p>
+          <h3 className="mt-5 text-xl font-semibold text-ink">{service.title}</h3>
+          <p className="mt-3 text-sm text-copy-muted">{service.description}</p>
         </Card>
       ))}
     </div>

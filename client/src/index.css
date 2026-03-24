@@ -1,4 +1,4 @@
-@import url('https://fonts.googleapis.com/css2?family=Sora:wght@400;500;600;700&family=Space+Grotesk:wght@500;700&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Great+Vibes&family=Sora:wght@400;500;600;700&family=Space+Grotesk:wght@500;700&display=swap');
 @import 'mapbox-gl/dist/mapbox-gl.css';
 
 @tailwind base;
@@ -6,25 +6,39 @@
 @tailwind utilities;
 
 :root {
-  color: #f5f5f5;
-  background-color: #050605;
+  color: #101713;
+  background-color: #f7f4ee;
+  color-scheme: light;
 }
 
 * {
   scrollbar-width: thin;
-  scrollbar-color: #329f5b #101312;
+  scrollbar-color: #329f5b #e4e0d7;
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
 }
 
 body {
-  @apply bg-ink text-white antialiased;
+  @apply bg-canvas text-ink antialiased;
   margin: 0;
   min-height: 100vh;
-  background-image: radial-gradient(circle at 20% -20%, rgba(50, 159, 91, 0.2), transparent 36%),
-    radial-gradient(circle at 90% 30%, rgba(255, 255, 255, 0.08), transparent 34%);
+  font-size: 17px;
+  line-height: 1.55;
+  background-image: radial-gradient(circle at 18% -10%, rgba(50, 159, 91, 0.15), transparent 34%),
+    radial-gradient(circle at 86% -2%, rgba(16, 23, 19, 0.06), transparent 28%),
+    linear-gradient(180deg, rgba(255, 255, 255, 0.7), rgba(247, 244, 238, 0.2));
 }
 
 #root {
   min-height: 100vh;
+}
+
+a {
+  color: inherit;
 }
 
 input,
@@ -33,28 +47,93 @@ button {
   font: inherit;
 }
 
+button,
+[role='button'],
+a,
+input,
+textarea,
+select {
+  transition: color 150ms ease, border-color 150ms ease, background-color 150ms ease, box-shadow 150ms ease;
+}
+
+:focus-visible {
+  outline: 2px solid rgba(50, 159, 91, 0.95);
+  outline-offset: 2px;
+}
+
+@layer components {
+  .surface-card {
+    @apply rounded-2xl border bg-surface shadow-soft;
+    border-color: #d6d7cf;
+  }
+
+  .surface-muted {
+    @apply rounded-2xl border bg-surface-muted;
+    border-color: rgba(214, 215, 207, 0.8);
+  }
+
+  .eyebrow {
+    @apply text-xs font-semibold uppercase tracking-[0.16em] text-brand;
+  }
+
+  .form-label {
+    @apply mb-2 block text-sm font-semibold text-ink;
+  }
+
+  .form-input {
+    @apply w-full rounded-xl border bg-surface px-4 py-3 text-base text-ink placeholder:text-copy-soft focus:border-brand focus:outline-none focus:ring-2 focus:ring-brand/25;
+    border-color: #d6d7cf;
+  }
+
+  .form-help {
+    @apply text-xs text-copy-muted;
+  }
+
+  .status-error {
+    @apply rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700;
+  }
+
+  .status-info {
+    @apply rounded-xl border border-brand/25 bg-brand/10 px-4 py-3 text-sm text-ink;
+  }
+}
+
 .mapboxgl-popup-content {
-  @apply rounded-xl border border-white/20 bg-black/90 text-white;
-  box-shadow: none;
+  @apply rounded-xl border bg-surface p-3 text-ink shadow-soft;
+  border-color: #d6d7cf;
 }
 
 .mapboxgl-popup-tip {
-  border-top-color: #000;
-  border-bottom-color: #000;
+  border-top-color: #fff;
+  border-bottom-color: #fff;
+}
+
+.mapboxgl-ctrl-group {
+  @apply overflow-hidden rounded-xl border bg-surface shadow-soft;
+  border-color: #d6d7cf;
+}
+
+.mapboxgl-ctrl-group button {
+  @apply text-ink;
+}
+
+.mapboxgl-ctrl-group button + button {
+  border-top: 1px solid #d6d7cf;
 }
 
 .mapboxgl-ctrl-logo,
 .mapboxgl-ctrl-attrib {
-  opacity: 0.8;
+  opacity: 0.9;
+  @apply rounded-md bg-surface/85 text-copy-muted;
 }
 
 .glow-ring {
-  box-shadow: 0 0 0 1px rgba(50, 159, 91, 0.6), 0 0 35px rgba(50, 159, 91, 0.2);
+  box-shadow: 0 0 0 1px rgba(50, 159, 91, 0.45), 0 12px 24px -18px rgba(50, 159, 91, 0.5);
 }
 
 @keyframes fadeUp {
   from {
-    transform: translateY(12px);
+    transform: translateY(10px);
     opacity: 0;
   }
   to {
@@ -64,5 +143,156 @@ button {
 }
 
 .fade-up {
-  animation: fadeUp 560ms ease-out both;
+  animation: fadeUp 520ms ease-out both;
+}
+
+@keyframes heroStatusPulse {
+  0%,
+  100% {
+    opacity: 0.85;
+    transform: scale(1);
+    box-shadow: 0 0 0 0 rgba(50, 159, 91, 0.24);
+  }
+  50% {
+    opacity: 1;
+    transform: scale(1.08);
+    box-shadow: 0 0 0 7px rgba(50, 159, 91, 0);
+  }
+}
+
+@keyframes heroEllipsisDot {
+  0%,
+  20% {
+    opacity: 0.18;
+    transform: translateY(1px);
+  }
+  45%,
+  100% {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes heroStatusTickerCapsule {
+  0% {
+    transform: translateY(7px) scale(0.98);
+  }
+  54% {
+    transform: translateY(-1px) scale(1.02);
+  }
+  100% {
+    transform: translateY(0) scale(1);
+  }
+}
+
+@keyframes heroStatusTickerText {
+  0% {
+    opacity: 0;
+    transform: translateY(130%) rotateX(-72deg);
+    filter: blur(4px);
+  }
+  68% {
+    opacity: 1;
+    transform: translateY(-4%) rotateX(10deg);
+    filter: blur(0);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0) rotateX(0deg);
+    filter: blur(0);
+  }
+}
+
+.hero-status-capsule {
+  position: relative;
+  width: fit-content;
+  max-width: 100%;
+  overflow: hidden;
+  isolation: isolate;
+  border: 1px solid rgba(255, 255, 255, 0.72);
+  background:
+    linear-gradient(135deg, rgba(255, 255, 255, 0.9), rgba(255, 255, 255, 0.72)),
+    rgba(247, 244, 238, 0.62);
+  box-shadow:
+    0 22px 40px -30px rgba(16, 23, 19, 0.45),
+    inset 0 1px 0 rgba(255, 255, 255, 0.92);
+  backdrop-filter: blur(14px);
+  transition:
+    border-color 220ms ease,
+    box-shadow 220ms ease,
+    background-color 220ms ease;
+  will-change: transform;
+}
+
+.hero-status-indicator {
+  display: inline-flex;
+  width: 0.55rem;
+  height: 0.55rem;
+  border-radius: 999px;
+  background: #329f5b;
+}
+
+.hero-status-indicator--pulse {
+  animation: heroStatusPulse 1800ms ease-in-out infinite;
+}
+
+.hero-status-indicator--steady {
+  opacity: 0.94;
+  transform: scale(1);
+}
+
+.hero-status-ellipsis {
+  display: inline-flex;
+  margin-left: 0.1rem;
+}
+
+.hero-status-ellipsis span {
+  display: inline-block;
+  width: 0.26rem;
+  animation: heroEllipsisDot 1s ease-in-out infinite;
+}
+
+.hero-status-ellipsis span:nth-child(2) {
+  animation-delay: 120ms;
+}
+
+.hero-status-ellipsis span:nth-child(3) {
+  animation-delay: 240ms;
+}
+
+.hero-status-text-rail {
+  transition: width 320ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.hero-status-text {
+  will-change: transform, opacity, filter;
+}
+
+.hero-status-text--tickerFlip {
+  transform-origin: 50% 50%;
+  animation: heroStatusTickerText 460ms cubic-bezier(0.18, 0.85, 0.28, 1) both;
+}
+
+.hero-status-capsule--tickerFlip.hero-status-burst-a,
+.hero-status-capsule--tickerFlip.hero-status-burst-b {
+  animation: heroStatusTickerCapsule 440ms cubic-bezier(0.18, 0.85, 0.28, 1);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .fade-up {
+    animation: none;
+  }
+
+  .hero-status-indicator,
+  .hero-status-indicator--pulse,
+  .hero-status-ellipsis span,
+  .hero-status-text,
+  .hero-status-burst-a,
+  .hero-status-burst-b {
+    animation: none;
+  }
+
+  .hero-status-text-rail {
+    transition: none;
+  }
 }
