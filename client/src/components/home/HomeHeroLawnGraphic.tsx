@@ -1,4 +1,4 @@
-import { useEffect, useId, useState } from 'react';
+import { useEffect, useId, useRef, useState } from 'react';
 import { cn } from '../../lib/cn';
 import {
   HOME_HERO_LAWN,
@@ -6,7 +6,6 @@ import {
   HOME_HERO_MOWER_FADE_IN_DURATION_MS,
   HOME_HERO_MOWER_HEADING_OFFSET_DEGREES,
   HOME_HERO_MOWER_INITIAL_TRACK_STATE,
-  HOME_HERO_MOWER_REVEAL_LAG_MS,
   HOME_HERO_MOWER_REVEAL_SCHEDULE,
   HOME_HERO_MOWER_TRACK_TOTAL_LENGTH,
   HOME_HERO_MOWER_TRAVEL_DURATION_MS,
@@ -15,6 +14,21 @@ import {
   type HeroPoint,
   type HeroSegmentId
 } from '../../lib/homeHeroLawn';
+import {
+  HOME_HERO_COVERAGE_ARROW_ANCHORS,
+  HOME_HERO_COVERAGE_INITIAL_STATE,
+  HOME_HERO_COVERAGE_PATH_D,
+  HOME_HERO_COVERAGE_PATH_TOTAL_LENGTH,
+  HOME_HERO_GENERATING_PATH_DURATION_MS,
+  HOME_HERO_LEARNING_DURATION_MS,
+  HOME_HERO_MOWING_DURATION_MS,
+  HOME_HERO_RESET_DURATION_MS,
+  HOME_HERO_TOTAL_CYCLE_DURATION_MS,
+  getHeroAnimationPhaseAtElapsedMs,
+  getHeroCoveragePathStateAtDistance,
+  type HeroAnimationPhase,
+  type HeroCoverageArrowAnchor
+} from '../../lib/homeHeroLawnCoverage';
 
 interface HomeHeroLawnShapeProps {
   className?: string;
@@ -22,46 +36,49 @@ interface HomeHeroLawnShapeProps {
   mowerPosition?: HeroPoint;
   mowerRotation?: number;
   revealedMeasurementIds?: readonly HeroSegmentId[];
+  coveragePathOpacity?: number;
+  coveragePathProgress?: number;
 }
 
 interface HomeHeroLawnGraphicProps {
   className?: string;
 }
 
+type HeroStatusPhase = 'learning' | 'generatingPath' | 'mowing';
+
 interface HeroAnimationState {
+  phase: HeroAnimationPhase;
+  statusPhase: HeroStatusPhase;
   mowerOpacity: number;
   mowerPosition: HeroPoint;
   mowerRotation: number;
   revealedMeasurementIds: readonly HeroSegmentId[];
+  coveragePathOpacity: number;
+  coveragePathProgress: number;
 }
 
 const DIMENSION_COLOR = 'rgba(121, 128, 124, 0.82)';
 const EXTENSION_COLOR = 'rgba(154, 160, 156, 0.58)';
 const TEXT_COLOR = 'rgba(99, 106, 103, 0.92)';
+const COVERAGE_PATH_COLOR = 'rgba(230, 239, 232, 0.88)';
+const COVERAGE_ARROW_COLOR = 'rgba(216, 228, 221, 0.78)';
 const DIMENSION_STROKE_WIDTH = 1.08;
 const EXTENSION_STROKE_WIDTH = 0.86;
+const COVERAGE_PATH_STROKE_WIDTH = 1.9;
+const COVERAGE_ARROW_STROKE_WIDTH = 1.08;
 const CAP_HALF_LENGTH = 3.5;
 const MOWER_WIDTH = 36;
 const MOWER_HEIGHT = 58;
-const RESET_BUFFER_MS = 380;
-
-const createInitialAnimationState = (): HeroAnimationState => ({
-  mowerOpacity: 0,
-  mowerPosition: HOME_HERO_MOWER_INITIAL_TRACK_STATE.point,
-  mowerRotation:
-    HOME_HERO_MOWER_INITIAL_TRACK_STATE.tangentDegrees + HOME_HERO_MOWER_HEADING_OFFSET_DEGREES,
-  revealedMeasurementIds: []
-});
-
-const createReducedMotionState = (): HeroAnimationState => ({
-  mowerOpacity: 1,
-  mowerPosition: HOME_HERO_MOWER_INITIAL_TRACK_STATE.point,
-  mowerRotation:
-    HOME_HERO_MOWER_INITIAL_TRACK_STATE.tangentDegrees + HOME_HERO_MOWER_HEADING_OFFSET_DEGREES,
-  revealedMeasurementIds: HOME_HERO_LAWN.annotations.map((annotation) => annotation.id)
-});
+const ALL_MEASUREMENT_IDS = HOME_HERO_LAWN.annotations.map((annotation) => annotation.id);
+const HERO_STATUS_MEASURE_TEXT: Record<HeroStatusPhase, string> = {
+  learning: 'learning your lawn...',
+  generatingPath: 'Generating path',
+  mowing: 'Mowing...'
+};
+const HERO_STATUS_MOTION = 'tickerFlip';
 
 const easeInOut = (value: number) => value * value * (3 - 2 * value);
+const clamp = (value: number, min: number, max: number) => Math.min(max, Math.max(min, value));
 
 const getLineLength = (start: HeroPoint, end: HeroPoint) =>
   Number(Math.hypot(end.x - start.x, end.y - start.y).toFixed(2));
@@ -86,6 +103,132 @@ const getTextStyle = (visible: boolean) => ({
   opacity: visible ? 1 : 0,
   transition: 'opacity 240ms ease-out 120ms'
 });
+
+const getCoveragePathStyle = ({
+  progress,
+  opacity
+}: {
+  progress: number;
+  opacity: number;
+}) => ({
+  opacity,
+  strokeDasharray: `${HOME_HERO_COVERAGE_PATH_TOTAL_LENGTH}`,
+  strokeDashoffset: HOME_HERO_COVERAGE_PATH_TOTAL_LENGTH * (1 - progress),
+  transition: 'opacity 260ms ease-out'
+});
+
+const getCoverageArrowOpacity = ({
+  anchorProgress,
+  pathProgress,
+  pathOpacity
+}: {
+  anchorProgress: number;
+  pathProgress: number;
+  pathOpacity: number;
+}) => {
+  const revealProgress = clamp((pathProgress - anchorProgress + 0.06) / 0.08, 0, 1);
+  return revealProgress * pathOpacity * 0.9;
+};
+
+const createInitialAnimationState = (): HeroAnimationState => ({
+  phase: 'learning',
+  statusPhase: 'learning',
+  mowerOpacity: 0,
+  mowerPosition: HOME_HERO_MOWER_INITIAL_TRACK_STATE.point,
+  mowerRotation:
+    HOME_HERO_MOWER_INITIAL_TRACK_STATE.tangentDegrees + HOME_HERO_MOWER_HEADING_OFFSET_DEGREES,
+  revealedMeasurementIds: [],
+  coveragePathOpacity: 0,
+  coveragePathProgress: 0
+});
+
+const createReducedMotionState = (): HeroAnimationState => ({
+  phase: 'learning',
+  statusPhase: 'learning',
+  mowerOpacity: 1,
+  mowerPosition: HOME_HERO_COVERAGE_INITIAL_STATE.point,
+  mowerRotation:
+    HOME_HERO_COVERAGE_INITIAL_STATE.tangentDegrees + HOME_HERO_MOWER_HEADING_OFFSET_DEGREES,
+  revealedMeasurementIds: ALL_MEASUREMENT_IDS,
+  coveragePathOpacity: 0.34,
+  coveragePathProgress: 1
+});
+
+const getHeroAnimationStateAtElapsedMs = (elapsedMs: number): HeroAnimationState => {
+  const phaseState = getHeroAnimationPhaseAtElapsedMs(elapsedMs);
+
+  if (phaseState.phase === 'learning') {
+    const fadeInProgress = Math.min(phaseState.phaseElapsedMs / HOME_HERO_MOWER_FADE_IN_DURATION_MS, 1);
+    const mowerOpacity = easeInOut(fadeInProgress);
+    const travelElapsedMs = Math.max(0, phaseState.phaseElapsedMs - HOME_HERO_MOWER_FADE_IN_DURATION_MS);
+    const travelProgress = Math.min(travelElapsedMs / HOME_HERO_MOWER_TRAVEL_DURATION_MS, 1);
+    const trackState = getHeroMowerTrackStateAtTravelDistance(
+      HOME_HERO_MOWER_TRACK_TOTAL_LENGTH * travelProgress
+    );
+    const revealedMeasurementIds = HOME_HERO_MOWER_REVEAL_SCHEDULE.filter(
+      (segment) => travelElapsedMs >= segment.revealAtMs
+    ).map((segment) => segment.id);
+
+    return {
+      phase: 'learning',
+      statusPhase: 'learning',
+      mowerOpacity,
+      mowerPosition: trackState.point,
+      mowerRotation: trackState.tangentDegrees + HOME_HERO_MOWER_HEADING_OFFSET_DEGREES,
+      revealedMeasurementIds,
+      coveragePathOpacity: 0,
+      coveragePathProgress: 0
+    };
+  }
+
+  if (phaseState.phase === 'generatingPath') {
+    const progress = phaseState.phaseElapsedMs / HOME_HERO_GENERATING_PATH_DURATION_MS;
+
+    return {
+      phase: 'generatingPath',
+      statusPhase: 'generatingPath',
+      mowerOpacity: 0,
+      mowerPosition: HOME_HERO_COVERAGE_INITIAL_STATE.point,
+      mowerRotation:
+        HOME_HERO_COVERAGE_INITIAL_STATE.tangentDegrees + HOME_HERO_MOWER_HEADING_OFFSET_DEGREES,
+      revealedMeasurementIds: ALL_MEASUREMENT_IDS,
+      coveragePathOpacity: 0.14 + easeInOut(progress) * 0.34,
+      coveragePathProgress: progress
+    };
+  }
+
+  if (phaseState.phase === 'mowing') {
+    const progress = phaseState.phaseElapsedMs / HOME_HERO_MOWING_DURATION_MS;
+    const mowerState = getHeroCoveragePathStateAtDistance(
+      HOME_HERO_COVERAGE_PATH_TOTAL_LENGTH * progress
+    );
+
+    return {
+      phase: 'mowing',
+      statusPhase: 'mowing',
+      mowerOpacity: 1,
+      mowerPosition: mowerState.point,
+      mowerRotation: mowerState.tangentDegrees + HOME_HERO_MOWER_HEADING_OFFSET_DEGREES,
+      revealedMeasurementIds: ALL_MEASUREMENT_IDS,
+      coveragePathOpacity: 0.48,
+      coveragePathProgress: 1
+    };
+  }
+
+  const fadeOut = 1 - easeInOut(phaseState.phaseElapsedMs / HOME_HERO_RESET_DURATION_MS);
+  const finalCoverageState = getHeroCoveragePathStateAtDistance(HOME_HERO_COVERAGE_PATH_TOTAL_LENGTH);
+
+  return {
+    phase: 'reset',
+    statusPhase: 'mowing',
+    mowerOpacity: fadeOut,
+    mowerPosition: finalCoverageState.point,
+    mowerRotation: finalCoverageState.tangentDegrees + HOME_HERO_MOWER_HEADING_OFFSET_DEGREES,
+    revealedMeasurementIds: [],
+    coveragePathOpacity: 0.48 * fadeOut,
+    coveragePathProgress: 1
+  };
+};
 
 const EndCap = ({
   x,
@@ -235,13 +378,85 @@ const RadiusAnnotation = ({
   );
 };
 
+const CoverageArrow = ({
+  anchor,
+  pathOpacity,
+  pathProgress
+}: {
+  anchor: HeroCoverageArrowAnchor;
+  pathOpacity: number;
+  pathProgress: number;
+}) => {
+  const arrowOpacity = getCoverageArrowOpacity({
+    anchorProgress: anchor.progress,
+    pathOpacity,
+    pathProgress
+  });
+  const arrowLength = anchor.variant === 'scanline' ? 6.8 : 5.6;
+  const arrowHeadInset = anchor.variant === 'scanline' ? 2.9 : 2.3;
+  const arrowWing = anchor.variant === 'scanline' ? 1.85 : 1.5;
+
+  return (
+    <g
+      transform={`translate(${anchor.point.x} ${anchor.point.y}) rotate(${anchor.tangentDegrees}) scale(${anchor.scale})`}
+      opacity={arrowOpacity}
+      data-hero-coverage-arrow="true"
+      data-arrow-variant={anchor.variant}
+      data-arrow-visible={arrowOpacity > 0.03}
+    >
+      <path
+        d={`M ${-arrowLength} 0 L ${arrowHeadInset} 0 M ${arrowHeadInset - 2.4} ${-arrowWing} L ${arrowHeadInset} 0 L ${arrowHeadInset - 2.4} ${arrowWing}`}
+        fill="none"
+        stroke={COVERAGE_ARROW_COLOR}
+        strokeWidth={COVERAGE_ARROW_STROKE_WIDTH}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        vectorEffect="non-scaling-stroke"
+      />
+    </g>
+  );
+};
+
+const HeroStatusLabel = ({
+  phase,
+  animatedEllipsis = true
+}: {
+  phase: HeroStatusPhase;
+  animatedEllipsis?: boolean;
+}) => {
+  if (phase === 'learning') {
+    return (
+      <>
+        learning your lawn
+        {animatedEllipsis ? (
+          <span className="hero-status-ellipsis" aria-hidden="true">
+            <span>.</span>
+            <span>.</span>
+            <span>.</span>
+          </span>
+        ) : (
+          '...'
+        )}
+      </>
+    );
+  }
+
+  if (phase === 'generatingPath') {
+    return <>Generating path</>;
+  }
+
+  return <>Mowing...</>;
+};
+
 export const HomeHeroLawnShape = ({
   className,
   mowerOpacity = 0,
   mowerPosition = HOME_HERO_MOWER_INITIAL_TRACK_STATE.point,
   mowerRotation =
     HOME_HERO_MOWER_INITIAL_TRACK_STATE.tangentDegrees + HOME_HERO_MOWER_HEADING_OFFSET_DEGREES,
-  revealedMeasurementIds = []
+  revealedMeasurementIds = [],
+  coveragePathOpacity = 0,
+  coveragePathProgress = 0
 }: HomeHeroLawnShapeProps) => {
   const baseId = useId().replace(/:/g, '');
   const shadowFilterId = `${baseId}-${HOME_HERO_LAWN.id}-shadow`;
@@ -250,7 +465,7 @@ export const HomeHeroLawnShape = ({
   return (
     <svg
       viewBox={HOME_HERO_LAWN.viewBox}
-      className={cn('pointer-events-none h-full w-full overflow-visible text-brand', className)}
+      className={cn('pointer-events-none w-full overflow-visible text-brand', className)}
       preserveAspectRatio="xMidYMid meet"
       aria-hidden="true"
       focusable="false"
@@ -279,6 +494,32 @@ export const HomeHeroLawnShape = ({
       </g>
 
       <g clipPath={`url(#${mowerClipId})`} aria-hidden="true">
+        <path
+          d={HOME_HERO_COVERAGE_PATH_D}
+          fill="none"
+          stroke={COVERAGE_PATH_COLOR}
+          strokeWidth={COVERAGE_PATH_STROKE_WIDTH}
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          vectorEffect="non-scaling-stroke"
+          style={getCoveragePathStyle({
+            progress: coveragePathProgress,
+            opacity: coveragePathOpacity
+          })}
+          data-hero-coverage-path="true"
+          data-coverage-visible={coveragePathOpacity > 0.02}
+          data-coverage-progress={coveragePathProgress.toFixed(3)}
+        />
+
+        {HOME_HERO_COVERAGE_ARROW_ANCHORS.map((anchor) => (
+          <CoverageArrow
+            key={`${anchor.variant}-${anchor.index}`}
+            anchor={anchor}
+            pathOpacity={coveragePathOpacity}
+            pathProgress={coveragePathProgress}
+          />
+        ))}
+
         <image
           href={HOME_HERO_MOWER_ASSET_PATH}
           x={-MOWER_WIDTH / 2}
@@ -321,6 +562,15 @@ export const HomeHeroLawnShape = ({
 export const HomeHeroLawnGraphic = ({ className }: HomeHeroLawnGraphicProps) => {
   const [prefersReducedMotion, setPrefersReducedMotion] = useState(false);
   const [animationState, setAnimationState] = useState<HeroAnimationState>(createInitialAnimationState);
+  const [statusAnimationKey, setStatusAnimationKey] = useState(0);
+  const [statusRailWidth, setStatusRailWidth] = useState<number | null>(null);
+  const statusMeasureRef = useRef<HTMLSpanElement | null>(null);
+  const activeStatusText = HERO_STATUS_MEASURE_TEXT[animationState.statusPhase];
+  const statusBurstClass = prefersReducedMotion
+    ? null
+    : statusAnimationKey % 2 === 0
+      ? 'hero-status-burst-a'
+      : 'hero-status-burst-b';
 
   useEffect(() => {
     if (typeof window === 'undefined' || typeof window.matchMedia !== 'function') {
@@ -351,46 +601,17 @@ export const HomeHeroLawnGraphic = ({ className }: HomeHeroLawnGraphicProps) => 
 
     let animationFrameId = 0;
     let startTime = 0;
-    const totalDurationMs =
-      HOME_HERO_MOWER_FADE_IN_DURATION_MS +
-      HOME_HERO_MOWER_TRAVEL_DURATION_MS +
-      HOME_HERO_MOWER_REVEAL_LAG_MS +
-      RESET_BUFFER_MS;
-
-    setAnimationState(createInitialAnimationState());
 
     const tick = (timestamp: number) => {
       if (startTime === 0) {
         startTime = timestamp;
       }
 
-      const elapsedMs = timestamp - startTime;
-      const fadeInProgress = Math.min(elapsedMs / HOME_HERO_MOWER_FADE_IN_DURATION_MS, 1);
-      const mowerOpacity = easeInOut(fadeInProgress);
-      const travelElapsedMs = Math.max(0, elapsedMs - HOME_HERO_MOWER_FADE_IN_DURATION_MS);
-      const travelProgress = Math.min(travelElapsedMs / HOME_HERO_MOWER_TRAVEL_DURATION_MS, 1);
-      const trackState = getHeroMowerTrackStateAtTravelDistance(
-        HOME_HERO_MOWER_TRACK_TOTAL_LENGTH * travelProgress
-      );
-      const revealedMeasurementIds = HOME_HERO_MOWER_REVEAL_SCHEDULE.filter(
-        (segment) => travelElapsedMs >= segment.revealAtMs
-      ).map((segment) => segment.id);
-
-      setAnimationState({
-        mowerOpacity,
-        mowerPosition: trackState.point,
-        mowerRotation: trackState.tangentDegrees + HOME_HERO_MOWER_HEADING_OFFSET_DEGREES,
-        revealedMeasurementIds
-      });
-
-      if (elapsedMs < totalDurationMs) {
-        animationFrameId = window.requestAnimationFrame(tick);
-        return;
-      }
-
-      setAnimationState(createInitialAnimationState());
+      setAnimationState(getHeroAnimationStateAtElapsedMs(timestamp - startTime));
+      animationFrameId = window.requestAnimationFrame(tick);
     };
 
+    setAnimationState(createInitialAnimationState());
     animationFrameId = window.requestAnimationFrame(tick);
 
     return () => {
@@ -398,33 +619,99 @@ export const HomeHeroLawnGraphic = ({ className }: HomeHeroLawnGraphicProps) => 
     };
   }, [prefersReducedMotion]);
 
+  useEffect(() => {
+    if (!statusMeasureRef.current || typeof window === 'undefined') {
+      return;
+    }
+
+    const frameId = window.requestAnimationFrame(() => {
+      const nextWidth = statusMeasureRef.current?.offsetWidth ?? 0;
+      setStatusRailWidth(nextWidth > 0 ? nextWidth : null);
+    });
+
+    return () => {
+      window.cancelAnimationFrame(frameId);
+    };
+  }, [activeStatusText]);
+
+  useEffect(() => {
+    if (prefersReducedMotion) {
+      return;
+    }
+
+    setStatusAnimationKey((currentKey) => currentKey + 1);
+  }, [animationState.statusPhase, prefersReducedMotion]);
+
   return (
     <div
       className={cn(
-        'pointer-events-none relative flex h-full w-full items-center justify-center overflow-visible px-2 pb-16 md:px-0 md:pb-20',
+        'pointer-events-none flex h-full w-full items-center justify-center overflow-visible px-2 md:px-0',
         className
       )}
-      data-hero-animation={prefersReducedMotion ? 'reduced-motion' : 'single-pass-reset'}
+      data-hero-animation={prefersReducedMotion ? 'reduced-motion' : 'wall-and-infill-loop'}
+      data-animation-phase={animationState.phase}
+      data-learning-duration-ms={HOME_HERO_LEARNING_DURATION_MS}
+      data-generating-duration-ms={HOME_HERO_GENERATING_PATH_DURATION_MS}
+      data-mowing-duration-ms={HOME_HERO_MOWING_DURATION_MS}
+      data-cycle-duration-ms={HOME_HERO_TOTAL_CYCLE_DURATION_MS}
+      data-hero-lawn-stack="true"
     >
-      <HomeHeroLawnShape
-        className="mx-auto max-h-full w-full max-w-[42rem]"
-        mowerOpacity={animationState.mowerOpacity}
-        mowerPosition={animationState.mowerPosition}
-        mowerRotation={animationState.mowerRotation}
-        revealedMeasurementIds={animationState.revealedMeasurementIds}
-      />
+      <div className="flex w-full max-w-[35.5rem] flex-col items-center justify-center">
+        <HomeHeroLawnShape
+          className="w-full"
+          mowerOpacity={animationState.mowerOpacity}
+          mowerPosition={animationState.mowerPosition}
+          mowerRotation={animationState.mowerRotation}
+          revealedMeasurementIds={animationState.revealedMeasurementIds}
+          coveragePathOpacity={animationState.coveragePathOpacity}
+          coveragePathProgress={animationState.coveragePathProgress}
+        />
 
-      <div className="absolute inset-x-4 bottom-3 flex justify-center md:inset-x-8 md:bottom-5">
-        <div className="hero-status-capsule flex items-center gap-3 rounded-full px-4 py-2.5 text-sm font-medium text-ink md:px-5">
-          <span className="hero-status-indicator" aria-hidden="true" />
-          <span className="tracking-[0.03em]">
-            learning your lawn
-            <span className="hero-status-ellipsis" aria-hidden="true">
-              <span>.</span>
-              <span>.</span>
-              <span>.</span>
-            </span>
-          </span>
+        <div className="-mt-10 flex justify-center md:-mt-12" data-hero-status-stack="true">
+          <div className="flex flex-col items-center">
+            <div
+              className={cn(
+                'hero-status-capsule flex items-center gap-3 rounded-full px-4 py-2.5 text-sm font-medium text-ink md:px-5',
+                !prefersReducedMotion && `hero-status-capsule--${HERO_STATUS_MOTION}`,
+                statusBurstClass
+              )}
+              data-status-phase={animationState.statusPhase}
+              data-status-motion={prefersReducedMotion ? 'reduced' : HERO_STATUS_MOTION}
+            >
+              <span
+                className={cn(
+                  'hero-status-indicator',
+                  animationState.statusPhase === 'learning'
+                    ? 'hero-status-indicator--pulse'
+                    : 'hero-status-indicator--steady'
+                )}
+                aria-hidden="true"
+              />
+              <div
+                className="hero-status-text-rail relative flex h-5 items-center justify-center overflow-hidden leading-none"
+                style={statusRailWidth ? { width: `${statusRailWidth}px` } : undefined}
+                data-status-rail="true"
+              >
+                <span
+                  ref={statusMeasureRef}
+                  className="pointer-events-none invisible whitespace-nowrap tracking-[0.03em]"
+                  aria-hidden="true"
+                >
+                  {activeStatusText}
+                </span>
+                <span
+                  key={`${HERO_STATUS_MOTION}-${animationState.statusPhase}-${statusAnimationKey}`}
+                  className={cn(
+                    'hero-status-text absolute inset-0 inline-flex items-center justify-center whitespace-nowrap tracking-[0.03em]',
+                    !prefersReducedMotion && `hero-status-text--${HERO_STATUS_MOTION}`
+                  )}
+                  data-status-active={animationState.statusPhase}
+                >
+                  <HeroStatusLabel phase={animationState.statusPhase} />
+                </span>
+              </div>
+            </div>
+          </div>
         </div>
       </div>
     </div>

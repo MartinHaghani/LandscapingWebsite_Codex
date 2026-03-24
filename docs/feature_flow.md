@@ -11,9 +11,12 @@
 1. User opens `/`.
 2. Hero opens as a balanced desktop split: left side for headline, subhead, CTA buttons, and `No sign-up required.` helper copy; right side for the oversized lawn graphic.
 3. Hero media renders a transparent lawn parcel directly over the existing page background and occupies most of the right half.
-4. The parcel silhouette follows one fixed curated path made from four straight runs and four circular corner arcs at a locked hero-only scale, while a mower asset fades in and traces an inset counter-clockwise loop inside the lawn.
-5. Each dimension annotation stays hidden until the mower has passed its corresponding segment, then reveals in sequence while the parcel keeps its brand-green fill, heavier white perimeter outline, and soft under-shadow.
-6. A compact `learning your lawn...` status capsule sits inside the lower edge of the graphic, and the stats band remains inside the first screen as a slim full-width strip beneath the two-column hero.
+4. The parcel silhouette follows one fixed curated path made from four straight runs and four circular corner arcs at a locked hero-only scale.
+5. Hero animation phases loop in order:
+   - `learning your lawn...`: mower fades in and traces the inset perimeter walls while dimensions reveal after each cleared segment
+   - `Generating path`: a 2-second infill build phase draws a subtle 11-pass horizontal boustrophedon coverage pattern with softer rounded U-turns and denser direction arrows across the lawn interior
+   - `Mowing...`: mower appears directly at the first scanline point, follows the full generated infill path, then the mower/path fade out before the next learning cycle
+6. The status capsule is stacked directly beneath the lawn shape, resizes to the active label width, and uses a ticker-flip transition with no separate stats strip beneath the two-column hero.
 
 ## Instant Quote: Draft + Finalize
 

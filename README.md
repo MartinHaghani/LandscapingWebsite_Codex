@@ -89,7 +89,7 @@ Default local URLs:
 - Coverage overlay now uses a light basemap + green `#329F5B` polygon treatment and remains privacy-hardened.
 - Services page uses CTA-only handoff to `/instant-quote`.
 - Marketing pages now use launch-ready production copy (no placeholder content), warm-light visual tokens, and readability-first spacing/contrast with mobile navigation and footer quick links.
-- Home hero now uses a balanced desktop split: left-side headline and CTA group with `No sign-up required.`, right-side animated transparent lawn parcel with a mower fade-in that traces the inset perimeter counter-clockwise, reveals CAD-style dimensions segment-by-segment after passing them, and keeps a compact `learning your lawn...` status capsule inside the graphic.
+- Home hero now uses a balanced desktop split: left-side headline and CTA group with `No sign-up required.`, right-side animated transparent lawn parcel with a looping three-state sequence: perimeter `learning your lawn...`, 2-second `Generating path`, then `Mowing...` along an 11-pass rounded boustrophedon infill path with denser direction arrows, direct mowing spawn on the first scanline, and a ticker-flip status capsule sized to the active label.
 - Instant Quote flow is now draft-first:
   - cadence selector supports `weekly` and `bi-weekly`
     - `weekly` = 26 sessions/season

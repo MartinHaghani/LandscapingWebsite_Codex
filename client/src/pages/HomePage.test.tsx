@@ -17,6 +17,10 @@ describe('HomePage hero', () => {
     expect(markup).toContain('aria-hidden="true"');
     expect(markup).toContain('data-measurement-count="8"');
     expect(markup).toContain('learning your lawn');
-    expect(markup).toContain('Quote Time');
+    expect(markup).toContain('data-hero-lawn-stack="true"');
+    expect(markup).toContain('data-hero-status-stack="true"');
+    expect(markup).toContain('data-status-motion="tickerFlip"');
+    expect(markup).not.toContain('data-motion-preview="true"');
+    expect(markup).not.toContain('Quote Time');
   });
 });

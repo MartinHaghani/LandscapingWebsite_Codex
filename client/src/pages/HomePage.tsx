@@ -2,7 +2,6 @@ import { Link } from 'react-router-dom';
 import { Card } from '../components/ui/Card';
 import { SectionTitle } from '../components/ui/SectionTitle';
 import { Button } from '../components/ui/Button';
-import { StatsBar } from '../components/ui/StatsBar';
 import { HomeHeroLawnGraphic } from '../components/home/HomeHeroLawnGraphic';
 
 const steps = [
@@ -22,12 +21,6 @@ const steps = [
     title: 'Finalize in One Step',
     body: 'Submit contact details to lock your quote ID and route it to our operations team for final review.'
   }
-];
-
-const stats = [
-  { label: 'Quote Time', value: '< 3 minutes' },
-  { label: 'Geometry Validation', value: 'Server re-measured' },
-  { label: 'Season Planning', value: 'Weekly or bi-weekly' }
 ];
 
 const faqs = [
@@ -78,10 +71,6 @@ export const HomePage = () => (
           <div className="fade-up flex min-h-0 items-center justify-center md:h-full [animation-delay:120ms]">
             <HomeHeroLawnGraphic className="h-[360px] w-full md:h-full" />
           </div>
-        </div>
-
-        <div className="mt-3 md:mt-1">
-          <StatsBar items={stats} />
         </div>
       </div>
     </section>

@@ -18,7 +18,7 @@ Autoscape provides:
 - Navigation includes mobile menu support and quote CTA.
 - Footer includes production contact details and internal quick links.
 - Marketing pages (home/services/about/contact) use non-placeholder production copy and a warm-light readability-first design system.
-- Home hero uses a symmetric desktop split with copy/CTAs on the left, `No sign-up required.` helper text under the CTA row, and a responsive animated lawn parcel on the right with a mower fade-in, counter-clockwise inset trace path, sequential CAD-style dimension reveals, a restrained under-shadow, and an in-graphic `learning your lawn...` status capsule.
+- Home hero uses a symmetric desktop split with copy/CTAs on the left, `No sign-up required.` helper text under the CTA row, and a responsive animated lawn parcel on the right with a perimeter-learning wall trace, an 11-pass rounded horizontal infill raster with denser direction arrows, direct mowing spawn on the first scanline, mowing follow-through, visible CAD dimensions, a restrained under-shadow, and a dynamically sized ticker-flip status capsule stacked directly under the lawn.
 
 ### Instant Quote Flow
 
