@@ -23,6 +23,7 @@ Primary domains:
 - Public layout shell: `client/src/components/layout/SiteLayout.tsx` (`Navbar`, `Footer`, `ScrollToTop`)
 - Public theming system: `client/tailwind.config.ts` + `client/src/index.css` (warm-light semantic tokens, shared form/focus/map-control styling)
 - Home hero system: `client/src/pages/HomePage.tsx` + `client/src/components/home/HomeHeroLawnGraphic.tsx` + `client/src/lib/homeHeroLawn.ts` + `client/src/lib/homeHeroLawnCoverage.ts` (true desktop 50/50 split, CTA helper copy, fixed parcel geometry constants, perimeter wall-trace metadata, rounded 11-pass boustrophedon infill path with sampled motion/denser arrows, direct mowing spawn on the first scanline, multi-phase hero timing, slightly heavier white outline, and a dynamically sized ticker-flip status capsule stacked directly below the lawn)
+- Home sustainability proof system: `client/src/components/home/HomeSustainabilitySection.tsx` + `client/src/pages/HomePage.tsx` (two-column narrative + comparison card, compact electric-vs-gas bars, and qualified copy limited to point-of-use exhaust, measured 25 ft noise, and lifecycle CO2e framing)
 
 ## 3) Persistence Layer
 

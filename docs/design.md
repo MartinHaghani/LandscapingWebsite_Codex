@@ -295,3 +295,19 @@ Implementation:
 - standardized focus-visible treatment and form primitives (`form-label`, `form-input`, `status-*`)
 - service-area map remains privacy-hardened but now uses light-compatible controls/popup treatment
 - instant-quote mapping keeps satellite basemap default for property precision, with warm-light control and summary panels
+
+## 20) Home Page Sustainability Proof
+
+Decision:
+
+- Add a short evidence-based electric proof section near the top of the home page without turning the landing page into a research report.
+
+Implementation:
+
+- inserted directly below the hero
+- two-column layout with marketing copy on the left and a premium comparison card on the right
+- three compact electric-vs-gas bars:
+  - point-of-use exhaust
+  - measured noise at 25 ft
+  - qualified 10-year lifecycle CO2e from the cited push mower study
+- copy keeps "zero emissions" explicitly tied to exhaust at the point of use and avoids silent/absolute environmental phrasing

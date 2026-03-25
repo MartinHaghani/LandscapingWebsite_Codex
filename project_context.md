@@ -19,6 +19,8 @@ Autoscape provides:
 - Footer includes production contact details and internal quick links.
 - Marketing pages (home/services/about/contact) use non-placeholder production copy and a warm-light readability-first design system.
 - Home hero uses a symmetric desktop split with copy/CTAs on the left, `No sign-up required.` helper text under the CTA row, and a responsive animated lawn parcel on the right with a perimeter-learning wall trace, an 11-pass rounded horizontal infill raster with denser direction arrows, direct mowing spawn on the first scanline, mowing follow-through, visible CAD dimensions, a restrained under-shadow, and a dynamically sized ticker-flip status capsule stacked directly under the lawn.
+- Home page also includes a sustainability proof section directly below the hero, comparing electric vs gas mowing on point-of-use exhaust, measured 25 ft noise, and qualified lifecycle CO2e with compact bar visuals.
+- Marketing copy keeps "zero emissions" qualified to exhaust at the point of use and avoids silent/absolute environmental wording.
 
 ### Instant Quote Flow
 

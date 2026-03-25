@@ -1,4 +1,5 @@
 import { Link } from 'react-router-dom';
+import { HomeSustainabilitySection } from '../components/home/HomeSustainabilitySection';
 import { Card } from '../components/ui/Card';
 import { SectionTitle } from '../components/ui/SectionTitle';
 import { Button } from '../components/ui/Button';
@@ -74,6 +75,8 @@ export const HomePage = () => (
         </div>
       </div>
     </section>
+
+    <HomeSustainabilitySection />
 
     <section className="mx-auto w-full max-w-7xl px-4 py-20 md:px-8">
       <SectionTitle

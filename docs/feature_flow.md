@@ -18,6 +18,16 @@
    - `Mowing...`: mower appears directly at the first scanline point, follows the full generated infill path, then the mower/path fade out before the next learning cycle
 6. The status capsule is stacked directly beneath the lawn shape, resizes to the active label width, and uses a ticker-flip transition with no separate stats strip beneath the two-column hero.
 
+## Home: Sustainability Proof
+
+1. User continues below the hero into a compact electric-vs-gas proof section.
+2. Left column explains the homeowner-facing value in plain language: no exhaust where the work happens, lower neighborhood noise, and lower lifecycle emissions versus gas equipment.
+3. Right column shows three compact bar comparisons:
+   - point-of-use exhaust
+   - measured noise at 25 ft
+   - 10-year lifecycle CO2e from the cited push mower study
+4. Homepage copy keeps "zero emissions" limited to exhaust at the point of use and avoids silent/absolute wording.
+
 ## Instant Quote: Draft + Finalize
 
 ### Step 1: Address + Coverage Gate
