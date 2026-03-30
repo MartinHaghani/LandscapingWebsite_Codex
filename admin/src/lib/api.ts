@@ -84,11 +84,12 @@ export type AdminLngLat = [number, number];
 export interface AdminPolygonSourcePolygon {
   id: string;
   kind: AdminPolygonKind;
-  points: AdminLngLat[];
+  ringPoints: AdminLngLat[];
+  rawStrokePoints: AdminLngLat[] | null;
 }
 
 export interface AdminPolygonSource {
-  schemaVersion: 1;
+  schemaVersion: 2;
   polygons: AdminPolygonSourcePolygon[];
   activePolygonId: string | null;
 }

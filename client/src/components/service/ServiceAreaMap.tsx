@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useRef } from 'react';
 import mapboxgl, { type GeoJSONSource } from 'mapbox-gl';
-import type { FeatureCollection, MultiPolygon, Polygon, Position } from 'geojson';
+import type { FeatureCollection, MultiPolygon, Polygon } from 'geojson';
 import type { LngLat, ServiceAreaResponse } from '../../types';
+import { getFeatureCollectionBounds } from '../../lib/mapBounds';
 
 interface ServiceAreaMapProps {
   token: string;
@@ -21,58 +22,6 @@ const MAX_ZOOM = 15;
 const EMPTY_FEATURE_COLLECTION: FeatureCollection<Polygon | MultiPolygon> = {
   type: 'FeatureCollection',
   features: []
-};
-
-const extractCoordinates = (coordinates: Position[] | Position[][] | Position[][][]): [number, number][] => {
-  if (!Array.isArray(coordinates) || coordinates.length === 0) {
-    return [];
-  }
-
-  const first = coordinates[0];
-  if (typeof first[0] === 'number') {
-    return (coordinates as Position[]).map((coordinate) => [coordinate[0], coordinate[1]]);
-  }
-
-  return (coordinates as Array<Position[] | Position[][]>).flatMap((nested) =>
-    extractCoordinates(nested as Position[] | Position[][] | Position[][][])
-  );
-};
-
-const getBounds = (
-  featureCollection: FeatureCollection<Polygon | MultiPolygon>,
-  highlightedLocation?: LngLat
-) => {
-  let minLng = Infinity;
-  let minLat = Infinity;
-  let maxLng = -Infinity;
-  let maxLat = -Infinity;
-
-  featureCollection.features.forEach((feature) => {
-    const coordinates = extractCoordinates(feature.geometry.coordinates as Position[] | Position[][] | Position[][][]);
-
-    coordinates.forEach(([lng, lat]) => {
-      minLng = Math.min(minLng, lng);
-      minLat = Math.min(minLat, lat);
-      maxLng = Math.max(maxLng, lng);
-      maxLat = Math.max(maxLat, lat);
-    });
-  });
-
-  if (highlightedLocation) {
-    minLng = Math.min(minLng, highlightedLocation[0]);
-    minLat = Math.min(minLat, highlightedLocation[1]);
-    maxLng = Math.max(maxLng, highlightedLocation[0]);
-    maxLat = Math.max(maxLat, highlightedLocation[1]);
-  }
-
-  if (!Number.isFinite(minLng) || !Number.isFinite(minLat) || !Number.isFinite(maxLng) || !Number.isFinite(maxLat)) {
-    return null;
-  }
-
-  return [
-    [minLng, minLat],
-    [maxLng, maxLat]
-  ] as [[number, number], [number, number]];
 };
 
 export const ServiceAreaMap = ({
@@ -131,7 +80,7 @@ export const ServiceAreaMap = ({
 
     source.setData(collection);
 
-    const bounds = getBounds(collection, markerLocation);
+    const bounds = getFeatureCollectionBounds(collection, markerLocation);
     const fitKey = bounds
       ? `${bounds[0][0]}:${bounds[0][1]}:${bounds[1][0]}:${bounds[1][1]}:${markerLocation?.join(',') ?? 'none'}`
       : `none:${markerLocation?.join(',') ?? 'none'}`;

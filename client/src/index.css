@@ -28,7 +28,8 @@ body {
   min-height: 100vh;
   font-size: 17px;
   line-height: 1.55;
-  background-image: radial-gradient(circle at 18% -10%, rgba(50, 159, 91, 0.15), transparent 34%),
+  background-image:
+    radial-gradient(circle at 18% -10%, rgba(50, 159, 91, 0.15), transparent 34%),
     radial-gradient(circle at 86% -2%, rgba(16, 23, 19, 0.06), transparent 28%),
     linear-gradient(180deg, rgba(255, 255, 255, 0.7), rgba(247, 244, 238, 0.2));
 }
@@ -53,7 +54,11 @@ a,
 input,
 textarea,
 select {
-  transition: color 150ms ease, border-color 150ms ease, background-color 150ms ease, box-shadow 150ms ease;
+  transition:
+    color 150ms ease,
+    border-color 150ms ease,
+    background-color 150ms ease,
+    box-shadow 150ms ease;
 }
 
 :focus-visible {
@@ -128,7 +133,9 @@ select {
 }
 
 .glow-ring {
-  box-shadow: 0 0 0 1px rgba(50, 159, 91, 0.45), 0 12px 24px -18px rgba(50, 159, 91, 0.5);
+  box-shadow:
+    0 0 0 1px rgba(50, 159, 91, 0.45),
+    0 12px 24px -18px rgba(50, 159, 91, 0.5);
 }
 
 @keyframes fadeUp {
@@ -201,6 +208,44 @@ select {
     transform: translateY(0) rotateX(0deg);
     filter: blur(0);
   }
+}
+
+@keyframes quoteGuideModalEnter {
+  from {
+    opacity: 0;
+    transform: translateY(18px) scale(0.965);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+@keyframes quoteGuideStepShift {
+  from {
+    opacity: 0;
+    transform: translateY(8px) scale(0.99);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+.quote-guide-modal-enter {
+  animation: quoteGuideModalEnter 360ms cubic-bezier(0.2, 0.9, 0.24, 1) both;
+}
+
+.quote-guide-step-shell {
+  will-change: transform, opacity;
+}
+
+.quote-guide-step-shell--animate {
+  animation: quoteGuideStepShift 240ms cubic-bezier(0.2, 0.9, 0.24, 1) both;
+}
+
+.quote-guide-slider-thumb {
+  transition: left 220ms cubic-bezier(0.2, 0.9, 0.24, 1);
 }
 
 .hero-status-capsule {
@@ -288,11 +333,14 @@ select {
   .hero-status-ellipsis span,
   .hero-status-text,
   .hero-status-burst-a,
-  .hero-status-burst-b {
+  .hero-status-burst-b,
+  .quote-guide-modal-enter,
+  .quote-guide-step-shell--animate {
     animation: none;
   }
 
-  .hero-status-text-rail {
+  .hero-status-text-rail,
+  .quote-guide-slider-thumb {
     transition: none;
   }
 }

@@ -1,5 +1,10 @@
 import { describe, expect, it } from 'vitest';
-import { canContinueToMapStep, getCoverageGateDestination, getSubmissionStatus } from './quoteFlow';
+import {
+  canContinueToMapStep,
+  canSubmitQuoteDraft,
+  getCoverageGateDestination,
+  getSubmissionStatus
+} from './quoteFlow';
 
 describe('quote flow helpers', () => {
   it('allows continue when address is selected or user typed enough to resolve', () => {
@@ -60,7 +65,59 @@ describe('quote flow helpers', () => {
         selfIntersecting: false,
         effectiveGeometryEmpty: false
       })
-    ).toBe('Ready to submit.');
+    ).toBe('Ready to continue.');
+  });
+
+  it('requires address, geometry, and valid service polygons before review or draft submit', () => {
+    expect(
+      canSubmitQuoteDraft({
+        selectedAddress: '123 Lawn Drive, Austin, TX',
+        validServicePolygonCount: 1,
+        hasGeometry: true,
+        selfIntersecting: false,
+        effectiveGeometryEmpty: false
+      })
+    ).toBe(true);
+
+    expect(
+      canSubmitQuoteDraft({
+        selectedAddress: '',
+        validServicePolygonCount: 1,
+        hasGeometry: true,
+        selfIntersecting: false,
+        effectiveGeometryEmpty: false
+      })
+    ).toBe(false);
+
+    expect(
+      canSubmitQuoteDraft({
+        selectedAddress: '123 Lawn Drive, Austin, TX',
+        validServicePolygonCount: 0,
+        hasGeometry: true,
+        selfIntersecting: false,
+        effectiveGeometryEmpty: false
+      })
+    ).toBe(false);
+
+    expect(
+      canSubmitQuoteDraft({
+        selectedAddress: '123 Lawn Drive, Austin, TX',
+        validServicePolygonCount: 1,
+        hasGeometry: false,
+        selfIntersecting: false,
+        effectiveGeometryEmpty: false
+      })
+    ).toBe(false);
+
+    expect(
+      canSubmitQuoteDraft({
+        selectedAddress: '123 Lawn Drive, Austin, TX',
+        validServicePolygonCount: 1,
+        hasGeometry: true,
+        selfIntersecting: true,
+        effectiveGeometryEmpty: false
+      })
+    ).toBe(false);
   });
 
   it('returns expected navigation target for coverage gate outcomes', () => {

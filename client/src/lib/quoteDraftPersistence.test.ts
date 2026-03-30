@@ -61,9 +61,14 @@ describe('quoteDraftPersistence', () => {
             {
               id: 'polygon-1',
               kind: 'service' as const,
-              points: [
+              ringPoints: [
                 [-79.52, 43.84],
                 [-79.521, 43.84],
+                [-79.521, 43.841]
+              ] as [number, number][],
+              rawStrokePoints: [
+                [-79.52, 43.84],
+                [-79.5205, 43.8404],
                 [-79.521, 43.841]
               ] as [number, number][]
             }
@@ -87,7 +92,7 @@ describe('quoteDraftPersistence', () => {
     storage.setItem(
       quoteDraftStorageKey,
       JSON.stringify({
-        version: 1,
+        version: 2,
         savedAt: new Date().toISOString(),
         state: {
           addressInput: 'x',
@@ -112,7 +117,7 @@ describe('quoteDraftPersistence', () => {
     storage.setItem(
       quoteDraftStorageKey,
       JSON.stringify({
-        version: 2,
+        version: 1,
         state: {}
       })
     );
@@ -120,12 +125,12 @@ describe('quoteDraftPersistence', () => {
     expect(loadQuoteDraftState(storage)).toBeNull();
   });
 
-  it('loads legacy snapshots and applies billing defaults', () => {
+  it('loads v2 snapshots and applies billing defaults', () => {
     const storage = createStorageMock();
     storage.setItem(
       quoteDraftStorageKey,
       JSON.stringify({
-        version: 1,
+        version: 2,
         savedAt: new Date().toISOString(),
         state: {
           addressInput: '123 Greenway Blvd',

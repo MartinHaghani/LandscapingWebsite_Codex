@@ -11,7 +11,10 @@ const cloneState = (state: PolygonEditorState): PolygonEditorState => ({
   polygons: state.polygons.map((polygon) => ({
     id: polygon.id,
     kind: polygon.kind,
-    points: polygon.points.map(([lng, lat]) => [lng, lat] as [number, number])
+    ringPoints: polygon.ringPoints.map(([lng, lat]) => [lng, lat] as [number, number]),
+    rawStrokePoints: polygon.rawStrokePoints
+      ? polygon.rawStrokePoints.map(([lng, lat]) => [lng, lat] as [number, number])
+      : null
   }))
 });
 
@@ -33,7 +36,8 @@ const statesEqual = (left: PolygonEditorState, right: PolygonEditorState) => {
     return (
       polygon.id === rightPolygon.id &&
       polygon.kind === rightPolygon.kind &&
-      pointsEqual(polygon.points, rightPolygon.points)
+      pointsEqual(polygon.ringPoints, rightPolygon.ringPoints) &&
+      pointsEqual(polygon.rawStrokePoints ?? [], rightPolygon.rawStrokePoints ?? [])
     );
   });
 };
