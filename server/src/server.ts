@@ -9,7 +9,6 @@ import {
   adminQuoteVersionCreateSchema,
   contactPayloadSchema,
   quoteDraftPayloadSchema,
-  quotePayloadSchema,
   quoteContactPayloadSchema,
   serviceAreaCheckSchema,
   serviceAreaRequestPayloadSchema
@@ -661,41 +660,7 @@ export const createServer = (options: CreateServerOptions = {}) => {
         const parsedDraft = quoteDraftPayloadSchema.safeParse(body);
 
         if (!parsedDraft.success) {
-          const parsedLegacy = quotePayloadSchema.safeParse(body);
-          if (!parsedLegacy.success) {
-            json(res, 400, { error: 'Invalid quote payload.', details: parsedDraft.error.flatten() });
-            return;
-          }
-
-          const legacy = parsedLegacy.data;
-          const result = await dataStore.createQuoteDraft({
-            idempotencyKey,
-            addressText: legacy.address,
-            location: legacy.location,
-            polygon: legacy.polygon,
-            recommendedPlan: legacy.plan,
-            pricingVersion: 'legacy-v1',
-            currency: 'CAD',
-            serviceFrequency: legacy.serviceFrequency ?? 'weekly',
-            billingMode: legacy.billingMode ?? 'seasonal',
-            baseTotal: legacy.quoteTotal,
-            finalTotal: legacy.quoteTotal,
-            authUserId: customerIdentity?.userId
-          });
-
-          if (customerIdentity) {
-            void customerAddressRecorder({
-              userId: customerIdentity.userId,
-              addressText: legacy.address
-            }).catch((error) => {
-              console.warn('Failed to update customer address metadata from legacy quote draft:', error);
-            });
-          }
-
-          json(res, result.statusCode, {
-            ...result.body,
-            replayed: result.replayed
-          });
+          json(res, 400, { error: 'Invalid quote payload.', details: parsedDraft.error.flatten() });
           return;
         }
 
@@ -1334,7 +1299,11 @@ export const createServer = (options: CreateServerOptions = {}) => {
             quotePublicId: adminQuoteVersionId,
             polygonSource: {
               ...parsed.data.polygonSource,
-              activePolygonId: parsed.data.polygonSource.activePolygonId ?? null
+              activePolygonId: parsed.data.polygonSource.activePolygonId ?? null,
+              polygons: parsed.data.polygonSource.polygons.map((polygon) => ({
+                ...polygon,
+                rawStrokePoints: polygon.rawStrokePoints ?? null
+              }))
             },
             serviceFrequency: parsed.data.serviceFrequency,
             perSessionTotal: parsed.data.perSessionTotal,

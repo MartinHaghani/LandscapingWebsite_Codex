@@ -2,27 +2,34 @@ import { useEffect, useMemo, useRef } from 'react';
 import mapboxgl, { type GeoJSONSource } from 'mapbox-gl';
 import type { FeatureCollection, LineString, Point, Polygon } from 'geojson';
 import type { EditablePolygon, LngLat, PolygonKind, SelectionTarget } from '../../types';
+import {
+  ADD_VERTEX_CURSOR,
+  EDGE_INSERTION_HIT_TOLERANCE_PX,
+  findEdgeInsertionHit,
+  insertPointIntoRing
+} from '../../lib/edgeInsertion';
+import { finalizeFreehandStroke } from '../../lib/freehand';
+import { cn } from '../../lib/cn';
 import { buildPolygonFeature } from '../../lib/geometry';
 
 interface QuoteMapProps {
   token: string;
   center: LngLat;
-  drawing: boolean;
+  drawMode: PolygonKind | null;
   selection: SelectionTarget;
   polygons: EditablePolygon[];
   activePolygonId: string | null;
-  onPointAdd: (polygonId: string, point: LngLat) => void;
-  onPolygonPointsChange: (polygonId: string, points: LngLat[]) => void;
+  className?: string;
+  onPolygonDrawn: (kind: PolygonKind, shape: { ringPoints: LngLat[]; rawStrokePoints: LngLat[] }) => void;
+  onPolygonRingPointsChange: (polygonId: string, ringPoints: LngLat[]) => void;
   onSelectionChange: (selection: SelectionTarget) => void;
 }
 
 const POLYGON_SOURCE_ID = 'quote-polygons-source';
 const PATH_SOURCE_ID = 'quote-active-path-source';
-const CENTER_SOURCE_ID = 'quote-center-source';
 const POLYGON_FILL_LAYER_ID = 'quote-polygons-fill';
 const POLYGON_OUTLINE_LAYER_ID = 'quote-polygons-outline';
 const PATH_LAYER_ID = 'quote-active-path-line';
-const CENTER_LAYER_ID = 'quote-center-point';
 const MAP_STYLE = 'mapbox://styles/mapbox/satellite-v9';
 
 const getSelectedPolygonId = (selection: SelectionTarget) => {
@@ -33,39 +40,69 @@ const getSelectedPolygonId = (selection: SelectionTarget) => {
   return selection.polygonId;
 };
 
-const activePathFeatureCollection = (activePolygon: EditablePolygon | undefined): FeatureCollection<LineString> => ({
-  type: 'FeatureCollection',
-  features:
-    activePolygon && activePolygon.points.length >= 2
-      ? [
-          {
-            type: 'Feature',
-            geometry: {
-              type: 'LineString',
-              coordinates: activePolygon.points
-            },
-            properties: {
-              polygonId: activePolygon.id,
-              polygonKind: activePolygon.kind
-            }
+const activePathFeatureCollection = (
+  activePolygon: EditablePolygon | undefined,
+  strokePoints: LngLat[],
+  strokeKind: PolygonKind | null
+): FeatureCollection<LineString> => {
+  if (strokeKind && strokePoints.length >= 2) {
+    return {
+      type: 'FeatureCollection',
+      features: [
+        {
+          type: 'Feature',
+          geometry: {
+            type: 'LineString',
+            coordinates: strokePoints
+          },
+          properties: {
+            polygonKind: strokeKind
           }
-        ]
-      : []
-});
+        }
+      ]
+    };
+  }
 
-const markerStyleByKind = (kind: PolygonKind, selected: boolean) => {
+  return {
+    type: 'FeatureCollection',
+    features:
+      activePolygon && activePolygon.ringPoints.length >= 2
+        ? [
+            {
+              type: 'Feature',
+              geometry: {
+                type: 'LineString',
+                coordinates: activePolygon.ringPoints
+              },
+              properties: {
+                polygonId: activePolygon.id,
+                polygonKind: activePolygon.kind
+              }
+            }
+          ]
+        : []
+  };
+};
+
+const getVertexScaleForZoom = (zoom: number) => Math.min(1.2, Math.max(0.75, zoom / 18));
+
+const markerStyleByKind = (kind: PolygonKind, selected: boolean, zoom: number) => {
+  const scale = getVertexScaleForZoom(zoom);
+  const selectedSize = `${Math.round(20 * scale)}px`;
+  const defaultSize = `${Math.round(16 * scale)}px`;
+
   if (kind === 'obstacle') {
     return selected
       ? {
-          width: '20px',
-          height: '20px',
+          width: selectedSize,
+          height: selectedSize,
           borderColor: '#FFF7F7',
           backgroundColor: '#DC2626',
           boxShadow: '0 0 0 2px rgba(255,255,255,0.85), 0 8px 16px rgba(220,38,38,0.45)'
         }
       : {
-          width: '16px',
-          height: '16px',
+          width: defaultSize,
+          height: defaultSize,
           borderColor: '#FFFFFF',
           backgroundColor: '#DC2626',
           boxShadow: '0 5px 12px rgba(220,38,38,0.45)'
@@ -74,62 +111,102 @@ const markerStyleByKind = (kind: PolygonKind, selected: boolean) => {
 
   return selected
     ? {
-        width: '20px',
-        height: '20px',
+        width: selectedSize,
+        height: selectedSize,
         borderColor: '#D1FAE1',
         backgroundColor: '#329F5B',
         boxShadow: '0 0 0 2px rgba(255,255,255,0.85), 0 8px 16px rgba(50,159,91,0.45)'
       }
     : {
-        width: '16px',
-        height: '16px',
+        width: defaultSize,
+        height: defaultSize,
         borderColor: '#FFFFFF',
         backgroundColor: '#329F5B',
         boxShadow: '0 5px 12px rgba(50,159,91,0.45)'
       };
 };
 
+const createHomeMarkerElement = () => {
+  const element = document.createElement('div');
+  element.style.width = '34px';
+  element.style.height = '34px';
+  element.style.borderRadius = '999px';
+  element.style.display = 'grid';
+  element.style.placeItems = 'center';
+  element.style.background = '#FFFFFF';
+  element.style.border = '2px solid rgba(50,159,91,0.16)';
+  element.style.boxShadow = '0 12px 22px rgba(15,23,42,0.18)';
+  element.innerHTML =
+    '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M4 10.75L12 4l8 6.75v8.25a1 1 0 0 1-1 1h-4.75v-5.5h-4.5V20H5a1 1 0 0 1-1-1v-8.25Z" fill="#329F5B"/><path d="M9.75 20v-5.5h4.5V20" stroke="#FFFFFF" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+  return element;
+};
+
+const applyMarkerStyle = (
+  element: HTMLButtonElement,
+  kind: PolygonKind,
+  selected: boolean,
+  zoom: number
+) => {
+  const markerStyle = markerStyleByKind(kind, selected, zoom);
+  element.style.width = markerStyle.width;
+  element.style.height = markerStyle.height;
+  element.style.borderColor = markerStyle.borderColor;
+  element.style.backgroundColor = markerStyle.backgroundColor;
+  element.style.boxShadow = markerStyle.boxShadow;
+};
+
 export const QuoteMap = ({
   token,
   center,
-  drawing,
+  drawMode,
   selection,
   polygons,
   activePolygonId,
-  onPointAdd,
-  onPolygonPointsChange,
+  className,
+  onPolygonDrawn,
+  onPolygonRingPointsChange,
   onSelectionChange
 }: QuoteMapProps) => {
   const selectedPolygonId = useMemo(() => getSelectedPolygonId(selection), [selection]);
 
   const containerRef = useRef<HTMLDivElement | null>(null);
   const mapRef = useRef<mapboxgl.Map | null>(null);
+  const centerMarkerRef = useRef<mapboxgl.Marker | null>(null);
   const vertexMarkersRef = useRef<mapboxgl.Marker[]>([]);
-  const drawingRef = useRef(drawing);
+  const vertexMarkerElementsRef = useRef<
+    Array<{ element: HTMLButtonElement; kind: PolygonKind; selected: boolean }>
+  >([]);
+  const drawModeRef = useRef<PolygonKind | null>(drawMode);
   const activePolygonIdRef = useRef(activePolygonId);
-  const onPointAddRef = useRef(onPointAdd);
-  const onPolygonPointsChangeRef = useRef(onPolygonPointsChange);
+  const onPolygonDrawnRef = useRef(onPolygonDrawn);
+  const onPolygonRingPointsChangeRef = useRef(onPolygonRingPointsChange);
   const onSelectionChangeRef = useRef(onSelectionChange);
   const centerRef = useRef(center);
+  const polygonsRef = useRef(polygons);
   const selectedPolygonIdRef = useRef<string | null>(selectedPolygonId);
   const ignoreNextMapClickRef = useRef(false);
+  const clearIgnoreNextMapClickTimeoutRef = useRef<number | null>(null);
   const isMarkerDraggingRef = useRef(false);
+  const isStrokeDrawingRef = useRef(false);
+  const strokePointsRef = useRef<LngLat[]>([]);
+  const hoveredInsertHitRef = useRef<ReturnType<typeof findEdgeInsertionHit> | null>(null);
+  const syncCanvasCursorRef = useRef<() => void>(() => {});
 
   useEffect(() => {
-    drawingRef.current = drawing;
-  }, [drawing]);
+    drawModeRef.current = drawMode;
+  }, [drawMode]);
 
   useEffect(() => {
     activePolygonIdRef.current = activePolygonId;
   }, [activePolygonId]);
 
   useEffect(() => {
-    onPointAddRef.current = onPointAdd;
-  }, [onPointAdd]);
+    onPolygonDrawnRef.current = onPolygonDrawn;
+  }, [onPolygonDrawn]);
 
   useEffect(() => {
-    onPolygonPointsChangeRef.current = onPolygonPointsChange;
-  }, [onPolygonPointsChange]);
+    onPolygonRingPointsChangeRef.current = onPolygonRingPointsChange;
+  }, [onPolygonRingPointsChange]);
 
   useEffect(() => {
     onSelectionChangeRef.current = onSelectionChange;
@@ -138,6 +215,10 @@ export const QuoteMap = ({
   useEffect(() => {
     centerRef.current = center;
   }, [center]);
+
+  useEffect(() => {
+    polygonsRef.current = polygons;
+  }, [polygons]);
 
   useEffect(() => {
     selectedPolygonIdRef.current = selectedPolygonId;
@@ -168,28 +249,184 @@ export const QuoteMap = ({
         showCompass: false,
         visualizePitch: false
       }),
-      'top-right'
+      'bottom-right'
     );
 
+    const syncActivePath = () => {
+      const pathSource = map.getSource(PATH_SOURCE_ID) as GeoJSONSource | undefined;
+      if (!pathSource) {
+        return;
+      }
+
+      const activePolygon = polygonsRef.current.find((polygonState) => polygonState.id === activePolygonIdRef.current);
+      pathSource.setData(
+        activePathFeatureCollection(activePolygon, strokePointsRef.current, isStrokeDrawingRef.current ? drawModeRef.current : null)
+      );
+    };
+
+    const syncCanvasCursor = () => {
+      if (drawModeRef.current) {
+        map.getCanvas().style.cursor = 'crosshair';
+        return;
+      }
+
+      map.getCanvas().style.cursor = hoveredInsertHitRef.current ? ADD_VERTEX_CURSOR : 'grab';
+    };
+
+    syncCanvasCursorRef.current = syncCanvasCursor;
+
+    const getInsertHit = (point: { x: number; y: number }) => {
+      const selectedPolygonId = selectedPolygonIdRef.current;
+      if (!selectedPolygonId || isMarkerDraggingRef.current || drawModeRef.current) {
+        return null;
+      }
+
+      const selectedPolygon = polygonsRef.current.find((polygonState) => polygonState.id === selectedPolygonId);
+      if (!selectedPolygon || selectedPolygon.ringPoints.length < 2) {
+        return null;
+      }
+
+      return findEdgeInsertionHit(
+        selectedPolygon.ringPoints,
+        point,
+        {
+          project: (lngLat) => {
+            const projected = map.project(lngLat);
+            return { x: projected.x, y: projected.y };
+          },
+          unproject: (screenPoint) => {
+            const lngLat = map.unproject([screenPoint.x, screenPoint.y]);
+            return [lngLat.lng, lngLat.lat] as LngLat;
+          }
+        },
+        EDGE_INSERTION_HIT_TOLERANCE_PX
+      );
+    };
+
+    const clearHoveredInsertHit = () => {
+      hoveredInsertHitRef.current = null;
+      syncCanvasCursor();
+    };
+
+    const syncVertexMarkerSizes = () => {
+      const zoom = map.getZoom();
+      vertexMarkerElementsRef.current.forEach(({ element, kind, selected }) => {
+        applyMarkerStyle(element, kind, selected, zoom);
+      });
+    };
+
+    const toLngLat = (clientX: number, clientY: number): LngLat => {
+      const rect = map.getCanvas().getBoundingClientRect();
+      const point = new mapboxgl.Point(clientX - rect.left, clientY - rect.top);
+      const lngLat = map.unproject(point);
+      return [lngLat.lng, lngLat.lat];
+    };
+
+    const finishStroke = () => {
+      if (!isStrokeDrawingRef.current) {
+        return;
+      }
+
+      isStrokeDrawingRef.current = false;
+      map.dragPan.enable();
+
+      const finalized = drawModeRef.current
+        ? finalizeFreehandStroke(strokePointsRef.current)
+        : null;
+
+      strokePointsRef.current = [];
+      syncActivePath();
+
+      if (drawModeRef.current && finalized) {
+        onPolygonDrawnRef.current(drawModeRef.current, finalized);
+      }
+    };
+
+    const handlePointerMove = (event: PointerEvent) => {
+      if (!isStrokeDrawingRef.current || !drawModeRef.current) {
+        return;
+      }
+
+      strokePointsRef.current = [...strokePointsRef.current, toLngLat(event.clientX, event.clientY)];
+      syncActivePath();
+    };
+
+    const handlePointerUp = () => {
+      finishStroke();
+    };
+
+    const handlePointerCancel = () => {
+      finishStroke();
+    };
+
+    const handlePointerDown = (event: PointerEvent) => {
+      if (!drawModeRef.current || event.button !== 0) {
+        return;
+      }
+
+      event.preventDefault();
+      event.stopPropagation();
+      isStrokeDrawingRef.current = true;
+      strokePointsRef.current = [toLngLat(event.clientX, event.clientY)];
+      map.dragPan.disable();
+      hoveredInsertHitRef.current = null;
+      syncCanvasCursor();
+      syncActivePath();
+    };
+
+    const canvas = map.getCanvas();
+    canvas.addEventListener('pointerdown', handlePointerDown);
+    window.addEventListener('pointermove', handlePointerMove);
+    window.addEventListener('pointerup', handlePointerUp);
+    window.addEventListener('pointercancel', handlePointerCancel);
+    map.on('zoom', syncVertexMarkerSizes);
+
+    const handleMapMouseMove = (event: mapboxgl.MapMouseEvent) => {
+      hoveredInsertHitRef.current = getInsertHit({
+        x: event.point.x,
+        y: event.point.y
+      });
+      syncCanvasCursor();
+    };
+
     const handleMapClick = (event: mapboxgl.MapMouseEvent) => {
-      if (isMarkerDraggingRef.current) {
+      if (isMarkerDraggingRef.current || drawModeRef.current) {
         return;
       }
 
       if (ignoreNextMapClickRef.current) {
         ignoreNextMapClickRef.current = false;
+        if (clearIgnoreNextMapClickTimeoutRef.current !== null) {
+          window.clearTimeout(clearIgnoreNextMapClickTimeoutRef.current);
+          clearIgnoreNextMapClickTimeoutRef.current = null;
+        }
         return;
       }
 
-      const currentTargetPolygonId = activePolygonIdRef.current ?? selectedPolygonIdRef.current;
+      const insertHit = getInsertHit({
+        x: event.point.x,
+        y: event.point.y
+      });
+      const selectedPolygonId = selectedPolygonIdRef.current;
 
-      if (drawingRef.current) {
-        if (!currentTargetPolygonId) {
+      if (insertHit && selectedPolygonId) {
+        const selectedPolygon = polygonsRef.current.find((polygonState) => polygonState.id === selectedPolygonId);
+        if (selectedPolygon) {
+          const nextPoints = insertPointIntoRing(
+            selectedPolygon.ringPoints,
+            insertHit.insertIndex,
+            insertHit.lngLat
+          );
+          onPolygonRingPointsChangeRef.current(selectedPolygon.id, nextPoints);
+          onSelectionChangeRef.current({
+            kind: 'vertex',
+            polygonId: selectedPolygon.id,
+            index: insertHit.insertIndex
+          });
+          hoveredInsertHitRef.current = null;
+          syncCanvasCursor();
           return;
         }
-
-        onPointAddRef.current(currentTargetPolygonId, [event.lngLat.lng, event.lngLat.lat]);
-        return;
       }
 
       const clickedFeatures = map.queryRenderedFeatures(event.point, {
@@ -208,7 +445,9 @@ export const QuoteMap = ({
       onSelectionChangeRef.current({ kind: 'none' });
     };
 
+    map.on('mousemove', handleMapMouseMove);
     map.on('click', handleMapClick);
+    canvas.addEventListener('mouseleave', clearHoveredInsertHit);
 
     map.on('load', () => {
       const polygonFeatureCollection: FeatureCollection<Polygon> = {
@@ -221,22 +460,6 @@ export const QuoteMap = ({
         features: []
       };
 
-      const centerFeature: FeatureCollection<Point> = {
-        type: 'FeatureCollection',
-        features: [
-          {
-            type: 'Feature',
-            geometry: {
-              type: 'Point',
-              coordinates: centerRef.current
-            },
-            properties: {
-              title: 'Property center'
-            }
-          }
-        ]
-      };
-
       map.addSource(POLYGON_SOURCE_ID, {
         type: 'geojson',
         data: polygonFeatureCollection
@@ -245,11 +468,6 @@ export const QuoteMap = ({
       map.addSource(PATH_SOURCE_ID, {
         type: 'geojson',
         data: pathFeatureCollection
-      });
-
-      map.addSource(CENTER_SOURCE_ID, {
-        type: 'geojson',
-        data: centerFeature
       });
 
       map.addLayer({
@@ -303,28 +521,38 @@ export const QuoteMap = ({
         }
       });
 
-      map.addLayer({
-        id: CENTER_LAYER_ID,
-        source: CENTER_SOURCE_ID,
-        type: 'circle',
-        paint: {
-          'circle-radius': 6,
-          'circle-color': '#ffffff',
-          'circle-stroke-width': 2,
-          'circle-stroke-color': '#329F5B'
-        }
-      });
     });
+
+    centerMarkerRef.current = new mapboxgl.Marker({
+      element: createHomeMarkerElement()
+    })
+      .setLngLat(centerRef.current)
+      .addTo(map);
 
     mapRef.current = map;
 
     return () => {
+      centerMarkerRef.current?.remove();
+      centerMarkerRef.current = null;
       vertexMarkersRef.current.forEach((marker) => marker.remove());
       vertexMarkersRef.current = [];
+      vertexMarkerElementsRef.current = [];
+      canvas.removeEventListener('pointerdown', handlePointerDown);
+      canvas.removeEventListener('mouseleave', clearHoveredInsertHit);
+      window.removeEventListener('pointermove', handlePointerMove);
+      window.removeEventListener('pointerup', handlePointerUp);
+      window.removeEventListener('pointercancel', handlePointerCancel);
+      if (clearIgnoreNextMapClickTimeoutRef.current !== null) {
+        window.clearTimeout(clearIgnoreNextMapClickTimeoutRef.current);
+        clearIgnoreNextMapClickTimeoutRef.current = null;
+      }
+      map.off('zoom', syncVertexMarkerSizes);
+      map.off('mousemove', handleMapMouseMove);
       map.remove();
       mapRef.current = null;
+      syncCanvasCursorRef.current = () => {};
     };
-  }, [token, center]);
+  }, [token]);
 
   useEffect(() => {
     const map = mapRef.current;
@@ -338,27 +566,7 @@ export const QuoteMap = ({
       speed: 1,
       essential: true
     });
-
-    const centerSource = map.getSource(CENTER_SOURCE_ID) as GeoJSONSource | undefined;
-    if (!centerSource) {
-      return;
-    }
-
-    centerSource.setData({
-      type: 'FeatureCollection',
-      features: [
-        {
-          type: 'Feature',
-          geometry: {
-            type: 'Point',
-            coordinates: center
-          },
-          properties: {
-            title: 'Property center'
-          }
-        }
-      ]
-    });
+    centerMarkerRef.current?.setLngLat(center);
   }, [center]);
 
   useEffect(() => {
@@ -373,7 +581,7 @@ export const QuoteMap = ({
         type: 'FeatureCollection',
         features: polygons
           .map((polygonState) => {
-            const feature = buildPolygonFeature(polygonState.points);
+            const feature = buildPolygonFeature(polygonState.ringPoints);
             if (!feature) {
               return null;
             }
@@ -394,18 +602,14 @@ export const QuoteMap = ({
     const pathSource = map.getSource(PATH_SOURCE_ID) as GeoJSONSource | undefined;
     if (pathSource) {
       const activePolygon = polygons.find((polygonState) => polygonState.id === activePolygonId);
-      pathSource.setData(activePathFeatureCollection(activePolygon));
+      pathSource.setData(activePathFeatureCollection(activePolygon, strokePointsRef.current, isStrokeDrawingRef.current ? drawMode : null));
     }
-  }, [polygons, selectedPolygonId, activePolygonId]);
+  }, [polygons, selectedPolygonId, activePolygonId, drawMode]);
 
   useEffect(() => {
-    const map = mapRef.current;
-    if (!map) {
-      return;
-    }
-
-    map.getCanvas().style.cursor = drawing ? 'crosshair' : 'grab';
-  }, [drawing]);
+    hoveredInsertHitRef.current = null;
+    syncCanvasCursorRef.current();
+  }, [drawMode, polygons, selection]);
 
   useEffect(() => {
     const map = mapRef.current;
@@ -421,11 +625,11 @@ export const QuoteMap = ({
     }
 
     const selectedPolygon = polygons.find((polygonState) => polygonState.id === selectedPolygonId);
-    if (!selectedPolygon || selectedPolygon.points.length === 0) {
+    if (!selectedPolygon || selectedPolygon.ringPoints.length === 0) {
       return;
     }
 
-    const markers = selectedPolygon.points.map((point, index) => {
+    const markers = selectedPolygon.ringPoints.map((point, index) => {
       const element = document.createElement('button');
       element.type = 'button';
       element.className = 'rounded-full border-2';
@@ -435,12 +639,7 @@ export const QuoteMap = ({
         selection.polygonId === selectedPolygonId &&
         selection.index === index;
 
-      const markerStyle = markerStyleByKind(selectedPolygon.kind, isSelectedVertex);
-      element.style.width = markerStyle.width;
-      element.style.height = markerStyle.height;
-      element.style.borderColor = markerStyle.borderColor;
-      element.style.backgroundColor = markerStyle.backgroundColor;
-      element.style.boxShadow = markerStyle.boxShadow;
+      applyMarkerStyle(element, selectedPolygon.kind, isSelectedVertex, map.getZoom());
       element.style.cursor = 'grab';
 
       element.setAttribute('aria-label', `Vertex ${index + 1}`);
@@ -455,44 +654,56 @@ export const QuoteMap = ({
       marker.on('dragstart', () => {
         isMarkerDraggingRef.current = true;
         element.style.cursor = 'grabbing';
+        hoveredInsertHitRef.current = null;
+        syncCanvasCursorRef.current();
       });
 
       marker.on('dragend', () => {
         const lngLat = marker.getLngLat();
-        const nextPoints = selectedPolygon.points.map((existingPoint) => [...existingPoint] as LngLat);
+        const nextPoints = selectedPolygon.ringPoints.map((existingPoint) => [...existingPoint] as LngLat);
         nextPoints[index] = [lngLat.lng, lngLat.lat];
-        onPolygonPointsChangeRef.current(selectedPolygonId, nextPoints);
+        onPolygonRingPointsChangeRef.current(selectedPolygonId, nextPoints);
 
-        // Prevent the synthetic post-drag click from accidentally adding a new point.
         ignoreNextMapClickRef.current = true;
+        if (clearIgnoreNextMapClickTimeoutRef.current !== null) {
+          window.clearTimeout(clearIgnoreNextMapClickTimeoutRef.current);
+        }
+        clearIgnoreNextMapClickTimeoutRef.current = window.setTimeout(() => {
+          ignoreNextMapClickRef.current = false;
+          clearIgnoreNextMapClickTimeoutRef.current = null;
+        }, 0);
         isMarkerDraggingRef.current = false;
         element.style.cursor = 'grab';
+        syncCanvasCursorRef.current();
       });
 
       return marker;
     });
 
     vertexMarkersRef.current = markers;
+    vertexMarkerElementsRef.current = markers.map((marker, index) => ({
+      element: marker.getElement() as HTMLButtonElement,
+      kind: selectedPolygon.kind,
+      selected:
+        selection.kind === 'vertex' &&
+        selection.polygonId === selectedPolygonId &&
+        selection.index === index
+    }));
 
     return () => {
       markers.forEach((marker) => marker.remove());
+      vertexMarkerElementsRef.current = [];
     };
   }, [polygons, selection, selectedPolygonId]);
 
-  const selectedPolygonPointCount =
-    selectedPolygonId === null
-      ? 0
-      : polygons.find((polygonState) => polygonState.id === selectedPolygonId)?.points.length ?? 0;
-
   return (
-    <div className="relative h-[430px] w-full overflow-hidden rounded-2xl border border-stroke shadow-soft md:h-[580px]">
+    <div
+      className={cn(
+        'relative h-[430px] w-full overflow-hidden rounded-2xl border border-stroke shadow-soft md:h-[580px]',
+        className
+      )}
+    >
       <div ref={containerRef} className="h-full w-full" />
-
-      {selectedPolygonPointCount > 2 ? (
-        <div className="pointer-events-none absolute bottom-4 left-4 rounded-lg border border-stroke bg-surface/92 px-3 py-2 text-xs text-copy-muted">
-          Polygon closes automatically for geodesic calculations.
-        </div>
-      ) : null}
     </div>
   );
 };

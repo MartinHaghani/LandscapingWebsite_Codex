@@ -24,12 +24,12 @@ export interface QuoteDraftPersistedState {
 }
 
 interface PersistedEnvelope {
-  version: 1;
+  version: 2;
   savedAt: string;
   state: QuoteDraftPersistedState;
 }
 
-export const quoteDraftStorageKey = 'autoscape.quoteDraft.v1';
+export const quoteDraftStorageKey = 'autoscape.quoteDraft.v2';
 
 const isRecord = (value: unknown): value is Record<string, unknown> =>
   typeof value === 'object' && value !== null;
@@ -70,12 +70,20 @@ const isPolygonEditorState = (value: unknown): value is PolygonEditorState => {
     if (
       typeof polygon.id !== 'string' ||
       !isPolygonKind(polygon.kind) ||
-      !Array.isArray(polygon.points)
+      !Array.isArray(polygon.ringPoints)
     ) {
       return false;
     }
 
-    return polygon.points.every((point) => isLngLat(point));
+    if (!polygon.ringPoints.every((point) => isLngLat(point))) {
+      return false;
+    }
+
+    if (!(polygon.rawStrokePoints === null || Array.isArray(polygon.rawStrokePoints))) {
+      return false;
+    }
+
+    return (polygon.rawStrokePoints ?? []).every((point) => isLngLat(point));
   });
 };
 
@@ -140,7 +148,7 @@ const isPersistedState = (value: unknown): value is QuoteDraftPersistedState => 
 
 export const saveQuoteDraftState = (storage: Storage, state: QuoteDraftPersistedState) => {
   const envelope: PersistedEnvelope = {
-    version: 1,
+    version: 2,
     savedAt: new Date().toISOString(),
     state
   };
@@ -160,7 +168,7 @@ export const loadQuoteDraftState = (storage: Storage): QuoteDraftPersistedState 
       return null;
     }
 
-    if (parsed.version !== 1) {
+    if (parsed.version !== 2) {
       return null;
     }
 

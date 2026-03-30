@@ -1,12 +1,13 @@
-import { useAuth } from '@clerk/clerk-react';
 import { useEffect, useMemo, useRef, useState, type FormEvent, type KeyboardEvent } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { QuoteDoneButton } from '../components/quote/QuoteDoneButton';
 import { QuoteMap } from '../components/quote/QuoteMap';
+import { QuoteProgressRail } from '../components/quote/QuoteProgressRail';
+import { Badge } from '../components/ui/Badge';
 import { Button } from '../components/ui/Button';
 import { Card } from '../components/ui/Card';
-import { SectionTitle } from '../components/ui/SectionTitle';
-import { api, ApiError, createIdempotencyKey } from '../lib/api';
-import { getAttributionSnapshot } from '../lib/attribution';
+import { api } from '../lib/api';
+import { cn } from '../lib/cn';
 import { fetchAddressSuggestions } from '../lib/geocoding';
 import { formatNumber, toFt, toFt2 } from '../lib/geometry';
 import { computeMultiPolygonMetrics } from '../lib/multiPolygonMetrics';
@@ -17,16 +18,15 @@ import {
   undoPolygonEdit
 } from '../lib/polygonHistory';
 import {
+  deleteVertexOrPolygonFromEditorState,
+  removePolygonFromEditorState
+} from '../lib/polygonEditing';
+import {
   canContinueToMapStep,
+  canSubmitQuoteDraft,
   getCoverageGateDestination,
   getSubmissionStatus
 } from '../lib/quoteFlow';
-import {
-  getQuoteTotal,
-  getRecommendedPlan,
-  getSeasonalPricing,
-  quotePricing
-} from '../lib/quote';
 import {
   clearQuoteDraftState,
   loadQuoteDraftState,
@@ -73,10 +73,8 @@ const createPolygonId = () => {
 
 export const InstantQuotePage = () => {
   const navigate = useNavigate();
-  const { getToken } = useAuth();
   const polygonCounterRef = useRef(0);
   const mapStepRef = useRef<HTMLDivElement | null>(null);
-  const attributionRef = useRef(getAttributionSnapshot());
   const restoredFromStorageRef = useRef(false);
 
   const [addressInput, setAddressInput] = useState('');
@@ -90,13 +88,13 @@ export const InstantQuotePage = () => {
   const [polygonHistory, setPolygonHistory] = useState(() =>
     createPolygonHistory(EMPTY_EDITOR_STATE)
   );
-  const [drawing, setDrawing] = useState(false);
+  const [drawMode, setDrawMode] = useState<PolygonKind | null>(null);
+  const [clearAllConfirmation, setClearAllConfirmation] = useState(false);
   const [selection, setSelection] = useState<SelectionTarget>({ kind: 'none' });
   const [unitMode, setUnitMode] = useState<UnitMode>('metric');
   const [serviceFrequency, setServiceFrequency] = useState<ServiceFrequency>('weekly');
   const [billingMode, setBillingMode] = useState<BillingMode>('seasonal');
   const [distanceToNearestStationKm, setDistanceToNearestStationKm] = useState(0);
-  const [submitting, setSubmitting] = useState(false);
   const [statusMessage, setStatusMessage] = useState<{
     type: 'error' | 'info';
     text: string;
@@ -105,21 +103,8 @@ export const InstantQuotePage = () => {
   const editorState = polygonHistory.present;
   const polygons = editorState.polygons;
   const activePolygonId = editorState.activePolygonId;
-  const activePolygon = polygons.find((polygon) => polygon.id === activePolygonId) ?? null;
 
   const metrics = useMemo(() => computeMultiPolygonMetrics(polygons), [polygons]);
-  const recommendedPlan = useMemo(() => getRecommendedPlan(metrics.areaM2), [metrics.areaM2]);
-  const safeDistanceToNearestStationKm = Number.isFinite(distanceToNearestStationKm)
-    ? distanceToNearestStationKm
-    : 0;
-  const quoteTotal = useMemo(
-    () => getQuoteTotal(metrics, safeDistanceToNearestStationKm),
-    [metrics, safeDistanceToNearestStationKm]
-  );
-  const seasonalPricing = useMemo(
-    () => getSeasonalPricing(quoteTotal, serviceFrequency),
-    [quoteTotal, serviceFrequency]
-  );
   const canUndo = polygonHistory.past.length > 0;
   const canRedo = polygonHistory.future.length > 0;
   const canContinueToMap = canContinueToMapStep({
@@ -134,19 +119,13 @@ export const InstantQuotePage = () => {
     selfIntersecting: metrics.selfIntersecting,
     effectiveGeometryEmpty: metrics.effectiveGeometryEmpty
   });
-
-  const canSubmit =
-    selectedAddress.trim().length > 0 &&
-    metrics.validServicePolygonCount > 0 &&
-    metrics.geometry !== null &&
-    !metrics.selfIntersecting &&
-    !metrics.effectiveGeometryEmpty &&
-    !submitting;
-
-  const activePolygonSummary =
-    activePolygon === null
-      ? 'None selected'
-      : `${activePolygon.kind === 'service' ? 'Service' : 'Obstacle'} (${activePolygon.points.length} points)`;
+  const canContinueToReview = canSubmitQuoteDraft({
+    selectedAddress,
+    validServicePolygonCount: metrics.validServicePolygonCount,
+    hasGeometry: metrics.geometry !== null,
+    selfIntersecting: metrics.selfIntersecting,
+    effectiveGeometryEmpty: metrics.effectiveGeometryEmpty
+  });
 
   useEffect(() => {
     const trimmed = addressInput.trim();
@@ -225,7 +204,7 @@ export const InstantQuotePage = () => {
     setBillingMode(restoredState.billingMode);
     setDistanceToNearestStationKm(restoredState.distanceToNearestStationKm);
     setUnitMode(restoredState.unitMode);
-    setDrawing(false);
+    setDrawMode(null);
     setSelection({ kind: 'none' });
     restoredFromStorageRef.current = true;
     setStatusMessage({
@@ -276,7 +255,8 @@ export const InstantQuotePage = () => {
 
   const clearEditorForNewAddress = () => {
     setPolygonHistory(createPolygonHistory(EMPTY_EDITOR_STATE));
-    setDrawing(false);
+    setDrawMode(null);
+    setClearAllConfirmation(false);
     setSelection({ kind: 'none' });
     setDistanceToNearestStationKm(0);
   };
@@ -403,7 +383,8 @@ export const InstantQuotePage = () => {
 
   const goToAddressStep = () => {
     setCurrentStep('address');
-    setDrawing(false);
+    setDrawMode(null);
+    setClearAllConfirmation(false);
     setSelection({ kind: 'none' });
   };
 
@@ -444,7 +425,8 @@ export const InstantQuotePage = () => {
   const clearAllGeometry = () => {
     setPolygonHistory(createPolygonHistory(EMPTY_EDITOR_STATE));
     setSelection({ kind: 'none' });
-    setDrawing(false);
+    setDrawMode(null);
+    setClearAllConfirmation(false);
     setStatusMessage({
       type: 'info',
       text: 'All mapped polygons were cleared.'
@@ -460,7 +442,8 @@ export const InstantQuotePage = () => {
     setCenter(DEFAULT_CENTER);
     setCurrentStep('address');
     setPolygonHistory(createPolygonHistory(EMPTY_EDITOR_STATE));
-    setDrawing(false);
+    setDrawMode(null);
+    setClearAllConfirmation(false);
     setSelection({ kind: 'none' });
     setUnitMode('metric');
     setServiceFrequency('weekly');
@@ -481,7 +464,9 @@ export const InstantQuotePage = () => {
   const applyPolygonPointsEdit = (polygonId: string, nextPoints: LngLat[]) => {
     setPolygonHistory((current) => {
       const nextPolygons = current.present.polygons.map((polygon) =>
-        polygon.id === polygonId ? { ...polygon, points: nextPoints } : polygon
+        polygon.id === polygonId
+          ? { ...polygon, ringPoints: nextPoints, rawStrokePoints: null }
+          : polygon
       );
 
       return applyPolygonEdit(current, {
@@ -493,26 +478,35 @@ export const InstantQuotePage = () => {
     setStatusMessage(null);
   };
 
-  const addPolygonByKind = (kind: PolygonKind) => {
+  const createDrawnPolygon = (kind: PolygonKind, ringPoints: LngLat[], rawStrokePoints: LngLat[]) => {
     polygonCounterRef.current += 1;
     const polygonId = `${createPolygonId()}-${polygonCounterRef.current}`;
 
     setPolygonHistory((current) =>
       applyPolygonEdit(current, {
-        polygons: [...current.present.polygons, { id: polygonId, kind, points: [] }],
+        polygons: [
+          ...current.present.polygons,
+          { id: polygonId, kind, ringPoints, rawStrokePoints }
+        ],
         activePolygonId: polygonId
       })
     );
 
     setSelection({ kind: 'polygon', polygonId });
-    setDrawing(true);
+    setDrawMode(null);
+    setClearAllConfirmation(false);
     setStatusMessage(null);
   };
 
-  const addServicePolygon = () => addPolygonByKind('service');
-  const addObstaclePolygon = () => addPolygonByKind('obstacle');
+  const toggleDrawMode = (nextKind: PolygonKind) => {
+    setClearAllConfirmation(false);
+    setSelection({ kind: 'none' });
+    setStatusMessage(null);
+    setDrawMode((current) => (current === nextKind ? null : nextKind));
+  };
 
   const handleMapSelectionChange = (nextSelection: SelectionTarget) => {
+    setClearAllConfirmation(false);
     setSelection(nextSelection);
 
     if (nextSelection.kind !== 'none') {
@@ -522,36 +516,27 @@ export const InstantQuotePage = () => {
 
   const handleUndo = () => {
     setPolygonHistory((current) => undoPolygonEdit(current));
+    setClearAllConfirmation(false);
     setSelection({ kind: 'none' });
     setStatusMessage(null);
   };
 
   const handleRedo = () => {
     setPolygonHistory((current) => redoPolygonEdit(current));
+    setClearAllConfirmation(false);
     setSelection({ kind: 'none' });
     setStatusMessage(null);
   };
 
   const handleDeleteSelection = () => {
+    setClearAllConfirmation(false);
     if (selection.kind === 'none') {
       return;
     }
 
     if (selection.kind === 'polygon') {
       setPolygonHistory((current) => {
-        const nextPolygons = current.present.polygons.filter(
-          (polygon) => polygon.id !== selection.polygonId
-        );
-        const nextActivePolygonId = nextPolygons.some(
-          (polygon) => polygon.id === current.present.activePolygonId
-        )
-          ? current.present.activePolygonId
-          : (nextPolygons[0]?.id ?? null);
-
-        return applyPolygonEdit(current, {
-          polygons: nextPolygons,
-          activePolygonId: nextActivePolygonId
-        });
+        return applyPolygonEdit(current, removePolygonFromEditorState(current.present, selection.polygonId));
       });
       setSelection({ kind: 'none' });
       setStatusMessage(null);
@@ -564,11 +549,24 @@ export const InstantQuotePage = () => {
       return;
     }
 
-    applyPolygonPointsEdit(
-      selection.polygonId,
-      selectedPolygon.points.filter((_, index) => index !== selection.index)
+    setPolygonHistory((current) =>
+      applyPolygonEdit(
+        current,
+        deleteVertexOrPolygonFromEditorState(current.present, selection.polygonId, selection.index)
+      )
     );
     setSelection({ kind: 'none' });
+    setStatusMessage(null);
+  };
+
+  const handleClearAll = () => {
+    if (!clearAllConfirmation) {
+      setClearAllConfirmation(true);
+      setStatusMessage(null);
+      return;
+    }
+
+    clearAllGeometry();
   };
 
   useEffect(() => {
@@ -584,7 +582,7 @@ export const InstantQuotePage = () => {
 
     if (
       selection.kind === 'vertex' &&
-      (selection.index < 0 || selection.index >= selectedPolygon.points.length)
+      (selection.index < 0 || selection.index >= selectedPolygon.ringPoints.length)
     ) {
       setSelection({ kind: 'none' });
     }
@@ -601,63 +599,48 @@ export const InstantQuotePage = () => {
     }
   }, [activePolygonId, polygons]);
 
-  const handleSubmitQuote = async () => {
-    if (!canSubmit || !metrics.geometry) {
+  useEffect(() => {
+    if (!clearAllConfirmation) {
       return;
     }
 
-    setSubmitting(true);
-    setStatusMessage(null);
+    const timeout = window.setTimeout(() => {
+      setClearAllConfirmation(false);
+    }, 3000);
 
-    try {
-      const authToken = await getToken();
-      const response = await api.submitQuoteDraft(
-        {
-          address: selectedAddress,
-          location: {
-            lat: center[1],
-            lng: center[0]
-          },
-          polygon: metrics.geometry,
-          polygonSource: {
-            schemaVersion: 1,
-            activePolygonId: editorState.activePolygonId,
-            polygons: editorState.polygons.map((polygonState) => ({
-              id: polygonState.id,
-              kind: polygonState.kind,
-              points: polygonState.points
-            }))
-          },
-          metrics: {
-            areaM2: metrics.areaM2,
-            perimeterM: metrics.perimeterM
-          },
-          plan: recommendedPlan,
-          quoteTotal,
-          baseTotal: quotePricing.baseFee,
-          pricingVersion: 'v1',
-          currency: 'CAD',
-          serviceFrequency,
-          billingMode,
-          attribution: attributionRef.current
-        },
-        createIdempotencyKey(),
-        authToken ?? undefined
-      );
+    return () => window.clearTimeout(timeout);
+  }, [clearAllConfirmation]);
 
-      if (typeof window !== 'undefined') {
-        clearQuoteDraftState(window.localStorage);
-      }
-
-      navigate(response.nextStepUrl ?? `/quote-contact/${response.quoteId}`);
-    } catch (error) {
-      setStatusMessage({
-        type: 'error',
-        text: error instanceof ApiError ? error.message : 'Quote request failed.'
-      });
-    } finally {
-      setSubmitting(false);
+  const persistCurrentDraft = () => {
+    if (typeof window === 'undefined') {
+      return;
     }
+
+    saveQuoteDraftState(window.localStorage, {
+      addressInput,
+      selectedAddress,
+      selectedAddressKey,
+      center,
+      currentStep: 'map',
+      polygonHistory,
+      serviceFrequency,
+      billingMode,
+      distanceToNearestStationKm,
+      unitMode
+    });
+  };
+
+  const handleContinueToReview = () => {
+    if (!canContinueToReview) {
+      return;
+    }
+
+    setDrawMode(null);
+    setClearAllConfirmation(false);
+    setSelection({ kind: 'none' });
+    setStatusMessage(null);
+    persistCurrentDraft();
+    navigate('/instant-quote/summary');
   };
 
   const areaValue =
@@ -668,43 +651,17 @@ export const InstantQuotePage = () => {
     unitMode === 'metric'
       ? `${formatNumber(metrics.perimeterM)} m`
       : `${formatNumber(toFt(metrics.perimeterM))} ft`;
+  const isServiceDrawMode = drawMode === 'service';
+  const isObstacleDrawMode = drawMode === 'obstacle';
 
   return (
     <div className="mx-auto w-full max-w-[1440px] px-4 py-12 md:px-8 md:py-16">
-      <SectionTitle
-        badge="Instant Quote"
-        title="Map your property and generate a quote instantly"
-        description="No sign-up required to build your draft quote."
-      />
-
-      <div className="mt-8 grid gap-4 md:grid-cols-2">
-        <Card
-          className={`border transition-all ${
-            currentStep === 'address'
-              ? 'border-brand/70 bg-brand/15 ring-2 ring-brand/30'
-              : 'border-stroke bg-surface text-copy-muted'
-          }`}
-        >
-          <p className="text-xs uppercase tracking-[0.14em] text-copy-muted">Step 1</p>
-          <p className="mt-2 text-lg font-semibold text-ink">Enter address</p>
-          <p className="mt-1 text-sm text-copy-muted">
-            Select a property address to lock the map center.
-          </p>
-        </Card>
-        <Card
-          className={`border transition-all ${
-            currentStep === 'map'
-              ? 'border-brand/70 bg-brand/15 ring-2 ring-brand/30'
-              : 'border-stroke bg-surface text-copy-muted'
-          }`}
-        >
-          <p className="text-xs uppercase tracking-[0.14em] text-copy-muted">Step 2</p>
-          <p className="mt-2 text-lg font-semibold text-ink">Map your lawn</p>
-          <p className="mt-1 text-sm text-copy-muted">
-            Draw service polygons and obstacles, then request your quote.
-          </p>
-        </Card>
+      <div className="max-w-4xl">
+        <Badge>Instant Quote</Badge>
+        <h1 className="sr-only">Instant Quote</h1>
       </div>
+
+      <QuoteProgressRail currentStep={currentStep} />
 
       {currentStep === 'address' ? (
         <div className="relative isolate z-50 mt-8 grid gap-6">
@@ -767,7 +724,7 @@ export const InstantQuotePage = () => {
                   disabled={!canContinueToMap}
                   className="shrink-0 whitespace-nowrap px-5 py-3"
                 >
-                  Continue to Step 2
+                  Continue to Map
                 </Button>
               </div>
             </form>
@@ -803,18 +760,17 @@ export const InstantQuotePage = () => {
         </div>
       ) : (
         <div ref={mapStepRef} className="mt-8 grid gap-6">
-          <Card className="flex flex-col gap-4 bg-surface md:flex-row md:items-center md:justify-between">
-            <div>
-              <p className="text-xs uppercase tracking-[0.14em] text-brand">
-                Step 2: Map your lawn
-              </p>
-              <p className="mt-2 text-sm text-copy-muted">Address locked to map center:</p>
-              <p className="mt-1 text-base text-ink">{selectedAddress}</p>
-            </div>
-            <Button type="button" variant="secondary" onClick={goToAddressStep}>
+          <div className="flex items-center justify-between gap-3 rounded-full border border-stroke/80 bg-surface/70 px-4 py-2 text-sm shadow-soft">
+            <p className="min-w-0 truncate text-copy-muted">{selectedAddress}</p>
+            <Button
+              type="button"
+              variant="ghost"
+              onClick={goToAddressStep}
+              className="min-h-0 shrink-0 px-3 py-1.5 text-xs uppercase tracking-[0.14em]"
+            >
               Change Address
             </Button>
-          </Card>
+          </div>
 
           {!MAPBOX_TOKEN ? (
             <Card className="border-red-300/70 bg-red-50">
@@ -823,101 +779,94 @@ export const InstantQuotePage = () => {
               </p>
             </Card>
           ) : (
-            <div className="grid gap-6 xl:grid-cols-[1.35fr_0.65fr]">
-              <div className="space-y-4">
-                <Card className="bg-surface">
-                  <p className="text-sm text-copy-muted">
-                    Click to add points around the area you want serviced. Drag any vertex at any
-                    time to refine the boundary, then use on-map tools to add service polygons, add
-                    obstacles, undo, redo, or delete selected geometry.
-                  </p>
+            <div className="space-y-4">
+              {metrics.selfIntersecting ? (
+                <p className="status-error">Overlapping boundary edges detected. Adjust vertices to continue.</p>
+              ) : null}
 
-                  {metrics.selfIntersecting ? (
-                    <p className="status-error mt-4">
-                      Overlapping boundary edges detected. Adjust vertices to continue.
-                    </p>
-                  ) : null}
+              {metrics.effectiveGeometryEmpty ? (
+                <p className="status-error">Obstacles remove the entire service area. Adjust boundaries to continue.</p>
+              ) : null}
 
-                  {metrics.effectiveGeometryEmpty ? (
-                    <p className="status-error mt-4">
-                      Obstacles remove the entire service area. Adjust boundaries to continue.
-                    </p>
-                  ) : null}
-                </Card>
+              <div className="relative">
+                <QuoteMap
+                  token={MAPBOX_TOKEN}
+                  center={center}
+                  drawMode={drawMode}
+                  selection={selection}
+                  polygons={polygons}
+                  activePolygonId={activePolygonId}
+                  className="h-[68vh] min-h-[460px] md:h-[74vh] md:min-h-[620px]"
+                  onPolygonDrawn={(kind, shape) => {
+                    createDrawnPolygon(kind, shape.ringPoints, shape.rawStrokePoints);
+                  }}
+                  onPolygonRingPointsChange={(polygonId, nextPoints) => {
+                    applyPolygonPointsEdit(polygonId, nextPoints);
+                  }}
+                  onSelectionChange={handleMapSelectionChange}
+                />
 
-                <div className="relative">
-                  <QuoteMap
-                    token={MAPBOX_TOKEN}
-                    center={center}
-                    drawing={drawing}
-                    selection={selection}
-                    polygons={polygons}
-                    activePolygonId={activePolygonId}
-                    onPointAdd={(polygonId, point) => {
-                      const targetPolygon = polygons.find((polygon) => polygon.id === polygonId);
-                      if (!targetPolygon) {
-                        return;
-                      }
-
-                      applyPolygonPointsEdit(polygonId, [...targetPolygon.points, point]);
-
-                      if (selection.kind === 'none') {
-                        setSelection({ kind: 'polygon', polygonId });
-                      }
-                    }}
-                    onPolygonPointsChange={(polygonId, nextPoints) => {
-                      applyPolygonPointsEdit(polygonId, nextPoints);
-                    }}
-                    onSelectionChange={handleMapSelectionChange}
-                  />
-
-                  <div
-                    className="absolute z-20 w-full px-3"
-                    style={{
-                      top: '0.75rem',
-                      left: '50%',
-                      transform: 'translateX(-50%)',
-                      pointerEvents: 'none'
-                    }}
-                  >
-                    <div
-                      className="mx-auto flex flex-wrap items-center justify-center gap-2 rounded-2xl border border-stroke bg-surface/95 px-3 py-2 shadow-soft backdrop-blur-sm"
-                      style={{
-                        width: 'max-content',
-                        maxWidth: '100%',
-                        pointerEvents: 'auto'
-                      }}
+                <div className="absolute left-3 top-3 z-20 rounded-2xl border border-stroke bg-surface/95 p-2 shadow-soft backdrop-blur-sm">
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={handleUndo}
+                      disabled={!canUndo}
+                      aria-label="Undo"
+                      className="inline-flex h-10 w-10 items-center justify-center rounded-full border border-stroke bg-surface text-lg text-ink transition-colors hover:border-brand disabled:cursor-not-allowed disabled:opacity-40"
                     >
-                      <Button
-                        variant={drawing ? 'secondary' : 'primary'}
-                        onClick={() => setDrawing((current) => !current)}
-                        disabled={activePolygonId === null}
-                      >
-                        {drawing ? 'Stop Drawing' : 'Start Drawing'}
-                      </Button>
-                      <Button variant="secondary" onClick={addServicePolygon}>
-                        Add Polygon
-                      </Button>
-                      <Button
-                        variant="secondary"
-                        onClick={addObstaclePolygon}
-                        className="border-red-300/70 text-red-700 hover:border-red-400 hover:text-red-800"
-                      >
-                        Add Obstacle
-                      </Button>
-                      <Button
-                        variant="secondary"
-                        onClick={clearAllGeometry}
-                        disabled={polygons.length === 0}
-                      >
-                        Clear All
-                      </Button>
-                      <Button variant="secondary" onClick={handleUndo} disabled={!canUndo}>
-                        Undo
-                      </Button>
-                      <Button variant="secondary" onClick={handleRedo} disabled={!canRedo}>
-                        Redo
-                      </Button>
+                      <span aria-hidden="true">&larr;</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={handleRedo}
+                      disabled={!canRedo}
+                      aria-label="Redo"
+                      className="inline-flex h-10 w-10 items-center justify-center rounded-full border border-stroke bg-surface text-lg text-ink transition-colors hover:border-brand disabled:cursor-not-allowed disabled:opacity-40"
+                    >
+                      <span aria-hidden="true">&rarr;</span>
+                    </button>
+                  </div>
+                </div>
+
+                <div className="absolute right-3 top-3 z-20">
+                  <QuoteDoneButton
+                    onClick={handleContinueToReview}
+                    disabled={!canContinueToReview}
+                  />
+                </div>
+
+                <div
+                  className="absolute inset-x-0 top-20 z-20 px-3 md:top-3"
+                  style={{ pointerEvents: 'none' }}
+                >
+                  <div
+                    className="mx-auto flex w-fit max-w-full flex-wrap items-center justify-center gap-2 rounded-2xl border border-stroke bg-surface/95 px-3 py-2 shadow-soft backdrop-blur-sm"
+                    style={{ pointerEvents: 'auto' }}
+                  >
+                    <Button
+                      variant={isServiceDrawMode ? 'primary' : 'secondary'}
+                      onClick={() => toggleDrawMode('service')}
+                      className={cn(
+                        isServiceDrawMode &&
+                          'border-brand bg-brand text-ink shadow-[0_0_0_2px_rgba(50,159,91,0.22)]'
+                      )}
+                    >
+                      {isServiceDrawMode ? 'Stop drawing' : 'Draw lawn'}
+                    </Button>
+                    <Button
+                      variant={isObstacleDrawMode ? 'primary' : 'secondary'}
+                      onClick={() => toggleDrawMode('obstacle')}
+                      className={cn(
+                        isObstacleDrawMode
+                          ? 'border-red-500 bg-red-600 text-white shadow-[0_0_0_2px_rgba(220,38,38,0.2)] hover:bg-red-700'
+                          : 'border-red-300/70 text-red-700 hover:border-red-400 hover:text-red-800'
+                      )}
+                    >
+                      {isObstacleDrawMode ? 'Stop drawing' : 'Draw obstacle'}
+                    </Button>
+                    <div className="mx-1 h-8 w-px bg-stroke" />
+                    <div className="flex items-center gap-2">
                       <Button
                         variant="secondary"
                         onClick={handleDeleteSelection}
@@ -928,204 +877,89 @@ export const InstantQuotePage = () => {
                             : 'border-red-300/70 text-red-700 hover:border-red-400 hover:text-red-800'
                         }
                       >
-                        <span className="mr-2 inline-flex h-5 w-5 items-center justify-center rounded-full border border-red-300/70 bg-red-100 text-xs font-bold leading-none text-red-700">
-                          X
-                        </span>
                         Delete
+                      </Button>
+                      <Button
+                        variant={clearAllConfirmation ? 'primary' : 'secondary'}
+                        onClick={handleClearAll}
+                        disabled={polygons.length === 0}
+                        className={
+                          clearAllConfirmation
+                            ? 'border-red-500 bg-red-600 text-white hover:border-red-500 hover:bg-red-700'
+                            : 'border-red-300/70 text-red-700 hover:border-red-400 hover:text-red-800'
+                        }
+                      >
+                        {clearAllConfirmation ? 'Confirm clear all' : 'Clear all'}
                       </Button>
                     </div>
                   </div>
                 </div>
               </div>
 
-              <Card className="h-fit bg-surface xl:sticky xl:top-24">
-                <p className="text-xs uppercase tracking-[0.17em] text-brand">Quote Summary</p>
-                <h3 className="mt-2 text-2xl font-semibold text-ink">Recommended Plan</h3>
-                <p className="mt-2 text-sm text-copy-muted">{recommendedPlan}</p>
-
-                <div className="mt-5 inline-flex overflow-hidden rounded-full border border-stroke">
-                  <button
-                    type="button"
-                    onClick={() => setUnitMode('metric')}
-                    className={`px-4 py-2 text-xs font-semibold uppercase tracking-[0.12em] transition-colors ${
-                      unitMode === 'metric' ? 'bg-brand text-ink' : 'bg-transparent text-copy-muted'
-                    }`}
-                  >
-                    Metric
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setUnitMode('imperial')}
-                    className={`px-4 py-2 text-xs font-semibold uppercase tracking-[0.12em] transition-colors ${
-                      unitMode === 'imperial'
-                        ? 'bg-brand text-ink'
-                        : 'bg-transparent text-copy-muted'
-                    }`}
-                  >
-                    Imperial
-                  </button>
-                </div>
-
-                <div className="mt-6 space-y-3 text-sm text-copy-muted">
-                  <div className="flex items-center justify-between">
-                    <span>Area</span>
-                    <span>{areaValue}</span>
+              <Card className="bg-surface">
+                <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+                  <div className="grid flex-1 gap-3 text-sm text-copy-muted sm:grid-cols-2 xl:grid-cols-4">
+                    <div className="rounded-2xl border border-stroke bg-surface-raised px-4 py-3">
+                      <p className="text-xs uppercase tracking-[0.12em] text-copy-muted">Area</p>
+                      <p className="mt-2 text-base font-semibold text-ink">{areaValue}</p>
+                    </div>
+                    <div className="rounded-2xl border border-stroke bg-surface-raised px-4 py-3">
+                      <p className="text-xs uppercase tracking-[0.12em] text-copy-muted">Perimeter</p>
+                      <p className="mt-2 text-base font-semibold text-ink">{perimeterValue}</p>
+                    </div>
+                    <div className="rounded-2xl border border-stroke bg-surface-raised px-4 py-3">
+                      <p className="text-xs uppercase tracking-[0.12em] text-copy-muted">Lawn shapes</p>
+                      <p className="mt-2 text-base font-semibold text-ink">
+                        {metrics.validServicePolygonCount} valid / {servicePolygons.length}
+                      </p>
+                    </div>
+                    <div className="rounded-2xl border border-stroke bg-surface-raised px-4 py-3">
+                      <p className="text-xs uppercase tracking-[0.12em] text-copy-muted">Obstacle shapes</p>
+                      <p className="mt-2 text-base font-semibold text-ink">
+                        {metrics.validObstaclePolygonCount} valid / {obstaclePolygons.length}
+                      </p>
+                    </div>
                   </div>
-                  <div className="flex items-center justify-between">
-                    <span>Perimeter</span>
-                    <span>{perimeterValue}</span>
-                  </div>
-                  <div className="flex items-center justify-between">
-                    <span>Base fee</span>
-                    <span>${quotePricing.baseFee.toFixed(2)}</span>
-                  </div>
-                </div>
 
-                <div className="mt-5">
-                  <p className="text-xs uppercase tracking-[0.12em] text-copy-muted">
-                    Service frequency
-                  </p>
-                  <div className="mt-2 inline-flex overflow-hidden rounded-full border border-stroke">
+                  <div className="flex flex-wrap items-center gap-3">
+                    <div className="inline-flex overflow-hidden rounded-full border border-stroke">
+                      <button
+                        type="button"
+                        onClick={() => setUnitMode('metric')}
+                        className={`px-4 py-2 text-xs font-semibold uppercase tracking-[0.12em] transition-colors ${
+                          unitMode === 'metric'
+                            ? 'bg-brand text-ink'
+                            : 'bg-transparent text-copy-muted'
+                        }`}
+                      >
+                        Metric
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setUnitMode('imperial')}
+                        className={`px-4 py-2 text-xs font-semibold uppercase tracking-[0.12em] transition-colors ${
+                          unitMode === 'imperial'
+                            ? 'bg-brand text-ink'
+                            : 'bg-transparent text-copy-muted'
+                        }`}
+                      >
+                        Imperial
+                      </button>
+                    </div>
                     <button
                       type="button"
-                      onClick={() => setServiceFrequency('weekly')}
-                      className={`px-4 py-2 text-xs font-semibold uppercase tracking-[0.12em] transition-colors ${
-                        serviceFrequency === 'weekly'
-                          ? 'bg-brand text-ink'
-                          : 'bg-transparent text-copy-muted'
-                      }`}
+                      onClick={resetQuoteDraft}
+                      className="inline-flex items-center text-xs font-semibold uppercase tracking-[0.12em] text-copy-muted transition-colors hover:text-brand"
                     >
-                      Weekly
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setServiceFrequency('biweekly')}
-                      className={`px-4 py-2 text-xs font-semibold uppercase tracking-[0.12em] transition-colors ${
-                        serviceFrequency === 'biweekly'
-                          ? 'bg-brand text-ink'
-                          : 'bg-transparent text-copy-muted'
-                      }`}
-                    >
-                      Bi-weekly
+                      Reset Saved Draft
                     </button>
                   </div>
                 </div>
 
-                <div className="mt-5">
-                  <p className="text-xs uppercase tracking-[0.12em] text-copy-muted">Billing plan</p>
-                  <div className="mt-2 grid grid-cols-2 gap-2 rounded-xl border border-stroke bg-surface p-1">
-                    <button
-                      type="button"
-                      onClick={() => setBillingMode('seasonal')}
-                      className={`rounded-lg px-3 py-2 text-xs font-semibold uppercase tracking-[0.1em] transition-colors ${
-                        billingMode === 'seasonal'
-                          ? 'bg-brand text-ink'
-                          : 'text-copy-muted hover:bg-brand/10'
-                      }`}
-                    >
-                      Seasonal
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setBillingMode('per_session')}
-                      className={`rounded-lg px-3 py-2 text-xs font-semibold uppercase tracking-[0.1em] transition-colors ${
-                        billingMode === 'per_session'
-                          ? 'bg-brand text-ink'
-                          : 'text-copy-muted hover:bg-brand/10'
-                      }`}
-                    >
-                      Per Session
-                    </button>
-                  </div>
+                <div className="mt-4 flex flex-col gap-3 text-sm text-copy-muted md:flex-row md:items-center md:justify-between">
+                  <p>Status: {submissionStatus}</p>
+                  <p>Draft progress is auto-saved in this browser.</p>
                 </div>
-
-                <a
-                  href="/how-rate-is-calculated"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="mt-4 inline-block text-sm font-semibold text-brand underline underline-offset-4 hover:text-brand/85"
-                >
-                  How the rate is calculated
-                </a>
-
-                <div
-                  className={`mt-6 rounded-2xl border px-4 py-4 ${
-                    billingMode === 'seasonal'
-                      ? 'border-brand/60 bg-brand/15 shadow-[0_0_0_1px_rgba(50,159,91,0.35)]'
-                      : 'border-stroke bg-surface'
-                  }`}
-                >
-                  <div className="flex items-center justify-between gap-3">
-                    <p className="text-xs uppercase tracking-[0.15em] text-brand">Seasonal (Default)</p>
-                    <span className="rounded-full border border-brand/50 bg-brand/10 px-2 py-1 text-[11px] font-semibold text-brand">
-                      20% OFF
-                    </span>
-                  </div>
-                  <p className="mt-2 text-3xl font-bold text-ink">
-                    ${seasonalPricing.seasonalDiscountedTotal.toFixed(2)}
-                  </p>
-                  <p className="mt-1 text-sm text-copy-muted">
-                    <span className="line-through">${seasonalPricing.fullSeasonTotal.toFixed(2)}</span>{' '}
-                    full season price
-                  </p>
-                  <p className="mt-1 text-sm text-brand">
-                    You save ${seasonalPricing.seasonalSavingsTotal.toFixed(2)} this season
-                  </p>
-                  <p className="mt-2 text-xs text-copy-muted">
-                    {seasonalPricing.sessionsMax} sessions per season ({serviceFrequency === 'weekly' ? 'weekly service' : 'bi-weekly service'}).
-                  </p>
-                  <p className="mt-1 text-xs text-copy-muted">
-                    Charged once for the full season after confirmation. Full refund available up to 24h after your first session.
-                  </p>
-                </div>
-
-                <div
-                  className={`mt-3 rounded-2xl border px-4 py-4 ${
-                    billingMode === 'per_session'
-                      ? 'border-brand/60 bg-brand/15 shadow-[0_0_0_1px_rgba(50,159,91,0.35)]'
-                      : 'border-stroke bg-surface'
-                  }`}
-                >
-                  <p className="text-xs uppercase tracking-[0.15em] text-brand">Per Session</p>
-                  <p className="mt-2 text-2xl font-semibold text-ink">${quoteTotal.toFixed(2)}</p>
-                  <p className="mt-1 text-sm text-copy-muted">
-                    Full season total: ${seasonalPricing.fullSeasonTotal.toFixed(2)} ({seasonalPricing.sessionsMax} sessions)
-                  </p>
-                  <p className="mt-1 text-xs text-copy-muted">
-                    Billed after each completed visit at the per-session rate.
-                  </p>
-                  <p className="mt-1 text-xs text-copy-muted">Cancel anytime on the per-session plan.</p>
-                </div>
-
-                <div className="mt-6 space-y-3 text-sm text-copy-muted">
-                  <p>Address: {selectedAddress}</p>
-                  <p>Cadence: {serviceFrequency === 'weekly' ? 'Weekly' : 'Bi-weekly'}</p>
-                  <p>
-                    Seasonal price shown above includes a {(seasonalPricing.seasonalDiscountRate * 100).toFixed(0)}%
-                    {' '}discount from full season pricing.
-                  </p>
-                  <p>
-                    Service polygons: {metrics.validServicePolygonCount} valid /{' '}
-                    {servicePolygons.length} total
-                  </p>
-                  <p>
-                    Obstacle polygons: {metrics.validObstaclePolygonCount} valid /{' '}
-                    {obstaclePolygons.length} total
-                  </p>
-                  <p>Active polygon: {activePolygonSummary}</p>
-                  <p>Submission status: {submissionStatus}</p>
-                </div>
-
-                <p className="mt-4 text-xs text-copy-muted">
-                  Draft progress is auto-saved in this browser.
-                </p>
-                <button
-                  type="button"
-                  onClick={resetQuoteDraft}
-                  className="mt-2 inline-flex items-center text-xs font-semibold uppercase tracking-[0.12em] text-copy-muted transition-colors hover:text-brand"
-                >
-                  Reset Saved Draft
-                </button>
 
                 {statusMessage ? (
                   <p
@@ -1138,10 +972,6 @@ export const InstantQuotePage = () => {
                     {statusMessage.text}
                   </p>
                 ) : null}
-
-                <Button className="mt-6 w-full" onClick={handleSubmitQuote} disabled={!canSubmit}>
-                  {submitting ? 'Saving Quote Draft...' : 'Continue to Contact Details'}
-                </Button>
               </Card>
             </div>
           )}

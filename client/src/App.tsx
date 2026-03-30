@@ -9,6 +9,11 @@ const ContactPage = lazy(() => import('./pages/ContactPage').then((module) => ({
 const InstantQuotePage = lazy(() =>
   import('./pages/InstantQuotePage').then((module) => ({ default: module.InstantQuotePage }))
 );
+const InstantQuoteSummaryPage = lazy(() =>
+  import('./pages/InstantQuoteSummaryPage').then((module) => ({
+    default: module.InstantQuoteSummaryPage
+  }))
+);
 const QuoteContactPage = lazy(() =>
   import('./pages/QuoteContactPage').then((module) => ({ default: module.QuoteContactPage }))
 );
@@ -54,6 +59,7 @@ const App = () => (
         <Route path="/about" element={<AboutPage />} />
         <Route path="/contact" element={<ContactPage />} />
         <Route path="/instant-quote" element={<InstantQuotePage />} />
+        <Route path="/instant-quote/summary" element={<InstantQuoteSummaryPage />} />
         <Route path="/quote-contact/:quoteId" element={<QuoteContactPage />} />
         <Route path="/service-unavailable" element={<OutOfServiceAreaPage />} />
         <Route path="/service-check-error" element={<ServiceCheckErrorPage />} />

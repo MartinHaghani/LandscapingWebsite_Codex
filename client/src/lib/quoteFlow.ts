@@ -5,6 +5,10 @@ interface SubmissionStatusInput {
   effectiveGeometryEmpty: boolean;
 }
 
+interface QuoteDraftReadyInput extends SubmissionStatusInput {
+  hasGeometry: boolean;
+}
+
 interface ContinueToMapInput {
   selectedAddress: string;
   addressInput: string;
@@ -14,6 +18,19 @@ export type CoverageGateOutcome = 'in-area' | 'out-of-area' | 'check-failed';
 
 export const canContinueToMapStep = ({ selectedAddress, addressInput }: ContinueToMapInput) =>
   selectedAddress.trim().length > 0 || addressInput.trim().length >= 3;
+
+export const canSubmitQuoteDraft = ({
+  selectedAddress,
+  validServicePolygonCount,
+  hasGeometry,
+  selfIntersecting,
+  effectiveGeometryEmpty
+}: QuoteDraftReadyInput) =>
+  selectedAddress.trim().length > 0 &&
+  validServicePolygonCount > 0 &&
+  hasGeometry &&
+  !selfIntersecting &&
+  !effectiveGeometryEmpty;
 
 export const getCoverageGateDestination = (outcome: CoverageGateOutcome) => {
   if (outcome === 'in-area') {
@@ -46,7 +63,7 @@ export const getSubmissionStatus = ({
   }
 
   if (selectedAddress.trim().length > 0) {
-    return 'Ready to submit.';
+    return 'Ready to continue.';
   }
 
   return 'Select an address.';

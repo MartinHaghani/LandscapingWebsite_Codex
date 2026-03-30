@@ -32,7 +32,9 @@ Decision:
 
 Implementation:
 
-- `POST /api/quote/draft` from mapping step
+- map builder stays local first, with server draft creation deferred to the review step
+- dedicated `/instant-quote/summary` review page before draft creation
+- `POST /api/quote/draft` from the review step
 - dedicated `/quote-contact/:quoteId` page
 - `POST /api/quote/:quoteId/contact` finalizes submission and moves quote to `in_review` with `customer_status=pending`
 - confirmation shown after finalize
@@ -194,6 +196,7 @@ Decision:
 Implementation:
 
 - home/services/about/contact pages now use production content
+- services page uses five shared-style inline SVG illustrations and removes the old mixed photo/placeholder card treatment, including removal of `Multi-Zone Scheduling`
 - footer uses real contact links (`tel:` + `mailto:`) and quick navigation links
 - mobile navigation includes in-header menu with quote CTA
 - metadata updates in `client/index.html` improve social preview and launch polish
@@ -206,11 +209,11 @@ Decision:
 
 Implementation:
 
-- local snapshot persisted under `autoscape.quoteDraft.v1`
+- local snapshot persisted under `autoscape.quoteDraft.v2`
 - snapshot includes:
   - step state
   - selected address metadata + map center
-  - polygon history and active editing state
+  - polygon history and active editing state (`ringPoints` + nullable `rawStrokePoints`)
   - unit mode and cadence
 - UI controls:
   - clear all geometry (map controls)
@@ -238,7 +241,55 @@ Implementation:
   - verifies bearer JWT via Clerk issuer/JWKS
   - derives customer profile identity (name/email/phone) for quote finalize actions
 
-## 17) Home Hero Visual Language
+## 17) Progress-First Quote Entry
+
+Decision:
+
+- orient the instant quote page with workflow progress, not extra marketing copy.
+
+Implementation:
+
+- `/instant-quote` keeps only the `Instant Quote` badge above the working UI
+- top-of-page step chrome is a non-interactive three-step rail for `Enter address`, `Map your lawn`, and `Review quote`
+- rail states show `Current step`, `Complete`, and `Up next` instead of button-like cards
+- map step uses a thin low-contrast address pill instead of a larger step header/instruction card
+- map step removes the embedded quote summary and uses a full-width map-first layout with a more prominent floating top-right `Done` action
+- review step uses one unified summary card with address-first property details, area/perimeter directly under the address, a live fitted property preview on the right, one `Back to Map` action beneath it, visit-count context near service frequency, and lighter billing-plan cards across the bottom
+- review step moves the main CTA to a single page-bottom `Submit Quote` button
+
+## 18) Freehand Quote Mapping
+
+Decision:
+
+- replace point-by-point polygon authoring with persistent freehand drawing in both the public quote tool and the admin quote editor.
+
+Implementation:
+
+- primary map actions are `Draw lawn` and `Draw obstacle`
+- selecting either action enters persistent draw mode and swaps the active button label to `Stop drawing`
+- pointer down starts a stroke, pointer move samples it, and pointer up simplifies the stroke into `ringPoints`
+- draw-end simplification distance-normalizes freehand strokes, caps vertex density by distance, and removes redundant wobble on straight runs
+- simplification is conservative: sharp corners and intentional curves are preserved
+- overlapping start/end close-loop tails are trimmed back to one clean join corner
+- clicking near the outline of the selected polygon inserts a vertex directly onto that edge and selects it
+- completed strokes automatically exit draw mode
+- created polygons stay vertex-editable for cleanup/refinement after freehand capture
+- undo/redo are icon-only arrows in a dedicated top-left map control box
+- delete and `Clear all` are grouped together, and `Clear all` requires a second confirmation click
+- geometry edits do not auto-reframe the map zoom
+- the address marker is a green home icon inside the white location dot
+- browser-local draft persistence bumps to `autoscape.quoteDraft.v2`
+- `polygonSource` storage contract is now `schemaVersion: 2`
+  - `activePolygonId`
+  - `polygons[].id`
+  - `polygons[].kind`
+  - `polygons[].ringPoints`
+  - `polygons[].rawStrokePoints | null`
+- server canonical quote geometry remains the measured `polygon_geom`, derived from `ringPoints`
+- legacy point-list `schemaVersion: 1` editor payloads are intentionally unsupported after the cutover
+- development/test data can be wiped with `npm --prefix server run cutover:freehand-reset-dev-data` before rollout
+
+## 19) Home Hero Visual Language
 
 Decision:
 
@@ -258,7 +309,7 @@ Implementation:
 - the mower status cycles through `learning your lawn...`, `Generating path`, and `Mowing...` inside a compact glass-like capsule stacked immediately beneath the lawn, with width that follows the active label and a ticker-flip transition for state changes
 - no separate stats strip sits beneath the hero; the lawn animation and under-lawn status capsule carry the right-side emphasis on their own
 
-## 18) Quote Ownership + Account Dashboard
+## 20) Quote Ownership + Account Dashboard
 
 Decision:
 
@@ -282,7 +333,7 @@ Implementation:
   - `/dashboard`
   - `/dashboard/quotes/:quoteId`
 
-## 19) Warm-Light Premium Public Refresh
+## 21) Warm-Light Premium Public Refresh
 
 Decision:
 
@@ -294,9 +345,9 @@ Implementation:
 - larger default reading scale, higher text contrast, and clearer spacing rhythm for older homeowners
 - standardized focus-visible treatment and form primitives (`form-label`, `form-input`, `status-*`)
 - service-area map remains privacy-hardened but now uses light-compatible controls/popup treatment
-- instant-quote mapping keeps satellite basemap default for property precision, with warm-light control and summary panels
+- instant-quote mapping keeps satellite basemap default for property precision, with warm-light control and review panels
 
-## 20) Home Page Sustainability Proof
+## 22) Home Page Sustainability Proof
 
 Decision:
 

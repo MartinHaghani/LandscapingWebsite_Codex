@@ -20,8 +20,8 @@ describe('computeMultiPolygonMetrics', () => {
 
     const areaSum = computeMetrics(polygonA).areaM2 + computeMetrics(polygonB).areaM2;
     const metrics = computeMultiPolygonMetrics([
-      { id: 'a', kind: 'service', points: polygonA },
-      { id: 'b', kind: 'obstacle', points: polygonB }
+      { id: 'a', kind: 'service', ringPoints: polygonA, rawStrokePoints: polygonA },
+      { id: 'b', kind: 'obstacle', ringPoints: polygonB, rawStrokePoints: polygonB }
     ]);
 
     expect(metrics.validServicePolygonCount).toBe(1);
@@ -49,8 +49,8 @@ describe('computeMultiPolygonMetrics', () => {
     const serviceOnly = computeMetrics(polygonA);
 
     const metrics = computeMultiPolygonMetrics([
-      { id: 'a', kind: 'service', points: polygonA },
-      { id: 'b', kind: 'obstacle', points: obstacle }
+      { id: 'a', kind: 'service', ringPoints: polygonA, rawStrokePoints: polygonA },
+      { id: 'b', kind: 'obstacle', ringPoints: obstacle, rawStrokePoints: obstacle }
     ]);
 
     expect(metrics.areaM2).toBeLessThan(serviceOnly.areaM2);
@@ -73,8 +73,13 @@ describe('computeMultiPolygonMetrics', () => {
     const serviceOnly = computeMetrics(service);
 
     const metrics = computeMultiPolygonMetrics([
-      { id: 'service', kind: 'service', points: service },
-      { id: 'obstacle-outside', kind: 'obstacle', points: obstacleOutside }
+      { id: 'service', kind: 'service', ringPoints: service, rawStrokePoints: service },
+      {
+        id: 'obstacle-outside',
+        kind: 'obstacle',
+        ringPoints: obstacleOutside,
+        rawStrokePoints: obstacleOutside
+      }
     ]);
 
     expect(Math.abs(metrics.areaM2 - serviceOnly.areaM2)).toBeLessThan(1);
@@ -96,8 +101,13 @@ describe('computeMultiPolygonMetrics', () => {
     ];
 
     const metrics = computeMultiPolygonMetrics([
-      { id: 'service', kind: 'service', points: service },
-      { id: 'obstacle-cover', kind: 'obstacle', points: obstacleCover }
+      { id: 'service', kind: 'service', ringPoints: service, rawStrokePoints: service },
+      {
+        id: 'obstacle-cover',
+        kind: 'obstacle',
+        ringPoints: obstacleCover,
+        rawStrokePoints: obstacleCover
+      }
     ]);
 
     expect(metrics.geometry).toBeNull();
@@ -127,9 +137,9 @@ describe('computeMultiPolygonMetrics', () => {
     ];
 
     const metrics = computeMultiPolygonMetrics([
-      { id: 'service', kind: 'service', points: service },
-      { id: 'obstacle-a', kind: 'obstacle', points: obstacleA },
-      { id: 'obstacle-b', kind: 'obstacle', points: obstacleB }
+      { id: 'service', kind: 'service', ringPoints: service, rawStrokePoints: service },
+      { id: 'obstacle-a', kind: 'obstacle', ringPoints: obstacleA, rawStrokePoints: obstacleA },
+      { id: 'obstacle-b', kind: 'obstacle', ringPoints: obstacleB, rawStrokePoints: obstacleB }
     ]);
 
     expect(metrics.areaM2).toBeGreaterThan(0);
@@ -138,8 +148,18 @@ describe('computeMultiPolygonMetrics', () => {
 
   it('ignores polygons with fewer than 3 distinct points', () => {
     const metrics = computeMultiPolygonMetrics([
-      { id: 'valid', kind: 'service', points: [[0, 0], [0.01, 0], [0, 0.01]] },
-      { id: 'invalid', kind: 'obstacle', points: [[1, 1], [1, 1], [1, 1]] }
+      {
+        id: 'valid',
+        kind: 'service',
+        ringPoints: [[0, 0], [0.01, 0], [0, 0.01]],
+        rawStrokePoints: null
+      },
+      {
+        id: 'invalid',
+        kind: 'obstacle',
+        ringPoints: [[1, 1], [1, 1], [1, 1]],
+        rawStrokePoints: null
+      }
     ]);
 
     expect(metrics.validServicePolygonCount).toBe(1);

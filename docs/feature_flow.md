@@ -4,7 +4,8 @@
 
 1. User opens `/services`.
 2. Page loads `GET /api/service-area` and renders approximate coverage overlay on a light basemap.
-3. User clicks `Check my address` CTA to start Instant Quote.
+3. Page presents five illustrated service cards: Autonomous Mowing, Smart Edging, Cleanup & Debris, Seasonal Maintenance, and Performance Reporting.
+4. User clicks `Check my address` CTA to start Instant Quote.
 
 ## Home: Transparent Hero Graphic
 
@@ -30,6 +31,8 @@
 
 ## Instant Quote: Draft + Finalize
 
+0. `/instant-quote` opens with a compact three-step progress rail that shows `Enter address` first, then `Map your lawn`, then `Review quote`.
+
 ### Step 1: Address + Coverage Gate
 
 1. User enters/selects address (Canada/US suggestions only).
@@ -44,25 +47,40 @@
 
 ### Step 2: Geometry Mapping
 
-1. User draws service polygons and optional obstacles.
-2. User can clear all geometry, undo/redo edits, and delete selected polygon/vertex.
-3. Quote map stays on satellite basemap by default; controls and quote summary panels use warm-light, high-contrast UI surfaces.
-4. User selects cadence (`Weekly` or `Bi-weekly`) and billing mode (`Seasonal` default or `Per Session`).
-5. Client auto-saves draft state in browser local storage (address + step + geometry + cadence + billing mode + unit mode).
-6. Client computes effective geometry and pricing with:
+1. User enters persistent freehand draw mode with either `Draw lawn` or `Draw obstacle`.
+2. While active, the selected draw button changes to `Stop drawing`; pointer down starts a stroke, pointer move samples it, and pointer up closes one polygon.
+3. Draw-end cleanup removes clearly redundant straight-line vertices while preserving sharp corners and intentional curves.
+4. Completed strokes automatically exit draw mode.
+5. User can still drag vertices after creation to refine the simplified ring; manual vertex edits clear stored `rawStrokePoints` for that polygon.
+6. User can clear all geometry, undo/redo edits, and delete selected polygon/vertex.
+7. Undo/redo live in their own arrow-only box at the top-left of the map. Delete and `Clear all` are grouped together, and `Clear all` requires confirmation.
+8. Geometry edits do not auto-reframe the map zoom.
+9. Quote map stays on satellite basemap by default; controls use warm-light, high-contrast UI surfaces.
+10. Map header chrome is reduced to a thin address pill with a subtle `Change address` action, and the address marker uses a green home icon inside the white dot.
+11. Builder page is full-width and uses a more prominent floating top-right `Done` action instead of the old embedded summary sidebar.
+12. Client auto-saves draft state in browser local storage (address + step + geometry + cadence + billing mode + unit mode) under `autoscape.quoteDraft.v2`.
+13. Client computes effective geometry and pricing with:
    - `perSession = max(20 + 0.05*A + 0.10*P + 1.0*D, 50)`
    - `D` from `POST /api/service-area/check` (`distanceToNearestStationKm`)
    - fixed sessions: weekly=26, bi-weekly=14
    - seasonal default discount: 20%
-7. Client submits idempotent draft:
+
+### Step 3: Review Quote
+
+1. `Done` navigates to `/instant-quote/summary` only when the mapped draft passes the existing geometry guardrails.
+2. Review page shows one unified review card with address first, area/perimeter directly under the address, cadence controls with visit-count context, a live fitted property preview, and one `Back to Map` button directly under the preview.
+3. Review page presents `Per Season` and `Per Session` as side-by-side plan cards; `Per Season` shows a struck-through regular price plus savings, `Per Session` shows the seasonal total inline, and `billingMode` stays in sync with the selected card.
+4. User taps the bottom `Submit Quote` button, which still creates the draft and then routes to contact details.
+5. Client submits idempotent draft from the review page:
 
 - `POST /api/quote/draft`
 - header: `Idempotency-Key`
 - payload includes `serviceFrequency` + `billingMode`
+- payload includes `polygonSource.schemaVersion = 2` with `activePolygonId`, `polygons[].ringPoints`, and nullable `polygons[].rawStrokePoints`
 
-8. Server validates geometry and stores draft quote + v1 version.
-9. If request is authenticated, server records draft address to Clerk account metadata (`addressHistory`, latest as `defaultAddress`).
-10. Client clears local draft snapshot and routes to `/quote-contact/:quoteId`.
+6. Server validates geometry, derives canonical quote geometry from `ringPoints`, and stores draft quote + version 1 history row.
+7. If request is authenticated, server records draft address to Clerk account metadata (`addressHistory`, latest as `defaultAddress`).
+8. Client clears local draft snapshot and routes to `/quote-contact/:quoteId`.
 
 ### Contact Finalize (Required)
 
@@ -143,9 +161,11 @@
 2. Admin actions:
 
 - open route-based editor `/quotes/:quoteId/edit` for `in_review` quotes
-- full map edit with the same polygon tools used in public quote flow
+- full map edit with the same freehand draw + vertex-refine tools used in public quote flow
   - editor map uses satellite imagery for visual verification
-  - saved quote polygons are rendered immediately when the editor opens
+  - saved quote polygons are rendered immediately when the editor opens from stored `polygonSource v2`
+  - editor uses the same distance-normalized draw-end simplification pass as the public quote tool, including the per-distance vertex cap, straight-edge wobble cleanup, and close-loop overlap trimming
+  - selected polygon outlines in both public and admin can be clicked near an edge to insert and select a new vertex
 - save new version (`POST /api/admin/quotes/:id/versions`)
 - submit selected version (`POST /api/admin/quotes/:id/versions/:versionNumber/submit`)
   - sets `status=verified`, `customer_status=awaiting_payment`

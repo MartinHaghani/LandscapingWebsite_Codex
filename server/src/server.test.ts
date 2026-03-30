@@ -122,6 +122,40 @@ const startServer = async (options?: {
   };
 };
 
+const closeRing = (ringPoints: Array<[number, number]>) => {
+  const [firstLng, firstLat] = ringPoints[0] ?? [];
+  const [lastLng, lastLat] = ringPoints[ringPoints.length - 1] ?? [];
+
+  if (firstLng === lastLng && firstLat === lastLat) {
+    return ringPoints;
+  }
+
+  return [...ringPoints, ringPoints[0]!];
+};
+
+const createPolygonGeometry = (ringPoints: Array<[number, number]>) => ({
+  type: 'Polygon' as const,
+  coordinates: [closeRing(ringPoints)]
+});
+
+const createPolygonSource = (
+  polygonId: string,
+  ringPoints: Array<[number, number]>,
+  kind: 'service' | 'obstacle' = 'service',
+  rawStrokePoints: Array<[number, number]> | null = ringPoints
+) => ({
+  schemaVersion: 2 as const,
+  activePolygonId: polygonId,
+  polygons: [
+    {
+      id: polygonId,
+      kind,
+      ringPoints,
+      rawStrokePoints
+    }
+  ]
+});
+
 afterEach(async () => {
   const pending = startedServers.splice(0, startedServers.length);
   await Promise.all(
@@ -218,6 +252,12 @@ describe('/api/service-area', () => {
 describe('quote draft + contact finalize flow', () => {
   it('creates draft quote with idempotent replay and finalizes contact', async () => {
     const { baseUrl } = await startServer();
+    const draftRing: Array<[number, number]> = [
+      [-79.5204, 43.8436],
+      [-79.5191, 43.8436],
+      [-79.5191, 43.8447],
+      [-79.5204, 43.8447]
+    ];
 
     const draftPayload = {
       address: '123 Green Lane, Vaughan, ON',
@@ -225,18 +265,8 @@ describe('quote draft + contact finalize flow', () => {
         lat: 43.844147,
         lng: -79.51962
       },
-      polygon: {
-        type: 'Polygon',
-        coordinates: [
-          [
-            [-79.5204, 43.8436],
-            [-79.5191, 43.8436],
-            [-79.5191, 43.8447],
-            [-79.5204, 43.8447],
-            [-79.5204, 43.8436]
-          ]
-        ]
-      },
+      polygon: createPolygonGeometry(draftRing),
+      polygonSource: createPolygonSource('service-1', draftRing),
       plan: 'Premium Weekly',
       quoteTotal: 245.55,
       serviceFrequency: 'biweekly',
@@ -400,18 +430,18 @@ describe('quote draft + contact finalize flow', () => {
           lat: 43.844147,
           lng: -79.51962
         },
-        polygon: {
-          type: 'Polygon',
-          coordinates: [
-            [
-              [-79.5202, 43.8438],
-              [-79.5193, 43.8438],
-              [-79.5193, 43.8445],
-              [-79.5202, 43.8445],
-              [-79.5202, 43.8438]
-            ]
-          ]
-        },
+        polygon: createPolygonGeometry([
+          [-79.5202, 43.8438],
+          [-79.5193, 43.8438],
+          [-79.5193, 43.8445],
+          [-79.5202, 43.8445]
+        ]),
+        polygonSource: createPolygonSource('service-1', [
+          [-79.5202, 43.8438],
+          [-79.5193, 43.8438],
+          [-79.5193, 43.8445],
+          [-79.5202, 43.8445]
+        ]),
         plan: 'Starter',
         quoteTotal: 180,
         serviceFrequency: 'weekly'
@@ -501,18 +531,18 @@ describe('quote draft + contact finalize flow', () => {
           lat: 43.844147,
           lng: -79.51962
         },
-        polygon: {
-          type: 'Polygon',
-          coordinates: [
-            [
-              [-79.5202, 43.8438],
-              [-79.5193, 43.8438],
-              [-79.5193, 43.8445],
-              [-79.5202, 43.8445],
-              [-79.5202, 43.8438]
-            ]
-          ]
-        },
+        polygon: createPolygonGeometry([
+          [-79.5202, 43.8438],
+          [-79.5193, 43.8438],
+          [-79.5193, 43.8445],
+          [-79.5202, 43.8445]
+        ]),
+        polygonSource: createPolygonSource('service-1', [
+          [-79.5202, 43.8438],
+          [-79.5193, 43.8438],
+          [-79.5193, 43.8445],
+          [-79.5202, 43.8445]
+        ]),
         plan: 'Starter',
         quoteTotal: 180,
         serviceFrequency: 'weekly'
@@ -572,18 +602,18 @@ describe('quote draft + contact finalize flow', () => {
           lat: 43.844147,
           lng: -79.51962
         },
-        polygon: {
-          type: 'Polygon',
-          coordinates: [
-            [
-              [-79.5202, 43.8438],
-              [-79.5193, 43.8438],
-              [-79.5193, 43.8445],
-              [-79.5202, 43.8445],
-              [-79.5202, 43.8438]
-            ]
-          ]
-        },
+        polygon: createPolygonGeometry([
+          [-79.5202, 43.8438],
+          [-79.5193, 43.8438],
+          [-79.5193, 43.8445],
+          [-79.5202, 43.8445]
+        ]),
+        polygonSource: createPolygonSource('service-1', [
+          [-79.5202, 43.8438],
+          [-79.5193, 43.8438],
+          [-79.5193, 43.8445],
+          [-79.5202, 43.8445]
+        ]),
         plan: 'Starter',
         quoteTotal: 180,
         serviceFrequency: 'weekly'
@@ -612,7 +642,7 @@ describe('quote draft + contact finalize flow', () => {
 });
 
 describe('admin quote editor workflow', () => {
-  it('returns derived polygon source fallback when draft source payload is missing', async () => {
+  it('rejects draft payloads that omit polygon source after the freehand cutover', async () => {
     const { baseUrl } = await startServer();
 
     const draftResponse = await fetch(`${baseUrl}/api/quote/draft`, {
@@ -647,36 +677,12 @@ describe('admin quote editor workflow', () => {
         currency: 'CAD'
       })
     });
-    assert.equal(draftResponse.status, 201);
-    const draftBody = (await draftResponse.json()) as { quoteId: string };
-
-    const finalizeResponse = await fetch(`${baseUrl}/api/quote/${draftBody.quoteId}/contact`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Idempotency-Key': 'quote-editor-contact-fallback-1',
-        Authorization: 'Bearer customer-legacy'
-      },
-      body: JSON.stringify({})
-    });
-    assert.equal(finalizeResponse.status, 200);
-
-    const editorResponse = await fetch(`${baseUrl}/api/admin/quotes/${draftBody.quoteId}/editor`, {
-      headers: {
-        Authorization: 'Bearer admin-admin'
-      }
-    });
-    assert.equal(editorResponse.status, 200);
-    const editorBody = (await editorResponse.json()) as {
-      polygonSourceFallback: boolean;
-      polygonSource: { polygons: Array<{ kind: string; points: unknown[] }> };
-    };
-    assert.equal(editorBody.polygonSourceFallback, true);
-    assert.equal(editorBody.polygonSource.polygons.length > 0, true);
-    assert.equal(editorBody.polygonSource.polygons[0]?.kind, 'service');
+    assert.equal(draftResponse.status, 400);
+    const draftBody = (await draftResponse.json()) as { error: string };
+    assert.equal(draftBody.error, 'Invalid quote payload.');
   });
 
-  it('repairs lat/lng-swapped polygon source payloads for editor rendering', async () => {
+  it('rejects polygon source payloads that do not match the submitted geometry', async () => {
     const { baseUrl } = await startServer();
 
     const draftResponse = await fetch(`${baseUrl}/api/quote/draft`, {
@@ -691,34 +697,18 @@ describe('admin quote editor workflow', () => {
           lat: 43.844147,
           lng: -79.51962
         },
-        polygon: {
-          type: 'Polygon',
-          coordinates: [
-            [
-              [-79.5201, 43.8439],
-              [-79.5194, 43.8439],
-              [-79.5194, 43.8444],
-              [-79.5201, 43.8444],
-              [-79.5201, 43.8439]
-            ]
-          ]
-        },
-        polygonSource: {
-          schemaVersion: 1,
-          activePolygonId: 'service-1',
-          polygons: [
-            {
-              id: 'service-1',
-              kind: 'service',
-              points: [
-                [43.8439, -79.5201],
-                [43.8439, -79.5194],
-                [43.8444, -79.5194],
-                [43.8444, -79.5201]
-              ]
-            }
-          ]
-        },
+        polygon: createPolygonGeometry([
+          [-79.5201, 43.8439],
+          [-79.5194, 43.8439],
+          [-79.5194, 43.8444],
+          [-79.5201, 43.8444]
+        ]),
+        polygonSource: createPolygonSource('service-1', [
+          [43.8439, -79.5201],
+          [43.8439, -79.5194],
+          [43.8444, -79.5194],
+          [43.8444, -79.5201]
+        ]),
         plan: 'Starter Autonomy Plan',
         quoteTotal: 175,
         serviceFrequency: 'weekly',
@@ -727,39 +717,12 @@ describe('admin quote editor workflow', () => {
         currency: 'CAD'
       })
     });
-    assert.equal(draftResponse.status, 201);
-    const draftBody = (await draftResponse.json()) as { quoteId: string };
-
-    const finalizeResponse = await fetch(`${baseUrl}/api/quote/${draftBody.quoteId}/contact`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Idempotency-Key': 'quote-editor-contact-swapped-1',
-        Authorization: 'Bearer customer-swapped'
-      },
-      body: JSON.stringify({})
-    });
-    assert.equal(finalizeResponse.status, 200);
-
-    const editorResponse = await fetch(`${baseUrl}/api/admin/quotes/${draftBody.quoteId}/editor`, {
-      headers: {
-        Authorization: 'Bearer admin-admin'
-      }
-    });
-    assert.equal(editorResponse.status, 200);
-    const editorBody = (await editorResponse.json()) as {
-      polygonSourceFallback: boolean;
-      polygonSource: { polygons: Array<{ points: Array<[number, number]> }> };
-    };
-    assert.equal(editorBody.polygonSourceFallback, true);
-    assert.equal(editorBody.polygonSource.polygons.length > 0, true);
-    const firstPoint = editorBody.polygonSource.polygons[0]?.points[0];
-    assert.ok(firstPoint);
-    assert.equal(firstPoint[0] < -70 && firstPoint[0] > -90, true);
-    assert.equal(firstPoint[1] > 40 && firstPoint[1] < 50, true);
+    assert.equal(draftResponse.status, 400);
+    const draftBody = (await draftResponse.json()) as { error: string };
+    assert.equal(draftBody.error, 'Invalid quote editor payload.');
   });
 
-  it('repairs lat/lng-swapped quote geometry using stored quote location anchor', async () => {
+  it('rejects quote geometry that is wildly inconsistent with the selected address location', async () => {
     const { baseUrl } = await startServer();
 
     const draftResponse = await fetch(`${baseUrl}/api/quote/draft`, {
@@ -774,34 +737,18 @@ describe('admin quote editor workflow', () => {
           lat: 43.844147,
           lng: -79.51962
         },
-        polygon: {
-          type: 'Polygon',
-          coordinates: [
-            [
-              [43.8439, -79.5201],
-              [43.8439, -79.5194],
-              [43.8444, -79.5194],
-              [43.8444, -79.5201],
-              [43.8439, -79.5201]
-            ]
-          ]
-        },
-        polygonSource: {
-          schemaVersion: 1,
-          activePolygonId: 'service-1',
-          polygons: [
-            {
-              id: 'service-1',
-              kind: 'service',
-              points: [
-                [43.8439, -79.5201],
-                [43.8439, -79.5194],
-                [43.8444, -79.5194],
-                [43.8444, -79.5201]
-              ]
-            }
-          ]
-        },
+        polygon: createPolygonGeometry([
+          [43.8439, -79.5201],
+          [43.8439, -79.5194],
+          [43.8444, -79.5194],
+          [43.8444, -79.5201]
+        ]),
+        polygonSource: createPolygonSource('service-1', [
+          [43.8439, -79.5201],
+          [43.8439, -79.5194],
+          [43.8444, -79.5194],
+          [43.8444, -79.5201]
+        ]),
         plan: 'Starter Autonomy Plan',
         quoteTotal: 176,
         serviceFrequency: 'weekly',
@@ -810,40 +757,19 @@ describe('admin quote editor workflow', () => {
         currency: 'CAD'
       })
     });
-    assert.equal(draftResponse.status, 201);
-    const draftBody = (await draftResponse.json()) as { quoteId: string };
-
-    const finalizeResponse = await fetch(`${baseUrl}/api/quote/${draftBody.quoteId}/contact`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Idempotency-Key': 'quote-editor-contact-swapped-geometry-1',
-        Authorization: 'Bearer customer-swapped-geometry'
-      },
-      body: JSON.stringify({})
-    });
-    assert.equal(finalizeResponse.status, 200);
-
-    const editorResponse = await fetch(`${baseUrl}/api/admin/quotes/${draftBody.quoteId}/editor`, {
-      headers: {
-        Authorization: 'Bearer admin-admin'
-      }
-    });
-    assert.equal(editorResponse.status, 200);
-    const editorBody = (await editorResponse.json()) as {
-      polygonSourceFallback: boolean;
-      polygonSource: { polygons: Array<{ points: Array<[number, number]> }> };
-    };
-    assert.equal(editorBody.polygonSourceFallback, true);
-    assert.equal(editorBody.polygonSource.polygons.length > 0, true);
-    const firstPoint = editorBody.polygonSource.polygons[0]?.points[0];
-    assert.ok(firstPoint);
-    assert.equal(firstPoint[0] < -70 && firstPoint[0] > -90, true);
-    assert.equal(firstPoint[1] > 40 && firstPoint[1] < 50, true);
+    assert.equal(draftResponse.status, 400);
+    const draftBody = (await draftResponse.json()) as { error: string };
+    assert.equal(draftBody.error, 'Invalid quote editor payload.');
   });
 
   it('supports versioned admin edits and submit to verified awaiting payment', async () => {
     const { baseUrl } = await startServer();
+    const reviewRing: Array<[number, number]> = [
+      [-79.5203, 43.8437],
+      [-79.5192, 43.8437],
+      [-79.5192, 43.8446],
+      [-79.5203, 43.8446]
+    ];
 
     const draftPayload = {
       address: '88 Review Crescent, Vaughan, ON',
@@ -851,34 +777,8 @@ describe('admin quote editor workflow', () => {
         lat: 43.844147,
         lng: -79.51962
       },
-      polygon: {
-        type: 'Polygon',
-        coordinates: [
-          [
-            [-79.5203, 43.8437],
-            [-79.5192, 43.8437],
-            [-79.5192, 43.8446],
-            [-79.5203, 43.8446],
-            [-79.5203, 43.8437]
-          ]
-        ]
-      },
-      polygonSource: {
-        schemaVersion: 1,
-        activePolygonId: 'service-1',
-        polygons: [
-          {
-            id: 'service-1',
-            kind: 'service',
-            points: [
-              [-79.5203, 43.8437],
-              [-79.5192, 43.8437],
-              [-79.5192, 43.8446],
-              [-79.5203, 43.8446]
-            ]
-          }
-        ]
-      },
+      polygon: createPolygonGeometry(reviewRing),
+      polygonSource: createPolygonSource('service-1', reviewRing),
       plan: 'Precision Weekly Plan',
       quoteTotal: 210.25,
       serviceFrequency: 'weekly',
@@ -923,7 +823,7 @@ describe('admin quote editor workflow', () => {
     };
     assert.equal(editorBody.status, 'in_review');
     assert.equal(editorBody.customerStatus, 'pending');
-    assert.equal(editorBody.polygonSource.schemaVersion, 1);
+    assert.equal(editorBody.polygonSource.schemaVersion, 2);
     assert.equal(editorBody.versions[0]?.versionNumber, 1);
     assert.equal(editorBody.versions[0]?.actorType, 'client');
 
@@ -934,22 +834,12 @@ describe('admin quote editor workflow', () => {
         Authorization: 'Bearer admin-admin'
       },
       body: JSON.stringify({
-        polygonSource: {
-          schemaVersion: 1,
-          activePolygonId: 'service-1',
-          polygons: [
-            {
-              id: 'service-1',
-              kind: 'service',
-              points: [
-                [-79.5204, 43.8437],
-                [-79.5191, 43.8437],
-                [-79.5191, 43.8447],
-                [-79.5204, 43.8447]
-              ]
-            }
-          ]
-        },
+        polygonSource: createPolygonSource('service-1', [
+          [-79.5204, 43.8437],
+          [-79.5191, 43.8437],
+          [-79.5191, 43.8447],
+          [-79.5204, 43.8447]
+        ]),
         serviceFrequency: 'biweekly',
         perSessionTotal: 199.99,
         finalTotal: 225
@@ -1024,34 +914,18 @@ describe('admin quote editor workflow', () => {
           lat: 43.844147,
           lng: -79.51962
         },
-        polygon: {
-          type: 'Polygon',
-          coordinates: [
-            [
-              [-79.5202, 43.8438],
-              [-79.5193, 43.8438],
-              [-79.5193, 43.8445],
-              [-79.5202, 43.8445],
-              [-79.5202, 43.8438]
-            ]
-          ]
-        },
-        polygonSource: {
-          schemaVersion: 1,
-          activePolygonId: 'service-1',
-          polygons: [
-            {
-              id: 'service-1',
-              kind: 'service',
-              points: [
-                [-79.5202, 43.8438],
-                [-79.5193, 43.8438],
-                [-79.5193, 43.8445],
-                [-79.5202, 43.8445]
-              ]
-            }
-          ]
-        },
+        polygon: createPolygonGeometry([
+          [-79.5202, 43.8438],
+          [-79.5193, 43.8438],
+          [-79.5193, 43.8445],
+          [-79.5202, 43.8445]
+        ]),
+        polygonSource: createPolygonSource('service-1', [
+          [-79.5202, 43.8438],
+          [-79.5193, 43.8438],
+          [-79.5193, 43.8445],
+          [-79.5202, 43.8445]
+        ]),
         plan: 'Starter Autonomy Plan',
         quoteTotal: 180,
         serviceFrequency: 'weekly',
@@ -1081,22 +955,12 @@ describe('admin quote editor workflow', () => {
         Authorization: 'Bearer admin-marketing'
       },
       body: JSON.stringify({
-        polygonSource: {
-          schemaVersion: 1,
-          activePolygonId: 'service-1',
-          polygons: [
-            {
-              id: 'service-1',
-              kind: 'service',
-              points: [
-                [-79.5202, 43.8438],
-                [-79.5193, 43.8438],
-                [-79.5193, 43.8445],
-                [-79.5202, 43.8445]
-              ]
-            }
-          ]
-        },
+        polygonSource: createPolygonSource('service-1', [
+          [-79.5202, 43.8438],
+          [-79.5193, 43.8438],
+          [-79.5193, 43.8445],
+          [-79.5202, 43.8445]
+        ]),
         serviceFrequency: 'weekly',
         perSessionTotal: 180,
         finalTotal: 180

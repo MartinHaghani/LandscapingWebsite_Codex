@@ -18,8 +18,11 @@ Primary domains:
 
 - API runtime: `server/src/index.ts` -> `server/src/server.ts`
 - Public app routes: `client/src/App.tsx`
+- Services gallery: `client/src/pages/ServicesPage.tsx` + `client/src/components/service/ServiceIllustrations.tsx` (coverage-first entry page with five shared-style inline SVG service scenes)
+- Instant quote builder: `client/src/pages/InstantQuotePage.tsx` (badge-only header + non-interactive three-step progress rail, full-width map builder, prominent floating `Done` action, local draft autosave, and review handoff)
+- Instant quote review: `client/src/pages/InstantQuoteSummaryPage.tsx` (unified review card, address-first property details, area/perimeter directly under the address, live fitted property preview, visit-count context near service frequency, lighter side-by-side billing plan selection, and `POST /api/quote/draft` trigger)
 - Admin app routes/state: `admin/src/App.tsx`
-- Admin quote editor map module: `admin/src/components/QuoteEditorMap.tsx` (satellite raster basemap + immediate polygon source hydration)
+- Admin quote editor map module: `admin/src/components/QuoteEditorMap.tsx` (satellite raster basemap + immediate freehand polygon source hydration with the same shared draw-end simplifier used in public)
 - Public layout shell: `client/src/components/layout/SiteLayout.tsx` (`Navbar`, `Footer`, `ScrollToTop`)
 - Public theming system: `client/tailwind.config.ts` + `client/src/index.css` (warm-light semantic tokens, shared form/focus/map-control styling)
 - Home hero system: `client/src/pages/HomePage.tsx` + `client/src/components/home/HomeHeroLawnGraphic.tsx` + `client/src/lib/homeHeroLawn.ts` + `client/src/lib/homeHeroLawnCoverage.ts` (true desktop 50/50 split, CTA helper copy, fixed parcel geometry constants, perimeter wall-trace metadata, rounded 11-pass boustrophedon infill path with sampled motion/denser arrows, direct mowing spawn on the first scanline, multi-phase hero timing, slightly heavier white outline, and a dynamically sized ticker-flip status capsule stacked directly below the lawn)
@@ -70,7 +73,7 @@ Spatial storage:
 
 Client-side quote draft resilience:
 
-- Local snapshot key: `autoscape.quoteDraft.v1`
+- Local snapshot key: `autoscape.quoteDraft.v2`
 - Stored state includes:
   - address input + selected address metadata
   - map center + step state
@@ -78,6 +81,27 @@ Client-side quote draft resilience:
   - unit mode + service frequency + billing mode
   - internal `distanceToNearestStationKm` from service-area check
 - Reset/clear controls are UI-level only and do not mutate server quote records.
+
+Quote editor/source geometry contract:
+
+- `polygonSource.schemaVersion = 2`
+- `activePolygonId: string | null`
+- `polygons[]`
+  - `id`
+  - `kind`
+  - `ringPoints`
+  - `rawStrokePoints: LngLat[] | null`
+- canonical `polygon_geom` remains server-measured and is derived from `ringPoints`
+- legacy `schemaVersion: 1` point-list payloads are intentionally rejected after the freehand cutover
+
+Shared quote-drawing simplification:
+
+- `shared/freehand.ts`
+  - raw stroke points are deduped geodesically first
+  - draw-end simplification distance-normalizes freehand strokes, caps vertex density by distance, removes redundant wobble on straight runs, and trims overlapping close-loop tails
+  - sharp corners and intentional curves are preserved
+  - simplification uses distance-based stroke normalization rather than pointer-event density
+- selected polygon outlines can be clicked near an edge to insert a new vertex at the projected on-line position
 
 Quote pricing contract:
 
@@ -197,6 +221,12 @@ Revisions:
 - Revise endpoint treats per-session total as canonical and recomputes seasonal range fields.
 - Quote editor versions include `actor_type` (`client` or `admin`) + `version_number` + `changed_at`.
 - Version submit endpoint applies selected version and sets `status=verified` + `customer_status=awaiting_payment`.
+
+Development cutover:
+
+- `server/src/scripts/freehandCutoverResetDevData.ts`
+- `npm --prefix server run cutover:freehand-reset-dev-data`
+- script truncates quote/editor/leads/test-contact attribution/audit/idempotency tables while preserving schema + base-station/reference data
 
 ## 7) Attribution Rules
 

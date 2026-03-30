@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { QuoteEditorMap } from '../components/QuoteEditorMap';
 import {
   adminApi,
@@ -14,6 +14,10 @@ import {
   redoPolygonEdit,
   undoPolygonEdit
 } from '../lib/polygonHistory';
+import {
+  deleteVertexOrPolygonFromEditorState,
+  removePolygonFromEditorState
+} from '../lib/polygonEditing';
 import type {
   EditablePolygon,
   LngLat,
@@ -46,7 +50,9 @@ const toEditorState = (polygonSource: AdminPolygonSource): PolygonEditorState =>
   polygons: polygonSource.polygons.map((polygon) => ({
     id: polygon.id,
     kind: polygon.kind,
-    points: polygon.points.map(([lng, lat]) => [lng, lat] as [number, number])
+    ringPoints: polygon.ringPoints.map(([lng, lat]) => [lng, lat] as [number, number]),
+    rawStrokePoints:
+      polygon.rawStrokePoints?.map(([lng, lat]) => [lng, lat] as [number, number]) ?? null
   })),
   activePolygonId:
     polygonSource.activePolygonId && polygonSource.polygons.some((item) => item.id === polygonSource.activePolygonId)
@@ -55,17 +61,19 @@ const toEditorState = (polygonSource: AdminPolygonSource): PolygonEditorState =>
 });
 
 const fromEditorState = (state: PolygonEditorState): AdminPolygonSource => ({
-  schemaVersion: 1,
+  schemaVersion: 2,
   activePolygonId: state.activePolygonId,
   polygons: state.polygons.map((polygon) => ({
     id: polygon.id,
     kind: polygon.kind,
-    points: polygon.points.map(([lng, lat]) => [lng, lat] as [number, number])
+    ringPoints: polygon.ringPoints.map(([lng, lat]) => [lng, lat] as [number, number]),
+    rawStrokePoints:
+      polygon.rawStrokePoints?.map(([lng, lat]) => [lng, lat] as [number, number]) ?? null
   }))
 });
 
 const getCenterFromPolygons = (polygons: EditablePolygon[]): LngLat => {
-  const points = polygons.flatMap((polygon) => polygon.points);
+  const points = polygons.flatMap((polygon) => polygon.ringPoints);
   if (points.length === 0) {
     return [-79.51962, 43.844147];
   }
@@ -84,17 +92,38 @@ const getCenterFromPolygons = (polygons: EditablePolygon[]): LngLat => {
 
 const formatDate = (value: string | null) => (value ? new Date(value).toLocaleString() : 'N/A');
 
+const activeDrawButtonStyle = (kind: PolygonKind) =>
+  kind === 'service'
+    ? {
+        borderColor: 'rgba(37,118,68,0.95)',
+        background: 'rgba(50,159,91,0.92)',
+        color: '#ffffff',
+        boxShadow: '0 0 0 2px rgba(50,159,91,0.2)'
+      }
+    : {
+        borderColor: 'rgba(185,28,28,0.95)',
+        background: 'rgba(220,38,38,0.92)',
+        color: '#ffffff',
+        boxShadow: '0 0 0 2px rgba(220,38,38,0.18)'
+      };
+
+const inactiveObstacleButtonStyle = {
+  borderColor: 'rgba(220,38,38,0.28)',
+  color: 'var(--danger)'
+};
+
 export const QuoteEditorPage = ({ getToken, quoteId, onBack }: QuoteEditorPageProps) => {
+  const polygonCounterRef = useRef(0);
   const [loading, setLoading] = useState(true);
   const [savingVersion, setSavingVersion] = useState(false);
   const [submittingVersion, setSubmittingVersion] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [info, setInfo] = useState<string | null>(null);
   const [editor, setEditor] = useState<AdminQuoteEditorResponse | null>(null);
-
   const [polygonHistory, setPolygonHistory] = useState(() => createPolygonHistory(EMPTY_EDITOR_STATE));
   const [selection, setSelection] = useState<SelectionTarget>({ kind: 'none' });
-  const [drawing, setDrawing] = useState(false);
+  const [drawMode, setDrawMode] = useState<PolygonKind | null>(null);
+  const [clearAllConfirmation, setClearAllConfirmation] = useState(false);
   const [unitMode, setUnitMode] = useState<'metric' | 'imperial'>('metric');
   const [center, setCenter] = useState<LngLat>([-79.51962, 43.844147]);
   const [serviceFrequency, setServiceFrequency] = useState<'weekly' | 'biweekly'>('weekly');
@@ -162,7 +191,8 @@ export const QuoteEditorPage = ({ getToken, quoteId, onBack }: QuoteEditorPagePr
             }
           : { kind: 'none' }
       );
-      setDrawing(false);
+      setDrawMode(null);
+      setClearAllConfirmation(false);
       setCenter(getCenterFromPolygons(initialState.polygons));
       setServiceFrequency(response.editable.serviceFrequency);
       setDistanceToNearestStationKm(response.calculated.distanceToNearestStationKm ?? 0);
@@ -184,6 +214,60 @@ export const QuoteEditorPage = ({ getToken, quoteId, onBack }: QuoteEditorPagePr
     void loadEditor();
   }, [quoteId]);
 
+  useEffect(() => {
+    if (activePolygonId === null && polygons.length > 0) {
+      setPolygonHistory((current) => ({
+        ...current,
+        present: {
+          ...current.present,
+          activePolygonId: polygons[0]?.id ?? null
+        }
+      }));
+      return;
+    }
+
+    if (activePolygonId && !polygons.some((polygon) => polygon.id === activePolygonId)) {
+      setPolygonHistory((current) => ({
+        ...current,
+        present: {
+          ...current.present,
+          activePolygonId: polygons[0]?.id ?? null
+        }
+      }));
+    }
+  }, [activePolygonId, polygons]);
+
+  useEffect(() => {
+    if (selection.kind === 'none') {
+      return;
+    }
+
+    const selectedPolygon = polygons.find((polygon) => polygon.id === selection.polygonId);
+    if (!selectedPolygon) {
+      setSelection({ kind: 'none' });
+      return;
+    }
+
+    if (
+      selection.kind === 'vertex' &&
+      (selection.index < 0 || selection.index >= selectedPolygon.ringPoints.length)
+    ) {
+      setSelection({ kind: 'none' });
+    }
+  }, [polygons, selection]);
+
+  useEffect(() => {
+    if (!clearAllConfirmation) {
+      return;
+    }
+
+    const timeout = window.setTimeout(() => {
+      setClearAllConfirmation(false);
+    }, 3000);
+
+    return () => window.clearTimeout(timeout);
+  }, [clearAllConfirmation]);
+
   const setActivePolygon = (nextPolygonId: string | null) => {
     setPolygonHistory((current) => ({
       ...current,
@@ -194,21 +278,12 @@ export const QuoteEditorPage = ({ getToken, quoteId, onBack }: QuoteEditorPagePr
     }));
   };
 
-  useEffect(() => {
-    if (activePolygonId === null && polygons.length > 0) {
-      setActivePolygon(polygons[0].id);
-      return;
-    }
-
-    if (activePolygonId && !polygons.some((polygon) => polygon.id === activePolygonId)) {
-      setActivePolygon(polygons[0]?.id ?? null);
-    }
-  }, [activePolygonId, polygons]);
-
   const applyPolygonPointsEdit = (polygonId: string, nextPoints: LngLat[]) => {
     setPolygonHistory((current) => {
       const nextPolygons = current.present.polygons.map((polygon) =>
-        polygon.id === polygonId ? { ...polygon, points: nextPoints } : polygon
+        polygon.id === polygonId
+          ? { ...polygon, ringPoints: nextPoints, rawStrokePoints: null }
+          : polygon
       );
 
       return applyPolygonEdit(current, {
@@ -218,40 +293,69 @@ export const QuoteEditorPage = ({ getToken, quoteId, onBack }: QuoteEditorPagePr
     });
   };
 
-  const addPolygonByKind = (kind: PolygonKind) => {
-    const polygonId = createPolygonId();
+  const createDrawnPolygon = (kind: PolygonKind, ringPoints: LngLat[], rawStrokePoints: LngLat[]) => {
+    polygonCounterRef.current += 1;
+    const polygonId = `${createPolygonId()}-${polygonCounterRef.current}`;
 
     setPolygonHistory((current) =>
       applyPolygonEdit(current, {
-        polygons: [...current.present.polygons, { id: polygonId, kind, points: [] }],
+        polygons: [
+          ...current.present.polygons,
+          { id: polygonId, kind, ringPoints, rawStrokePoints }
+        ],
         activePolygonId: polygonId
       })
     );
 
     setSelection({ kind: 'polygon', polygonId });
-    setDrawing(true);
+    setDrawMode(null);
+    setClearAllConfirmation(false);
+    setError(null);
+    setInfo(null);
+  };
+
+  const toggleDrawMode = (nextKind: PolygonKind) => {
+    setClearAllConfirmation(false);
+    setSelection({ kind: 'none' });
+    setError(null);
+    setInfo(null);
+    setDrawMode((current) => (current === nextKind ? null : nextKind));
+  };
+
+  const handleMapSelectionChange = (nextSelection: SelectionTarget) => {
+    setClearAllConfirmation(false);
+    setSelection(nextSelection);
+
+    if (nextSelection.kind !== 'none') {
+      setActivePolygon(nextSelection.polygonId);
+    }
+  };
+
+  const handleUndo = () => {
+    setPolygonHistory((current) => undoPolygonEdit(current));
+    setClearAllConfirmation(false);
+    setSelection({ kind: 'none' });
+    setError(null);
+    setInfo(null);
+  };
+
+  const handleRedo = () => {
+    setPolygonHistory((current) => redoPolygonEdit(current));
+    setClearAllConfirmation(false);
+    setSelection({ kind: 'none' });
+    setError(null);
+    setInfo(null);
   };
 
   const handleDeleteSelection = () => {
+    setClearAllConfirmation(false);
     if (selection.kind === 'none') {
       return;
     }
 
     if (selection.kind === 'polygon') {
       setPolygonHistory((current) => {
-        const nextPolygons = current.present.polygons.filter(
-          (polygon) => polygon.id !== selection.polygonId
-        );
-        const nextActivePolygonId = nextPolygons.some(
-          (polygon) => polygon.id === current.present.activePolygonId
-        )
-          ? current.present.activePolygonId
-          : (nextPolygons[0]?.id ?? null);
-
-        return applyPolygonEdit(current, {
-          polygons: nextPolygons,
-          activePolygonId: nextActivePolygonId
-        });
+        return applyPolygonEdit(current, removePolygonFromEditorState(current.present, selection.polygonId));
       });
       setSelection({ kind: 'none' });
       return;
@@ -263,11 +367,33 @@ export const QuoteEditorPage = ({ getToken, quoteId, onBack }: QuoteEditorPagePr
       return;
     }
 
-    applyPolygonPointsEdit(
-      selection.polygonId,
-      selectedPolygon.points.filter((_, index) => index !== selection.index)
+    setPolygonHistory((current) =>
+      applyPolygonEdit(
+        current,
+        deleteVertexOrPolygonFromEditorState(current.present, selection.polygonId, selection.index)
+      )
     );
     setSelection({ kind: 'none' });
+  };
+
+  const clearAllGeometry = () => {
+    setPolygonHistory(createPolygonHistory(EMPTY_EDITOR_STATE));
+    setSelection({ kind: 'none' });
+    setDrawMode(null);
+    setClearAllConfirmation(false);
+    setInfo('All mapped polygons were cleared from the editor.');
+    setError(null);
+  };
+
+  const handleClearAll = () => {
+    if (!clearAllConfirmation) {
+      setClearAllConfirmation(true);
+      setError(null);
+      setInfo(null);
+      return;
+    }
+
+    clearAllGeometry();
   };
 
   const saveVersion = async () => {
@@ -280,7 +406,7 @@ export const QuoteEditorPage = ({ getToken, quoteId, onBack }: QuoteEditorPagePr
     setInfo(null);
 
     try {
-        const response = await adminApi.createQuoteVersion(getToken, quoteId, {
+      const response = await adminApi.createQuoteVersion(getToken, quoteId, {
         polygonSource: fromEditorState(editorState),
         serviceFrequency,
         perSessionTotal: Number(perSessionTotalText),
@@ -342,7 +468,8 @@ export const QuoteEditorPage = ({ getToken, quoteId, onBack }: QuoteEditorPagePr
           }
         : { kind: 'none' }
     );
-    setDrawing(false);
+    setDrawMode(null);
+    setClearAllConfirmation(false);
     setCenter(getCenterFromPolygons(nextState.polygons));
     setServiceFrequency(version.serviceFrequency);
     setPerSessionTotalText(String(version.perSessionTotal));
@@ -356,7 +483,7 @@ export const QuoteEditorPage = ({ getToken, quoteId, onBack }: QuoteEditorPagePr
   const activePolygonSummary =
     activePolygon === null
       ? 'None selected'
-      : `${activePolygon.kind === 'service' ? 'Service' : 'Obstacle'} (${activePolygon.points.length} points)`;
+      : `${activePolygon.kind === 'service' ? 'Service' : 'Obstacle'} (${activePolygon.ringPoints.length} points)`;
 
   const areaValue =
     unitMode === 'metric'
@@ -366,6 +493,8 @@ export const QuoteEditorPage = ({ getToken, quoteId, onBack }: QuoteEditorPagePr
     unitMode === 'metric'
       ? `${formatNumber(metrics.perimeterM)} m`
       : `${formatNumber(toFt(metrics.perimeterM))} ft`;
+  const isServiceDrawMode = drawMode === 'service';
+  const isObstacleDrawMode = drawMode === 'obstacle';
 
   if (!loading && !editor) {
     return (
@@ -412,12 +541,6 @@ export const QuoteEditorPage = ({ getToken, quoteId, onBack }: QuoteEditorPagePr
         </div>
       </div>
 
-      {editor?.polygonSourceFallback ? (
-        <p className="error-banner">
-          This quote did not store source polygons. Editor loaded a derived service polygon fallback.
-        </p>
-      ) : null}
-
       {error ? <p className="error-banner">{error}</p> : null}
       {info ? <p className="hint">{info}</p> : null}
 
@@ -426,71 +549,130 @@ export const QuoteEditorPage = ({ getToken, quoteId, onBack }: QuoteEditorPagePr
       {!loading ? (
         <div style={{ display: 'grid', gap: '1rem', gridTemplateColumns: 'minmax(0, 1.35fr) minmax(320px, 0.65fr)' }}>
           <div style={{ display: 'grid', gap: '0.75rem' }}>
-            <div style={{ display: 'flex', gap: '0.45rem', flexWrap: 'wrap' }}>
-              <button
-                type="button"
-                className="button"
-                onClick={() => setDrawing((current) => !current)}
-                disabled={activePolygonId === null}
-              >
-                {drawing ? 'Stop Drawing' : 'Start Drawing'}
-              </button>
-              <button type="button" className="button" onClick={() => addPolygonByKind('service')}>
-                Add Polygon
-              </button>
-              <button type="button" className="button" onClick={() => addPolygonByKind('obstacle')}>
-                Add Obstacle
-              </button>
-              <button
-                type="button"
-                className="button"
-                onClick={() => {
-                  setPolygonHistory(createPolygonHistory(EMPTY_EDITOR_STATE));
-                  setSelection({ kind: 'none' });
-                  setDrawing(false);
+            {metrics.selfIntersecting ? (
+              <p className="error-banner">Overlapping boundary edges detected. Adjust vertices before saving.</p>
+            ) : null}
+            {metrics.effectiveGeometryEmpty ? (
+              <p className="error-banner">Obstacles remove the entire service area. Adjust boundaries before saving.</p>
+            ) : null}
+
+            <div style={{ position: 'relative' }}>
+              <QuoteEditorMap
+                center={center}
+                drawMode={drawMode}
+                selection={selection}
+                polygons={polygons}
+                activePolygonId={activePolygonId}
+                onPolygonDrawn={(kind, shape) => {
+                  createDrawnPolygon(kind, shape.ringPoints, shape.rawStrokePoints);
                 }}
-                disabled={polygons.length === 0}
+                onPolygonRingPointsChange={(polygonId, nextPoints) => {
+                  applyPolygonPointsEdit(polygonId, nextPoints);
+                }}
+                onSelectionChange={handleMapSelectionChange}
+              />
+
+              <div
+                style={{
+                  position: 'absolute',
+                  top: '1rem',
+                  left: '1rem',
+                  zIndex: 20,
+                  display: 'flex',
+                  gap: '0.45rem',
+                  padding: '0.45rem',
+                  borderRadius: '14px',
+                  border: '1px solid rgba(255,255,255,0.18)',
+                  background: 'rgba(14,20,17,0.86)',
+                  boxShadow: '0 14px 28px rgba(0,0,0,0.26)',
+                  backdropFilter: 'blur(10px)'
+                }}
               >
-                Clear All
-              </button>
-              <button type="button" className="button" onClick={() => setPolygonHistory((current) => undoPolygonEdit(current))} disabled={!canUndo}>
-                Undo
-              </button>
-              <button type="button" className="button" onClick={() => setPolygonHistory((current) => redoPolygonEdit(current))} disabled={!canRedo}>
-                Redo
-              </button>
-              <button type="button" className="button" onClick={handleDeleteSelection} disabled={selection.kind === 'none'}>
-                Delete
-              </button>
+                <button
+                  type="button"
+                  className="button"
+                  onClick={handleUndo}
+                  disabled={!canUndo}
+                  aria-label="Undo"
+                  style={{ minWidth: '2.6rem', minHeight: '2.6rem', padding: '0.35rem 0.55rem' }}
+                >
+                  <span aria-hidden="true">&larr;</span>
+                </button>
+                <button
+                  type="button"
+                  className="button"
+                  onClick={handleRedo}
+                  disabled={!canRedo}
+                  aria-label="Redo"
+                  style={{ minWidth: '2.6rem', minHeight: '2.6rem', padding: '0.35rem 0.55rem' }}
+                >
+                  <span aria-hidden="true">&rarr;</span>
+                </button>
+              </div>
+
+              <div
+                style={{
+                  position: 'absolute',
+                  top: '1rem',
+                  left: '50%',
+                  transform: 'translateX(-50%)',
+                  zIndex: 20,
+                  display: 'flex',
+                  gap: '0.45rem',
+                  flexWrap: 'wrap',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  maxWidth: 'calc(100% - 7.5rem)',
+                  padding: '0.6rem 0.7rem',
+                  borderRadius: '18px',
+                  border: '1px solid rgba(255,255,255,0.16)',
+                  background: 'rgba(11,17,14,0.88)',
+                  boxShadow: '0 18px 32px rgba(0,0,0,0.24)',
+                  backdropFilter: 'blur(10px)'
+                }}
+              >
+                <button
+                  type="button"
+                  className="button"
+                  onClick={() => toggleDrawMode('service')}
+                  style={isServiceDrawMode ? activeDrawButtonStyle('service') : undefined}
+                >
+                  {isServiceDrawMode ? 'Stop drawing' : 'Draw lawn'}
+                </button>
+                <button
+                  type="button"
+                  className="button"
+                  onClick={() => toggleDrawMode('obstacle')}
+                  style={isObstacleDrawMode ? activeDrawButtonStyle('obstacle') : inactiveObstacleButtonStyle}
+                >
+                  {isObstacleDrawMode ? 'Stop drawing' : 'Draw obstacle'}
+                </button>
+                <div
+                  aria-hidden="true"
+                  style={{ width: '1px', height: '2rem', background: 'rgba(255,255,255,0.14)' }}
+                />
+                <div style={{ display: 'flex', gap: '0.45rem', flexWrap: 'wrap' }}>
+                  <button
+                    type="button"
+                    className="button"
+                    onClick={handleDeleteSelection}
+                    disabled={selection.kind === 'none'}
+                    style={selection.kind === 'none' ? undefined : inactiveObstacleButtonStyle}
+                  >
+                    Delete
+                  </button>
+                  <button
+                    type="button"
+                    className="button"
+                    onClick={handleClearAll}
+                    disabled={polygons.length === 0}
+                    style={clearAllConfirmation ? activeDrawButtonStyle('obstacle') : inactiveObstacleButtonStyle}
+                  >
+                    {clearAllConfirmation ? 'Confirm clear all' : 'Clear all'}
+                  </button>
+                </div>
+              </div>
             </div>
-
-            <QuoteEditorMap
-              center={center}
-              drawing={drawing}
-              selection={selection}
-              polygons={polygons}
-              activePolygonId={activePolygonId}
-              onPointAdd={(polygonId, point) => {
-                const targetPolygon = polygons.find((polygon) => polygon.id === polygonId);
-                if (!targetPolygon) {
-                  return;
-                }
-
-                applyPolygonPointsEdit(polygonId, [...targetPolygon.points, point]);
-                if (selection.kind === 'none') {
-                  setSelection({ kind: 'polygon', polygonId });
-                }
-              }}
-              onPolygonPointsChange={(polygonId, nextPoints) => {
-                applyPolygonPointsEdit(polygonId, nextPoints);
-              }}
-              onSelectionChange={(nextSelection) => {
-                setSelection(nextSelection);
-                if (nextSelection.kind !== 'none') {
-                  setActivePolygon(nextSelection.polygonId);
-                }
-              }}
-            />
           </div>
 
           <div style={{ display: 'grid', gap: '0.75rem' }}>
@@ -516,17 +698,6 @@ export const QuoteEditorPage = ({ getToken, quoteId, onBack }: QuoteEditorPagePr
                   Units: {unitMode === 'metric' ? 'Metric' : 'Imperial'}
                 </button>
               </div>
-
-              {metrics.selfIntersecting ? (
-                <p style={{ color: 'var(--danger)', marginTop: '0.5rem' }}>
-                  Polygon self-intersection detected. Fix geometry before saving.
-                </p>
-              ) : null}
-              {metrics.effectiveGeometryEmpty ? (
-                <p style={{ color: 'var(--danger)', marginTop: '0.5rem' }}>
-                  Obstacles remove entire service area. Fix geometry before saving.
-                </p>
-              ) : null}
             </article>
 
             <article className="metric-card">

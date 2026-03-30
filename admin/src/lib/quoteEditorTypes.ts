@@ -5,7 +5,8 @@ export type PolygonKind = 'service' | 'obstacle';
 export interface EditablePolygon {
   id: string;
   kind: PolygonKind;
-  points: LngLat[];
+  ringPoints: LngLat[];
+  rawStrokePoints: LngLat[] | null;
 }
 
 export interface PolygonEditorState {

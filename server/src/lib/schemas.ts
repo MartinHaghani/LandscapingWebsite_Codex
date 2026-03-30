@@ -9,11 +9,12 @@ const coordinateSchema = z
 const polygonSourcePolygonSchema = z.object({
   id: z.string().trim().min(1).max(120),
   kind: z.enum(['service', 'obstacle']),
-  points: z.array(coordinateSchema).min(3)
+  ringPoints: z.array(coordinateSchema).min(3),
+  rawStrokePoints: z.array(coordinateSchema).min(2).nullable().optional()
 });
 
 export const polygonSourceSchema = z.object({
-  schemaVersion: z.literal(1),
+  schemaVersion: z.literal(2),
   polygons: z.array(polygonSourcePolygonSchema).min(1),
   activePolygonId: z.string().trim().max(120).nullable().optional()
 });
@@ -85,7 +86,7 @@ export const quoteDraftPayloadSchema = z.object({
   baseTotal: z.number().nonnegative().optional(),
   pricingVersion: z.string().trim().min(1).max(40).optional(),
   currency: z.string().trim().min(1).max(8).optional(),
-  polygonSource: z.unknown().optional(),
+  polygonSource: polygonSourceSchema,
   attribution: attributionSchema
 });
 

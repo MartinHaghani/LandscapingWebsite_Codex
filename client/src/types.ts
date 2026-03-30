@@ -25,11 +25,12 @@ export type PolygonKind = 'service' | 'obstacle';
 export interface EditablePolygon {
   id: string;
   kind: PolygonKind;
-  points: LngLat[];
+  ringPoints: LngLat[];
+  rawStrokePoints: LngLat[] | null;
 }
 
 export interface QuotePolygonSource {
-  schemaVersion: 1;
+  schemaVersion: 2;
   polygons: EditablePolygon[];
   activePolygonId: string | null;
 }

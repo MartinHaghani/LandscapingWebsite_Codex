@@ -1,7 +1,14 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef } from 'react';
 import maplibregl, { type GeoJSONSource, type StyleSpecification } from 'maplibre-gl';
-import type { FeatureCollection, LineString, Point, Polygon } from 'geojson';
+import type { FeatureCollection, LineString, Polygon } from 'geojson';
 import type { EditablePolygon, LngLat, PolygonKind, SelectionTarget } from '../lib/quoteEditorTypes';
+import {
+  ADD_VERTEX_CURSOR,
+  EDGE_INSERTION_HIT_TOLERANCE_PX,
+  findEdgeInsertionHit,
+  insertPointIntoRing
+} from '../lib/edgeInsertion';
+import { finalizeFreehandStroke } from '../lib/freehand';
 import { buildPolygonFeature } from '../lib/quoteEditorGeometry';
 import 'maplibre-gl/dist/maplibre-gl.css';
 
@@ -38,36 +45,20 @@ const styleSpec: StyleSpecification = {
 
 interface QuoteEditorMapProps {
   center: LngLat;
-  drawing: boolean;
+  drawMode: PolygonKind | null;
   selection: SelectionTarget;
   polygons: EditablePolygon[];
   activePolygonId: string | null;
-  onPointAdd: (polygonId: string, point: LngLat) => void;
-  onPolygonPointsChange: (polygonId: string, points: LngLat[]) => void;
+  onPolygonDrawn: (kind: PolygonKind, shape: { ringPoints: LngLat[]; rawStrokePoints: LngLat[] }) => void;
+  onPolygonRingPointsChange: (polygonId: string, ringPoints: LngLat[]) => void;
   onSelectionChange: (selection: SelectionTarget) => void;
 }
 
-interface ProjectedOverlayPolygon {
-  id: string;
-  kind: PolygonKind;
-  selected: boolean;
-  active: boolean;
-  points: Array<{ x: number; y: number }>;
-}
-
 const POLYGON_SOURCE_ID = 'quote-polygons-source';
-const POLYGON_OUTLINE_SOURCE_ID = 'quote-polygons-outline-source';
 const PATH_SOURCE_ID = 'quote-active-path-source';
-const CENTER_SOURCE_ID = 'quote-center-source';
 const POLYGON_FILL_LAYER_ID = 'quote-polygons-fill';
-const POLYGON_SHEEN_LAYER_ID = 'quote-polygons-sheen';
-const POLYGON_EDGE_FALLBACK_LAYER_ID = 'quote-polygons-edge-fallback';
-const POLYGON_GLOW_LAYER_ID = 'quote-polygons-glow';
-const POLYGON_CASING_LAYER_ID = 'quote-polygons-casing';
 const POLYGON_OUTLINE_LAYER_ID = 'quote-polygons-outline';
-const PATH_GLOW_LAYER_ID = 'quote-active-path-glow';
 const PATH_LAYER_ID = 'quote-active-path-line';
-const CENTER_LAYER_ID = 'quote-center-point';
 
 const getSelectedPolygonId = (selection: SelectionTarget) => {
   if (selection.kind === 'none') {
@@ -77,219 +68,171 @@ const getSelectedPolygonId = (selection: SelectionTarget) => {
   return selection.polygonId;
 };
 
-const activePathFeatureCollection = (activePolygon: EditablePolygon | undefined): FeatureCollection<LineString> => ({
-  type: 'FeatureCollection',
-  features:
-    activePolygon && activePolygon.points.length >= 2
-      ? [
-          {
-            type: 'Feature',
-            geometry: {
-              type: 'LineString',
-              coordinates: activePolygon.points
-            },
-            properties: {
-              polygonId: activePolygon.id,
-              polygonKind: activePolygon.kind
-            }
+const activePathFeatureCollection = (
+  activePolygon: EditablePolygon | undefined,
+  strokePoints: LngLat[],
+  strokeKind: PolygonKind | null
+): FeatureCollection<LineString> => {
+  if (strokeKind && strokePoints.length >= 2) {
+    return {
+      type: 'FeatureCollection',
+      features: [
+        {
+          type: 'Feature',
+          geometry: {
+            type: 'LineString',
+            coordinates: strokePoints
+          },
+          properties: {
+            polygonKind: strokeKind
           }
-        ]
-      : []
-});
-
-const closeLineRing = (points: LngLat[]) => {
-  if (points.length < 3) {
-    return [...points];
+        }
+      ]
+    };
   }
 
-  const [firstLng, firstLat] = points[0];
-  const [lastLng, lastLat] = points[points.length - 1];
-  if (firstLng === lastLng && firstLat === lastLat) {
-    return [...points];
-  }
-
-  return [...points, points[0]];
+  return {
+    type: 'FeatureCollection',
+    features:
+      activePolygon && activePolygon.ringPoints.length >= 2
+        ? [
+            {
+              type: 'Feature',
+              geometry: {
+                type: 'LineString',
+                coordinates: activePolygon.ringPoints
+              },
+              properties: {
+                polygonId: activePolygon.id,
+                polygonKind: activePolygon.kind
+              }
+            }
+          ]
+        : []
+  };
 };
 
-const polygonFeatureCollection = (
-  polygons: EditablePolygon[],
-  selectedPolygonId: string | null
-): FeatureCollection<Polygon> => ({
-  type: 'FeatureCollection',
-  features: polygons
-    .map((polygonState) => {
-      const feature = buildPolygonFeature(polygonState.points);
-      if (!feature) {
-        return null;
-      }
+const getVertexScaleForZoom = (zoom: number) => Math.min(1.2, Math.max(0.75, zoom / 18));
 
-      return {
-        ...feature,
-        properties: {
-          polygonId: polygonState.id,
-          polygonKind: polygonState.kind,
-          selected: polygonState.id === selectedPolygonId
-        }
-      };
-    })
-    .filter((feature): feature is NonNullable<typeof feature> => feature !== null)
-});
+const markerStyleByKind = (kind: PolygonKind, selected: boolean, zoom: number) => {
+  const scale = getVertexScaleForZoom(zoom);
+  const selectedSize = `${Math.round(20 * scale)}px`;
+  const defaultSize = `${Math.round(16 * scale)}px`;
 
-const polygonOutlineFeatureCollection = (
-  polygons: EditablePolygon[],
-  selectedPolygonId: string | null,
-  activePolygonId: string | null
-): FeatureCollection<LineString> => ({
-  type: 'FeatureCollection',
-  features: polygons
-    .map((polygonState) => {
-      if (polygonState.points.length < 2) {
-        return null;
-      }
-
-      return {
-        type: 'Feature' as const,
-        geometry: {
-          type: 'LineString' as const,
-          coordinates: closeLineRing(polygonState.points)
-        },
-        properties: {
-          polygonId: polygonState.id,
-          polygonKind: polygonState.kind,
-          selected: polygonState.id === selectedPolygonId,
-          active: polygonState.id === activePolygonId
-        }
-      };
-    })
-    .filter((feature): feature is NonNullable<typeof feature> => feature !== null)
-});
-
-const syncPolygonSources = (
-  map: maplibregl.Map,
-  polygons: EditablePolygon[],
-  selectedPolygonId: string | null,
-  activePolygonId: string | null
-) => {
-  const polygonSource = map.getSource(POLYGON_SOURCE_ID) as GeoJSONSource | undefined;
-  if (polygonSource) {
-    polygonSource.setData(polygonFeatureCollection(polygons, selectedPolygonId));
-  }
-
-  const outlineSource = map.getSource(POLYGON_OUTLINE_SOURCE_ID) as GeoJSONSource | undefined;
-  if (outlineSource) {
-    outlineSource.setData(polygonOutlineFeatureCollection(polygons, selectedPolygonId, activePolygonId));
-  }
-
-  const pathSource = map.getSource(PATH_SOURCE_ID) as GeoJSONSource | undefined;
-  if (pathSource) {
-    const activePolygon = polygons.find((polygonState) => polygonState.id === activePolygonId);
-    pathSource.setData(activePathFeatureCollection(activePolygon));
-  }
-};
-
-const markerStyleByKind = (kind: PolygonKind, selected: boolean) => {
   if (kind === 'obstacle') {
     return selected
       ? {
-          width: '20px',
-          height: '20px',
-          borderColor: '#FFE4E6',
+          width: selectedSize,
+          height: selectedSize,
+          borderColor: '#FFF7F7',
           backgroundColor: '#DC2626',
-          boxShadow: '0 0 26px rgba(239,68,68,0.9), 0 0 0 2px rgba(255,255,255,0.75)'
+          boxShadow: '0 0 0 2px rgba(255,255,255,0.85), 0 8px 16px rgba(220,38,38,0.45)'
         }
       : {
-          width: '16px',
-          height: '16px',
+          width: defaultSize,
+          height: defaultSize,
           borderColor: '#FFFFFF',
           backgroundColor: '#DC2626',
-          boxShadow: '0 0 18px rgba(239,68,68,0.55)'
+          boxShadow: '0 5px 12px rgba(220,38,38,0.45)'
         };
   }
 
   return selected
     ? {
-        width: '20px',
-        height: '20px',
-        borderColor: '#9FF0BD',
+        width: selectedSize,
+        height: selectedSize,
+        borderColor: '#D1FAE1',
         backgroundColor: '#329F5B',
-        boxShadow: '0 0 26px rgba(50,159,91,0.9), 0 0 0 2px rgba(255,255,255,0.7)'
+        boxShadow: '0 0 0 2px rgba(255,255,255,0.85), 0 8px 16px rgba(50,159,91,0.45)'
       }
     : {
-        width: '16px',
-        height: '16px',
+        width: defaultSize,
+        height: defaultSize,
         borderColor: '#FFFFFF',
         backgroundColor: '#329F5B',
-        boxShadow: '0 0 18px rgba(50,159,91,0.55)'
+        boxShadow: '0 5px 12px rgba(50,159,91,0.45)'
       };
 };
 
-const projectOverlayPolygons = (
-  map: maplibregl.Map,
-  polygons: EditablePolygon[],
-  selectedPolygonId: string | null,
-  activePolygonId: string | null
-): ProjectedOverlayPolygon[] =>
-  polygons
-    .map((polygonState) => {
-      const points = polygonState.points
-        .map(([lng, lat]) => map.project([lng, lat]))
-        .filter((point) => Number.isFinite(point.x) && Number.isFinite(point.y))
-        .map((point) => ({ x: point.x, y: point.y }));
+const createHomeMarkerElement = () => {
+  const element = document.createElement('div');
+  element.style.width = '34px';
+  element.style.height = '34px';
+  element.style.borderRadius = '999px';
+  element.style.display = 'grid';
+  element.style.placeItems = 'center';
+  element.style.background = '#FFFFFF';
+  element.style.border = '2px solid rgba(50,159,91,0.16)';
+  element.style.boxShadow = '0 12px 22px rgba(15,23,42,0.18)';
+  element.innerHTML =
+    '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M4 10.75L12 4l8 6.75v8.25a1 1 0 0 1-1 1h-4.75v-5.5h-4.5V20H5a1 1 0 0 1-1-1v-8.25Z" fill="#329F5B"/><path d="M9.75 20v-5.5h4.5V20" stroke="#FFFFFF" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+  return element;
+};
 
-      return {
-        id: polygonState.id,
-        kind: polygonState.kind,
-        selected: polygonState.id === selectedPolygonId,
-        active: polygonState.id === activePolygonId,
-        points
-      };
-    })
-    .filter((polygonState) => polygonState.points.length >= 3);
+const applyMarkerStyle = (
+  element: HTMLButtonElement,
+  kind: PolygonKind,
+  selected: boolean,
+  zoom: number
+) => {
+  const markerStyle = markerStyleByKind(kind, selected, zoom);
+  element.style.width = markerStyle.width;
+  element.style.height = markerStyle.height;
+  element.style.borderColor = markerStyle.borderColor;
+  element.style.backgroundColor = markerStyle.backgroundColor;
+  element.style.boxShadow = markerStyle.boxShadow;
+};
 
 export const QuoteEditorMap = ({
   center,
-  drawing,
+  drawMode,
   selection,
   polygons,
   activePolygonId,
-  onPointAdd,
-  onPolygonPointsChange,
+  onPolygonDrawn,
+  onPolygonRingPointsChange,
   onSelectionChange
 }: QuoteEditorMapProps) => {
   const selectedPolygonId = useMemo(() => getSelectedPolygonId(selection), [selection]);
 
   const containerRef = useRef<HTMLDivElement | null>(null);
   const mapRef = useRef<maplibregl.Map | null>(null);
+  const centerMarkerRef = useRef<maplibregl.Marker | null>(null);
   const vertexMarkersRef = useRef<maplibregl.Marker[]>([]);
-  const drawingRef = useRef(drawing);
+  const vertexMarkerElementsRef = useRef<
+    Array<{ element: HTMLButtonElement; kind: PolygonKind; selected: boolean }>
+  >([]);
+  const drawModeRef = useRef<PolygonKind | null>(drawMode);
   const activePolygonIdRef = useRef(activePolygonId);
-  const onPointAddRef = useRef(onPointAdd);
-  const onPolygonPointsChangeRef = useRef(onPolygonPointsChange);
+  const onPolygonDrawnRef = useRef(onPolygonDrawn);
+  const onPolygonRingPointsChangeRef = useRef(onPolygonRingPointsChange);
   const onSelectionChangeRef = useRef(onSelectionChange);
   const centerRef = useRef(center);
   const polygonsRef = useRef(polygons);
   const selectedPolygonIdRef = useRef<string | null>(selectedPolygonId);
   const ignoreNextMapClickRef = useRef(false);
+  const clearIgnoreNextMapClickTimeoutRef = useRef<number | null>(null);
   const isMarkerDraggingRef = useRef(false);
-  const [overlayPolygons, setOverlayPolygons] = useState<ProjectedOverlayPolygon[]>([]);
-  const [overlaySize, setOverlaySize] = useState({ width: 0, height: 0 });
-  const syncProjectedOverlayRef = useRef<() => void>(() => {});
+  const isStrokeDrawingRef = useRef(false);
+  const strokePointsRef = useRef<LngLat[]>([]);
+  const hoveredInsertHitRef = useRef<ReturnType<typeof findEdgeInsertionHit> | null>(null);
+  const syncCanvasCursorRef = useRef<() => void>(() => {});
 
   useEffect(() => {
-    drawingRef.current = drawing;
-  }, [drawing]);
+    drawModeRef.current = drawMode;
+  }, [drawMode]);
 
   useEffect(() => {
     activePolygonIdRef.current = activePolygonId;
   }, [activePolygonId]);
 
   useEffect(() => {
-    onPointAddRef.current = onPointAdd;
-  }, [onPointAdd]);
+    onPolygonDrawnRef.current = onPolygonDrawn;
+  }, [onPolygonDrawn]);
 
   useEffect(() => {
-    onPolygonPointsChangeRef.current = onPolygonPointsChange;
-  }, [onPolygonPointsChange]);
+    onPolygonRingPointsChangeRef.current = onPolygonRingPointsChange;
+  }, [onPolygonRingPointsChange]);
 
   useEffect(() => {
     onSelectionChangeRef.current = onSelectionChange;
@@ -306,31 +249,6 @@ export const QuoteEditorMap = ({
   useEffect(() => {
     selectedPolygonIdRef.current = selectedPolygonId;
   }, [selectedPolygonId]);
-
-  useEffect(() => {
-    syncProjectedOverlayRef.current = () => {
-      const map = mapRef.current;
-      if (!map) {
-        return;
-      }
-
-      const container = map.getContainer();
-      const width = container.clientWidth;
-      const height = container.clientHeight;
-
-      setOverlaySize((current) =>
-        current.width === width && current.height === height ? current : { width, height }
-      );
-      setOverlayPolygons(
-        projectOverlayPolygons(
-          map,
-          polygonsRef.current,
-          selectedPolygonIdRef.current,
-          activePolygonIdRef.current
-        )
-      );
-    };
-  });
 
   useEffect(() => {
     if (!containerRef.current || mapRef.current) {
@@ -355,8 +273,202 @@ export const QuoteEditorMap = ({
         showCompass: false,
         visualizePitch: false
       }),
-      'top-right'
+      'bottom-right'
     );
+
+    const syncActivePath = () => {
+      const pathSource = map.getSource(PATH_SOURCE_ID) as GeoJSONSource | undefined;
+      if (!pathSource) {
+        return;
+      }
+
+      const activePolygon = polygonsRef.current.find((polygonState) => polygonState.id === activePolygonIdRef.current);
+      pathSource.setData(
+        activePathFeatureCollection(activePolygon, strokePointsRef.current, isStrokeDrawingRef.current ? drawModeRef.current : null)
+      );
+    };
+
+    const syncCanvasCursor = () => {
+      if (drawModeRef.current) {
+        map.getCanvas().style.cursor = 'crosshair';
+        return;
+      }
+
+      map.getCanvas().style.cursor = hoveredInsertHitRef.current ? ADD_VERTEX_CURSOR : 'grab';
+    };
+
+    syncCanvasCursorRef.current = syncCanvasCursor;
+
+    const getInsertHit = (point: { x: number; y: number }) => {
+      const selectedPolygonId = selectedPolygonIdRef.current;
+      if (!selectedPolygonId || isMarkerDraggingRef.current || drawModeRef.current) {
+        return null;
+      }
+
+      const selectedPolygon = polygonsRef.current.find((polygonState) => polygonState.id === selectedPolygonId);
+      if (!selectedPolygon || selectedPolygon.ringPoints.length < 2) {
+        return null;
+      }
+
+      return findEdgeInsertionHit(
+        selectedPolygon.ringPoints,
+        point,
+        {
+          project: (lngLat) => {
+            const projected = map.project(lngLat);
+            return { x: projected.x, y: projected.y };
+          },
+          unproject: (screenPoint) => {
+            const lngLat = map.unproject([screenPoint.x, screenPoint.y]);
+            return [lngLat.lng, lngLat.lat] as LngLat;
+          }
+        },
+        EDGE_INSERTION_HIT_TOLERANCE_PX
+      );
+    };
+
+    const clearHoveredInsertHit = () => {
+      hoveredInsertHitRef.current = null;
+      syncCanvasCursor();
+    };
+
+    const syncVertexMarkerSizes = () => {
+      const zoom = map.getZoom();
+      vertexMarkerElementsRef.current.forEach(({ element, kind, selected }) => {
+        applyMarkerStyle(element, kind, selected, zoom);
+      });
+    };
+
+    const toLngLat = (clientX: number, clientY: number): LngLat => {
+      const rect = map.getCanvas().getBoundingClientRect();
+      const lngLat = map.unproject([clientX - rect.left, clientY - rect.top]);
+      return [lngLat.lng, lngLat.lat];
+    };
+
+    const finishStroke = () => {
+      if (!isStrokeDrawingRef.current) {
+        return;
+      }
+
+      isStrokeDrawingRef.current = false;
+      map.dragPan.enable();
+
+      const finalized = drawModeRef.current ? finalizeFreehandStroke(strokePointsRef.current) : null;
+
+      strokePointsRef.current = [];
+      syncActivePath();
+
+      if (drawModeRef.current && finalized) {
+        onPolygonDrawnRef.current(drawModeRef.current, finalized);
+      }
+    };
+
+    const handlePointerMove = (event: PointerEvent) => {
+      if (!isStrokeDrawingRef.current || !drawModeRef.current) {
+        return;
+      }
+
+      strokePointsRef.current = [...strokePointsRef.current, toLngLat(event.clientX, event.clientY)];
+      syncActivePath();
+    };
+
+    const handlePointerUp = () => {
+      finishStroke();
+    };
+
+    const handlePointerCancel = () => {
+      finishStroke();
+    };
+
+    const handlePointerDown = (event: PointerEvent) => {
+      if (!drawModeRef.current || event.button !== 0) {
+        return;
+      }
+
+      event.preventDefault();
+      event.stopPropagation();
+      isStrokeDrawingRef.current = true;
+      strokePointsRef.current = [toLngLat(event.clientX, event.clientY)];
+      map.dragPan.disable();
+      hoveredInsertHitRef.current = null;
+      syncCanvasCursor();
+      syncActivePath();
+    };
+
+    const canvas = map.getCanvas();
+    canvas.addEventListener('pointerdown', handlePointerDown);
+    window.addEventListener('pointermove', handlePointerMove);
+    window.addEventListener('pointerup', handlePointerUp);
+    window.addEventListener('pointercancel', handlePointerCancel);
+    map.on('zoom', syncVertexMarkerSizes);
+
+    const handleMapMouseMove = (event: maplibregl.MapMouseEvent) => {
+      hoveredInsertHitRef.current = getInsertHit({
+        x: event.point.x,
+        y: event.point.y
+      });
+      syncCanvasCursor();
+    };
+
+    const handleMapClick = (event: maplibregl.MapMouseEvent) => {
+      if (isMarkerDraggingRef.current || drawModeRef.current) {
+        return;
+      }
+
+      if (ignoreNextMapClickRef.current) {
+        ignoreNextMapClickRef.current = false;
+        if (clearIgnoreNextMapClickTimeoutRef.current !== null) {
+          window.clearTimeout(clearIgnoreNextMapClickTimeoutRef.current);
+          clearIgnoreNextMapClickTimeoutRef.current = null;
+        }
+        return;
+      }
+
+      const insertHit = getInsertHit({
+        x: event.point.x,
+        y: event.point.y
+      });
+      const selectedPolygonId = selectedPolygonIdRef.current;
+
+      if (insertHit && selectedPolygonId) {
+        const selectedPolygon = polygonsRef.current.find((polygonState) => polygonState.id === selectedPolygonId);
+        if (selectedPolygon) {
+          const nextPoints = insertPointIntoRing(
+            selectedPolygon.ringPoints,
+            insertHit.insertIndex,
+            insertHit.lngLat
+          );
+          onPolygonRingPointsChangeRef.current(selectedPolygon.id, nextPoints);
+          onSelectionChangeRef.current({
+            kind: 'vertex',
+            polygonId: selectedPolygon.id,
+            index: insertHit.insertIndex
+          });
+          hoveredInsertHitRef.current = null;
+          syncCanvasCursor();
+          return;
+        }
+      }
+
+      const clickedFeatures = map.queryRenderedFeatures(event.point, {
+        layers: [POLYGON_FILL_LAYER_ID, POLYGON_OUTLINE_LAYER_ID]
+      });
+
+      const clickedPolygonId = clickedFeatures
+        .map((feature) => feature.properties?.polygonId)
+        .find((value) => typeof value === 'string');
+
+      if (clickedPolygonId) {
+        onSelectionChangeRef.current({ kind: 'polygon', polygonId: clickedPolygonId });
+        return;
+      }
+
+      onSelectionChangeRef.current({ kind: 'none' });
+    };
+
+    map.on('mousemove', handleMapMouseMove);
+    map.on('click', handleMapClick);
+    canvas.addEventListener('mouseleave', clearHoveredInsertHit);
 
     const ensureSourcesAndLayers = () => {
       if (!map.isStyleLoaded()) {
@@ -383,37 +495,6 @@ export const QuoteEditorMap = ({
         });
       }
 
-      if (!map.getSource(POLYGON_OUTLINE_SOURCE_ID)) {
-        map.addSource(POLYGON_OUTLINE_SOURCE_ID, {
-          type: 'geojson',
-          data: {
-            type: 'FeatureCollection',
-            features: []
-          } as FeatureCollection<LineString>
-        });
-      }
-
-      if (!map.getSource(CENTER_SOURCE_ID)) {
-        map.addSource(CENTER_SOURCE_ID, {
-          type: 'geojson',
-          data: {
-            type: 'FeatureCollection',
-            features: [
-              {
-                type: 'Feature',
-                geometry: {
-                  type: 'Point',
-                  coordinates: centerRef.current
-                },
-                properties: {
-                  title: 'Property center'
-                }
-              }
-            ]
-          } as FeatureCollection<Point>
-        });
-      }
-
       if (!map.getLayer(POLYGON_FILL_LAYER_ID)) {
         map.addLayer({
           id: POLYGON_FILL_LAYER_ID,
@@ -423,142 +504,15 @@ export const QuoteEditorMap = ({
             'fill-color': [
               'case',
               ['==', ['get', 'polygonKind'], 'obstacle'],
-              '#B91C1C',
-              '#059669'
+              '#DC2626',
+              '#329F5B'
             ],
             'fill-opacity': [
               'case',
               ['==', ['get', 'polygonKind'], 'obstacle'],
-              ['case', ['==', ['get', 'selected'], true], 0.38, 0.22],
-              ['case', ['==', ['get', 'selected'], true], 0.42, 0.26]
+              ['case', ['==', ['get', 'selected'], true], 0.42, 0.2],
+              ['case', ['==', ['get', 'selected'], true], 0.54, 0.24]
             ]
-          }
-        });
-      }
-
-      if (!map.getLayer(POLYGON_SHEEN_LAYER_ID)) {
-        map.addLayer({
-          id: POLYGON_SHEEN_LAYER_ID,
-          source: POLYGON_SOURCE_ID,
-          type: 'fill',
-          paint: {
-            'fill-color': [
-              'case',
-              ['==', ['get', 'polygonKind'], 'obstacle'],
-              '#FFE4E6',
-              '#F3FFF7'
-            ],
-            'fill-opacity': [
-              'case',
-              ['==', ['get', 'selected'], true],
-              0.08,
-              0.035
-            ]
-          }
-        });
-      }
-
-      if (!map.getLayer(POLYGON_EDGE_FALLBACK_LAYER_ID)) {
-        map.addLayer({
-          id: POLYGON_EDGE_FALLBACK_LAYER_ID,
-          source: POLYGON_SOURCE_ID,
-          type: 'line',
-          layout: {
-            'line-join': 'round',
-            'line-cap': 'round'
-          },
-          paint: {
-            'line-color': [
-              'case',
-              ['==', ['get', 'polygonKind'], 'obstacle'],
-              ['case', ['==', ['get', 'selected'], true], '#FFF3F5', '#FF7A90'],
-              ['case', ['==', ['get', 'selected'], true], '#F8FFFC', '#4EF0A5']
-            ],
-            'line-width': [
-              'case',
-              ['==', ['get', 'selected'], true],
-              6.2,
-              4.4
-            ],
-            'line-opacity': [
-              'case',
-              ['==', ['get', 'selected'], true],
-              0.98,
-              0.9
-            ]
-          }
-        });
-      }
-
-      if (!map.getLayer(POLYGON_GLOW_LAYER_ID)) {
-        map.addLayer({
-          id: POLYGON_GLOW_LAYER_ID,
-          source: POLYGON_OUTLINE_SOURCE_ID,
-          type: 'line',
-          layout: {
-            'line-join': 'round',
-            'line-cap': 'round'
-          },
-          paint: {
-            'line-color': [
-              'case',
-              ['==', ['get', 'polygonKind'], 'obstacle'],
-              '#FF6B7A',
-              '#33D17A'
-            ],
-            'line-width': [
-              'case',
-              ['==', ['get', 'selected'], true],
-              14,
-              ['==', ['get', 'active'], true],
-              10.5,
-              7.4
-            ],
-            'line-opacity': [
-              'case',
-              ['==', ['get', 'selected'], true],
-              0.5,
-              ['==', ['get', 'active'], true],
-              0.34,
-              0.2
-            ],
-            'line-blur': [
-              'case',
-              ['==', ['get', 'selected'], true],
-              4.2,
-              ['==', ['get', 'active'], true],
-              3,
-              2.1
-            ]
-          }
-        });
-      }
-
-      if (!map.getLayer(POLYGON_CASING_LAYER_ID)) {
-        map.addLayer({
-          id: POLYGON_CASING_LAYER_ID,
-          source: POLYGON_OUTLINE_SOURCE_ID,
-          type: 'line',
-          layout: {
-            'line-join': 'round',
-            'line-cap': 'round'
-          },
-          paint: {
-            'line-color': [
-              'case',
-              ['==', ['get', 'polygonKind'], 'obstacle'],
-              '#23070A',
-              '#031A0B'
-            ],
-            'line-width': [
-              'case',
-              ['==', ['get', 'selected'], true],
-              7.4,
-              ['==', ['get', 'active'], true],
-              6.1,
-              4.9
-            ],
-            'line-opacity': 0.82
           }
         });
       }
@@ -566,50 +520,16 @@ export const QuoteEditorMap = ({
       if (!map.getLayer(POLYGON_OUTLINE_LAYER_ID)) {
         map.addLayer({
           id: POLYGON_OUTLINE_LAYER_ID,
-          source: POLYGON_OUTLINE_SOURCE_ID,
+          source: POLYGON_SOURCE_ID,
           type: 'line',
-          layout: {
-            'line-join': 'round',
-            'line-cap': 'round'
-          },
           paint: {
             'line-color': [
               'case',
               ['==', ['get', 'polygonKind'], 'obstacle'],
-              ['case', ['==', ['get', 'selected'], true], '#FFF1F3', '#FFB4BE'],
-              ['case', ['==', ['get', 'selected'], true], '#FFFFFF', '#C6F7D8']
+              ['case', ['==', ['get', 'selected'], true], '#FFE4E6', '#FDA4AF'],
+              ['case', ['==', ['get', 'selected'], true], '#FFFFFF', '#BFEBCF']
             ],
-            'line-width': [
-              'case',
-              ['==', ['get', 'selected'], true],
-              3.9,
-              ['==', ['get', 'active'], true],
-              3.3,
-              2.7
-            ]
-          }
-        });
-      }
-
-      if (!map.getLayer(PATH_GLOW_LAYER_ID)) {
-        map.addLayer({
-          id: PATH_GLOW_LAYER_ID,
-          source: PATH_SOURCE_ID,
-          type: 'line',
-          layout: {
-            'line-join': 'round',
-            'line-cap': 'round'
-          },
-          paint: {
-            'line-color': [
-              'case',
-              ['==', ['get', 'polygonKind'], 'obstacle'],
-              '#FF6B7A',
-              '#33D17A'
-            ],
-            'line-width': 8,
-            'line-opacity': 0.42,
-            'line-blur': 2.6
+            'line-width': ['case', ['==', ['get', 'selected'], true], 3.2, 2.1]
           }
         });
       }
@@ -619,96 +539,54 @@ export const QuoteEditorMap = ({
           id: PATH_LAYER_ID,
           source: PATH_SOURCE_ID,
           type: 'line',
-          layout: {
-            'line-join': 'round',
-            'line-cap': 'round'
-          },
           paint: {
             'line-color': [
               'case',
               ['==', ['get', 'polygonKind'], 'obstacle'],
-              '#FFF8F9',
-              '#F5FFFA'
+              '#FDA4AF',
+              '#7DE8A6'
             ],
-            'line-width': 3.6,
-            'line-dasharray': [1.4, 1.1]
+            'line-width': 2,
+            'line-dasharray': [2, 1]
           }
         });
       }
 
-      if (!map.getLayer(CENTER_LAYER_ID)) {
-        map.addLayer({
-          id: CENTER_LAYER_ID,
-          source: CENTER_SOURCE_ID,
-          type: 'circle',
-          paint: {
-            'circle-radius': 6,
-            'circle-color': '#ffffff',
-            'circle-stroke-width': 2,
-            'circle-stroke-color': '#329F5B'
-          }
-        });
-      }
-
-      syncPolygonSources(
-        map,
-        polygonsRef.current,
-        selectedPolygonIdRef.current,
-        activePolygonIdRef.current
-      );
     };
-
-    const handleMapClick = (event: maplibregl.MapMouseEvent) => {
-      if (isMarkerDraggingRef.current) {
-        return;
-      }
-
-      if (ignoreNextMapClickRef.current) {
-        ignoreNextMapClickRef.current = false;
-        return;
-      }
-
-      const currentTargetPolygonId = activePolygonIdRef.current ?? selectedPolygonIdRef.current;
-      if (drawingRef.current) {
-        if (!currentTargetPolygonId) {
-          return;
-        }
-
-        onPointAddRef.current(currentTargetPolygonId, [event.lngLat.lng, event.lngLat.lat]);
-        return;
-      }
-
-      const clickedFeatures = map.queryRenderedFeatures(event.point, {
-        layers: [POLYGON_FILL_LAYER_ID, POLYGON_OUTLINE_LAYER_ID]
-      });
-
-      const clickedPolygonId = clickedFeatures
-        .map((feature) => feature.properties?.polygonId)
-        .find((value) => typeof value === 'string');
-
-      if (clickedPolygonId) {
-        onSelectionChangeRef.current({ kind: 'polygon', polygonId: clickedPolygonId });
-      }
-    };
-
-    map.on('click', handleMapClick);
 
     map.on('load', ensureSourcesAndLayers);
     map.on('styledata', ensureSourcesAndLayers);
-    map.on('move', () => syncProjectedOverlayRef.current());
-    map.on('zoom', () => syncProjectedOverlayRef.current());
-    map.on('resize', () => syncProjectedOverlayRef.current());
+
+    centerMarkerRef.current = new maplibregl.Marker({
+      element: createHomeMarkerElement()
+    })
+      .setLngLat(centerRef.current)
+      .addTo(map);
 
     mapRef.current = map;
-    syncProjectedOverlayRef.current();
 
     return () => {
+      centerMarkerRef.current?.remove();
+      centerMarkerRef.current = null;
       vertexMarkersRef.current.forEach((marker) => marker.remove());
       vertexMarkersRef.current = [];
+      vertexMarkerElementsRef.current = [];
+      canvas.removeEventListener('pointerdown', handlePointerDown);
+      canvas.removeEventListener('mouseleave', clearHoveredInsertHit);
+      window.removeEventListener('pointermove', handlePointerMove);
+      window.removeEventListener('pointerup', handlePointerUp);
+      window.removeEventListener('pointercancel', handlePointerCancel);
+      if (clearIgnoreNextMapClickTimeoutRef.current !== null) {
+        window.clearTimeout(clearIgnoreNextMapClickTimeoutRef.current);
+        clearIgnoreNextMapClickTimeoutRef.current = null;
+      }
+      map.off('zoom', syncVertexMarkerSizes);
+      map.off('mousemove', handleMapMouseMove);
       map.remove();
       mapRef.current = null;
+      syncCanvasCursorRef.current = () => {};
     };
-  }, [center]);
+  }, []);
 
   useEffect(() => {
     const map = mapRef.current;
@@ -722,72 +600,50 @@ export const QuoteEditorMap = ({
       speed: 1,
       essential: true
     });
-
-    const centerSource = map.getSource(CENTER_SOURCE_ID) as GeoJSONSource | undefined;
-    if (!centerSource) {
-      return;
-    }
-
-    centerSource.setData({
-      type: 'FeatureCollection',
-      features: [
-        {
-          type: 'Feature',
-          geometry: {
-            type: 'Point',
-            coordinates: center
-          },
-          properties: {
-            title: 'Property center'
-          }
-        }
-      ]
-    });
-    syncProjectedOverlayRef.current();
+    centerMarkerRef.current?.setLngLat(center);
   }, [center]);
 
   useEffect(() => {
     const map = mapRef.current;
-    if (!map || polygons.length === 0) {
-      return;
-    }
-
-    const points = polygons.flatMap((polygonState) => polygonState.points);
-    if (points.length === 0) {
-      return;
-    }
-
-    const bounds = points.slice(1).reduce(
-      (currentBounds, point) => currentBounds.extend(point),
-      new maplibregl.LngLatBounds(points[0], points[0])
-    );
-
-    map.fitBounds(bounds, {
-      padding: 72,
-      maxZoom: 18.5,
-      duration: 0,
-      essential: true
-    });
-  }, [polygons]);
-
-  useEffect(() => {
-    const map = mapRef.current;
     if (!map) {
       return;
     }
 
-    syncPolygonSources(map, polygons, selectedPolygonId, activePolygonId);
-    syncProjectedOverlayRef.current();
-  }, [polygons, selectedPolygonId, activePolygonId]);
+    const polygonSource = map.getSource(POLYGON_SOURCE_ID) as GeoJSONSource | undefined;
+    if (polygonSource) {
+      polygonSource.setData({
+        type: 'FeatureCollection',
+        features: polygons
+          .map((polygonState) => {
+            const feature = buildPolygonFeature(polygonState.ringPoints);
+            if (!feature) {
+              return null;
+            }
 
-  useEffect(() => {
-    const map = mapRef.current;
-    if (!map) {
-      return;
+            return {
+              ...feature,
+              properties: {
+                polygonId: polygonState.id,
+                polygonKind: polygonState.kind,
+                selected: polygonState.id === selectedPolygonId
+              }
+            };
+          })
+          .filter((feature): feature is NonNullable<typeof feature> => feature !== null)
+      });
     }
 
-    map.getCanvas().style.cursor = drawing ? 'crosshair' : 'grab';
-  }, [drawing]);
+    const pathSource = map.getSource(PATH_SOURCE_ID) as GeoJSONSource | undefined;
+    if (pathSource) {
+      const activePolygon = polygons.find((polygonState) => polygonState.id === activePolygonId);
+      pathSource.setData(activePathFeatureCollection(activePolygon, strokePointsRef.current, isStrokeDrawingRef.current ? drawMode : null));
+    }
+  }, [polygons, selectedPolygonId, activePolygonId, drawMode]);
+
+  useEffect(() => {
+    hoveredInsertHitRef.current = null;
+    syncCanvasCursorRef.current();
+  }, [drawMode, polygons, selection]);
 
   useEffect(() => {
     const map = mapRef.current;
@@ -803,30 +659,21 @@ export const QuoteEditorMap = ({
     }
 
     const selectedPolygon = polygons.find((polygonState) => polygonState.id === selectedPolygonId);
-    if (!selectedPolygon || selectedPolygon.points.length === 0) {
+    if (!selectedPolygon || selectedPolygon.ringPoints.length === 0) {
       return;
     }
 
-    const markers = selectedPolygon.points.map((point, index) => {
+    const markers = selectedPolygon.ringPoints.map((point, index) => {
       const element = document.createElement('button');
       element.type = 'button';
-      element.style.borderRadius = '999px';
-      element.style.borderWidth = '2px';
-      element.style.borderStyle = 'solid';
-      element.style.padding = '0';
-      element.style.outline = 'none';
+      element.className = 'rounded-full border-2';
 
       const isSelectedVertex =
         selection.kind === 'vertex' &&
         selection.polygonId === selectedPolygonId &&
         selection.index === index;
 
-      const markerStyle = markerStyleByKind(selectedPolygon.kind, isSelectedVertex);
-      element.style.width = markerStyle.width;
-      element.style.height = markerStyle.height;
-      element.style.borderColor = markerStyle.borderColor;
-      element.style.backgroundColor = markerStyle.backgroundColor;
-      element.style.boxShadow = markerStyle.boxShadow;
+      applyMarkerStyle(element, selectedPolygon.kind, isSelectedVertex, map.getZoom());
       element.style.cursor = 'grab';
 
       element.setAttribute('aria-label', `Vertex ${index + 1}`);
@@ -841,33 +688,47 @@ export const QuoteEditorMap = ({
       marker.on('dragstart', () => {
         isMarkerDraggingRef.current = true;
         element.style.cursor = 'grabbing';
+        hoveredInsertHitRef.current = null;
+        syncCanvasCursorRef.current();
       });
 
       marker.on('dragend', () => {
         const lngLat = marker.getLngLat();
-        const nextPoints = selectedPolygon.points.map((existingPoint) => [...existingPoint] as LngLat);
+        const nextPoints = selectedPolygon.ringPoints.map((existingPoint) => [...existingPoint] as LngLat);
         nextPoints[index] = [lngLat.lng, lngLat.lat];
-        onPolygonPointsChangeRef.current(selectedPolygonId, nextPoints);
+        onPolygonRingPointsChangeRef.current(selectedPolygonId, nextPoints);
 
         ignoreNextMapClickRef.current = true;
+        if (clearIgnoreNextMapClickTimeoutRef.current !== null) {
+          window.clearTimeout(clearIgnoreNextMapClickTimeoutRef.current);
+        }
+        clearIgnoreNextMapClickTimeoutRef.current = window.setTimeout(() => {
+          ignoreNextMapClickRef.current = false;
+          clearIgnoreNextMapClickTimeoutRef.current = null;
+        }, 0);
         isMarkerDraggingRef.current = false;
         element.style.cursor = 'grab';
+        syncCanvasCursorRef.current();
       });
 
       return marker;
     });
 
     vertexMarkersRef.current = markers;
+    vertexMarkerElementsRef.current = markers.map((marker, index) => ({
+      element: marker.getElement() as HTMLButtonElement,
+      kind: selectedPolygon.kind,
+      selected:
+        selection.kind === 'vertex' &&
+        selection.polygonId === selectedPolygonId &&
+        selection.index === index
+    }));
 
     return () => {
       markers.forEach((marker) => marker.remove());
+      vertexMarkerElementsRef.current = [];
     };
   }, [polygons, selection, selectedPolygonId]);
-
-  const selectedPolygonPointCount =
-    selectedPolygonId === null
-      ? 0
-      : polygons.find((polygonState) => polygonState.id === selectedPolygonId)?.points.length ?? 0;
 
   return (
     <div
@@ -884,246 +745,15 @@ export const QuoteEditorMap = ({
       }}
     >
       <div ref={containerRef} style={{ height: '100%', width: '100%' }} />
-
-      {overlaySize.width > 0 && overlaySize.height > 0 ? (
-        <svg
-          width={overlaySize.width}
-          height={overlaySize.height}
-          viewBox={`0 0 ${overlaySize.width} ${overlaySize.height}`}
-          style={{
-            pointerEvents: 'none',
-            position: 'absolute',
-            inset: 0,
-            zIndex: 1
-          }}
-          aria-hidden="true"
-        >
-          <defs>
-            <linearGradient id="overlay-service-fill" x1="0%" y1="0%" x2="100%" y2="100%">
-              <stop offset="0%" stopColor="#5CF0B6" />
-              <stop offset="100%" stopColor="#14B87A" />
-            </linearGradient>
-            <linearGradient id="overlay-service-fill-selected" x1="0%" y1="0%" x2="100%" y2="100%">
-              <stop offset="0%" stopColor="#A8FFD9" />
-              <stop offset="100%" stopColor="#2ED08E" />
-            </linearGradient>
-            <linearGradient id="overlay-obstacle-fill" x1="0%" y1="0%" x2="100%" y2="100%">
-              <stop offset="0%" stopColor="#FF9FB0" />
-              <stop offset="100%" stopColor="#E34863" />
-            </linearGradient>
-            <linearGradient id="overlay-obstacle-fill-selected" x1="0%" y1="0%" x2="100%" y2="100%">
-              <stop offset="0%" stopColor="#FFD2DB" />
-              <stop offset="100%" stopColor="#F06179" />
-            </linearGradient>
-            <pattern
-              id="overlay-obstacle-hatch"
-              patternUnits="userSpaceOnUse"
-              width="12"
-              height="12"
-              patternTransform="rotate(38)"
-            >
-              <line x1="0" y1="0" x2="0" y2="12" stroke="rgba(255,255,255,0.65)" strokeWidth="2.4" />
-            </pattern>
-            <filter id="overlay-edge-glow" x="-35%" y="-35%" width="170%" height="170%">
-              <feGaussianBlur in="SourceGraphic" stdDeviation="2.7" result="blurred" />
-              <feMerge>
-                <feMergeNode in="blurred" />
-                <feMergeNode in="SourceGraphic" />
-              </feMerge>
-            </filter>
-          </defs>
-
-          {overlayPolygons.map((polygonState) => {
-            const points = polygonState.points.map((point) => `${point.x},${point.y}`).join(' ');
-            const fillColor =
-              polygonState.kind === 'obstacle'
-                ? polygonState.selected
-                  ? 'url(#overlay-obstacle-fill-selected)'
-                  : 'url(#overlay-obstacle-fill)'
-                : polygonState.selected
-                  ? 'url(#overlay-service-fill-selected)'
-                  : 'url(#overlay-service-fill)';
-            const fillOpacity = polygonState.selected ? 0.48 : polygonState.active ? 0.35 : 0.28;
-            const casingColor = polygonState.kind === 'obstacle' ? '#2F090E' : '#032417';
-            const lineColor = polygonState.kind === 'obstacle' ? '#FFEAF0' : '#E9FFF4';
-            const glowColor = polygonState.kind === 'obstacle' ? '#FF6E89' : '#49E6A6';
-            const glowWidth = polygonState.selected ? 12.5 : polygonState.active ? 10 : 7.5;
-            const glowOpacity = polygonState.selected ? 0.74 : polygonState.active ? 0.6 : 0.42;
-
-            return (
-              <g key={polygonState.id}>
-                <polygon points={points} fill={fillColor} fillOpacity={fillOpacity} />
-                {polygonState.kind === 'obstacle' ? (
-                  <polygon
-                    points={points}
-                    fill="url(#overlay-obstacle-hatch)"
-                    fillOpacity={polygonState.selected ? 0.26 : 0.16}
-                  />
-                ) : null}
-                <polygon
-                  points={points}
-                  fill="none"
-                  stroke={glowColor}
-                  strokeLinejoin="round"
-                  strokeLinecap="round"
-                  strokeWidth={glowWidth}
-                  strokeOpacity={glowOpacity}
-                  filter="url(#overlay-edge-glow)"
-                />
-                <polygon
-                  points={points}
-                  fill="none"
-                  stroke={casingColor}
-                  strokeLinejoin="round"
-                  strokeLinecap="round"
-                  strokeWidth={polygonState.selected ? 7.2 : polygonState.active ? 6.2 : 5.2}
-                />
-                <polygon
-                  points={points}
-                  fill="none"
-                  stroke={lineColor}
-                  strokeLinejoin="round"
-                  strokeLinecap="round"
-                  strokeWidth={polygonState.selected ? 4.3 : polygonState.active ? 3.7 : 3.1}
-                />
-                {polygonState.selected ? (
-                  <polygon
-                    points={points}
-                    fill="none"
-                    stroke="rgba(255,255,255,0.78)"
-                    strokeLinejoin="round"
-                    strokeLinecap="round"
-                    strokeWidth={1.7}
-                    strokeDasharray="10 8"
-                  >
-                    <animate
-                      attributeName="stroke-dashoffset"
-                      from="0"
-                      to="-36"
-                      dur="1.4s"
-                      repeatCount="indefinite"
-                    />
-                  </polygon>
-                ) : null}
-              </g>
-            );
-          })}
-        </svg>
-      ) : null}
-
       <div
         style={{
           pointerEvents: 'none',
           position: 'absolute',
           inset: 0,
-        background:
-          'linear-gradient(180deg, rgba(6,10,8,0.26) 0%, rgba(6,10,8,0) 20%, rgba(6,10,8,0) 78%, rgba(6,10,8,0.22) 100%)'
+          background:
+            'linear-gradient(180deg, rgba(6,10,8,0.18) 0%, rgba(6,10,8,0) 18%, rgba(6,10,8,0) 78%, rgba(6,10,8,0.18) 100%)'
         }}
       />
-
-      <div
-        style={{
-          position: 'absolute',
-          top: '1rem',
-          left: '1rem',
-          display: 'flex',
-          gap: '0.55rem',
-          flexWrap: 'wrap',
-          pointerEvents: 'none'
-        }}
-      >
-        <div
-          style={{
-            borderRadius: '999px',
-            border: '1px solid rgba(174,255,220,0.42)',
-            background: 'rgba(7,22,15,0.7)',
-            padding: '0.42rem 0.74rem',
-            fontSize: '0.72rem',
-            color: 'rgba(244,255,248,0.95)',
-            backdropFilter: 'blur(9px)',
-            boxShadow: '0 14px 26px rgba(0,0,0,0.22), inset 0 0 0 1px rgba(255,255,255,0.06)'
-          }}
-        >
-          <span
-            style={{
-              display: 'inline-block',
-              width: '0.55rem',
-              height: '0.55rem',
-              marginRight: '0.45rem',
-              borderRadius: '999px',
-              background: '#33D17A',
-              boxShadow: '0 0 16px rgba(51,209,122,0.78)'
-            }}
-          />
-          Service area
-        </div>
-        <div
-          style={{
-            borderRadius: '999px',
-            border: '1px solid rgba(255,176,191,0.48)',
-            background: 'rgba(28,9,13,0.72)',
-            padding: '0.42rem 0.74rem',
-            fontSize: '0.72rem',
-            color: 'rgba(255,246,248,0.95)',
-            backdropFilter: 'blur(9px)',
-            boxShadow: '0 14px 26px rgba(0,0,0,0.22), inset 0 0 0 1px rgba(255,255,255,0.06)'
-          }}
-        >
-          <span
-            style={{
-              display: 'inline-block',
-              width: '0.55rem',
-              height: '0.55rem',
-              marginRight: '0.45rem',
-              borderRadius: '999px',
-              background: '#FF6B7A',
-              boxShadow: '0 0 16px rgba(255,107,122,0.82)'
-            }}
-          />
-          Obstacle
-        </div>
-      </div>
-
-      <div
-        style={{
-          pointerEvents: 'none',
-          position: 'absolute',
-          top: '1rem',
-          right: '1rem',
-          borderRadius: '999px',
-          border: '1px solid rgba(169,255,216,0.36)',
-          background: 'rgba(4,15,10,0.78)',
-          padding: '0.4rem 0.78rem',
-          fontSize: '0.69rem',
-          letterSpacing: '0.06em',
-          textTransform: 'uppercase',
-          color: '#E9FFF4',
-          backdropFilter: 'blur(9px)',
-          boxShadow: '0 14px 30px rgba(0,0,0,0.28), inset 0 0 0 1px rgba(255,255,255,0.05)'
-        }}
-      >
-        Editor Visuals V4
-      </div>
-
-      {selectedPolygonPointCount > 2 ? (
-        <div
-          style={{
-            pointerEvents: 'none',
-            position: 'absolute',
-            left: '1rem',
-            bottom: '1rem',
-            borderRadius: '10px',
-            border: '1px solid rgba(255,255,255,0.26)',
-            background: 'rgba(6,12,9,0.78)',
-            padding: '0.5rem 0.75rem',
-            fontSize: '0.75rem',
-            color: 'rgba(242,255,247,0.86)',
-            backdropFilter: 'blur(8px)'
-          }}
-        >
-          Polygon closes automatically for geodesic calculations.
-        </div>
-      ) : null}
     </div>
   );
 };

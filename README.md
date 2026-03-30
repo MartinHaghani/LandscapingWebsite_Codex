@@ -70,7 +70,13 @@ npm --prefix server run prisma:generate
 npm --prefix server run prisma:migrate:dev
 ```
 
-5. Run apps:
+5. If you are cutting an existing development/test database over to the freehand editor, wipe old quote data once:
+
+```bash
+npm --prefix server run cutover:freehand-reset-dev-data
+```
+
+6. Run apps:
 
 ```bash
 npm run dev        # public app + API
@@ -88,11 +94,25 @@ Default local URLs:
 - `/services` starts with the Service Area map card.
 - Coverage overlay now uses a light basemap + green `#329F5B` polygon treatment and remains privacy-hardened.
 - Services page uses CTA-only handoff to `/instant-quote`.
+- Services page now presents five inline premium-vector service illustrations for Autonomous Mowing, Smart Edging, Cleanup & Debris, Seasonal Maintenance, and Performance Reporting.
 - Marketing pages now use launch-ready production copy (no placeholder content), warm-light visual tokens, and readability-first spacing/contrast with mobile navigation and footer quick links.
 - Home hero now uses a balanced desktop split: left-side headline and CTA group with `No sign-up required.`, right-side animated transparent lawn parcel with a looping three-state sequence: perimeter `learning your lawn...`, 2-second `Generating path`, then `Mowing...` along an 11-pass rounded boustrophedon infill path with denser direction arrows, direct mowing spawn on the first scanline, and a ticker-flip status capsule sized to the active label.
 - Home page now includes a sustainability proof section directly below the hero with compact electric-vs-gas bars for point-of-use exhaust, measured 25 ft noise, and qualified 10-year lifecycle CO2e.
 - Homepage claim framing keeps "zero emissions" limited to exhaust at the point of use and avoids silent/absolute wording.
 - Instant Quote flow is now draft-first:
+  - intro chrome uses a badge-only heading and a three-step progress rail instead of marketing helper copy
+  - map step uses a thin address pill instead of a large step header card
+  - geometry capture is persistent freehand drawing, not point-by-point vertex placement
+    - `Draw lawn` and `Draw obstacle` toggle into `Stop drawing`
+    - completed strokes automatically exit draw mode instead of staying latched on
+    - draw-end simplification now distance-normalizes freehand strokes, caps vertex density by distance, and removes redundant wobble on straight edges while preserving sharp corners and intentional curves
+    - overlapping start/end loop-closure cleanup now collapses freehand close-loop overlap into one clean join corner
+    - clicking near the outline of the currently selected polygon inserts a vertex at that exact edge position and selects it immediately
+    - undo/redo live in a separate arrow-only control box at the top-left of the map
+    - delete + clear-all stay grouped together, and `Clear all` requires inline confirmation
+    - freehand-created polygons remain vertex-editable for cleanup after the stroke is finished
+    - map edits no longer auto-reframe/zoom the viewport after each geometry change
+    - property center now uses a green home icon inside the white map marker
   - cadence selector supports `weekly` and `bi-weekly`
     - `weekly` = 26 sessions/season
     - `bi-weekly` = 14 sessions/season
@@ -101,16 +121,24 @@ Default local URLs:
   - quote outputs include per-session, full-season, and discounted seasonal totals
   - billing modes: `seasonal` (default, 20% discount) and `per_session`
   - quote drawing map keeps satellite basemap by default, with warm-light control panels for readability
+  - `/instant-quote` is now a map-first builder page with a stronger floating top-right `Done` action
+  - `/instant-quote/summary` now uses one unified review card with address-first property details, area/perimeter directly under the address, a live fitted property preview, one `Back to Map` action, visit-count context near service frequency, and lighter side-by-side billing plan cards
   - address suggestions support keyboard navigation (`ArrowUp/ArrowDown/Enter/Escape`)
   - browser-local draft persistence auto-saves address, step state, polygons, units, cadence, and billing mode
+    - local draft storage key/version is `autoscape.quoteDraft.v2`
+  - quote/editor source payload is `schemaVersion: 2`
+    - polygons store `id`, `kind`, `ringPoints`, and nullable `rawStrokePoints`
+    - server derives/stores canonical quote geometry from `ringPoints` and remeasures it server-side
+    - legacy point-list `schemaVersion: 1` source payloads are no longer accepted at runtime
   - users can clear geometry or reset saved draft from the quote UI
-  1. `POST /api/quote/draft`
-  2. Sign in/sign up required at `/quote-contact/:quoteId`
-  3. Signed-in draft saves quote address to Clerk account metadata (`addressHistory`, latest as `defaultAddress`)
-  4. `POST /api/quote/:quoteId/claim` links quote to authenticated account
-  5. `/quote-contact/:quoteId` collects optional notes only; phone and address come from account + quote draft
-  6. `POST /api/quote/:quoteId/contact` finalizes contact + sets status `in_review` (`customer_status=pending`)
-  7. Confirmation page `/quote-confirmation/:quoteId`
+  1. `/instant-quote/summary` reviews pricing and preferences before any server draft is created
+  2. `POST /api/quote/draft`
+  3. Sign in/sign up required at `/quote-contact/:quoteId`
+  4. Signed-in draft saves quote address to Clerk account metadata (`addressHistory`, latest as `defaultAddress`)
+  5. `POST /api/quote/:quoteId/claim` links quote to authenticated account
+  6. `/quote-contact/:quoteId` collects optional notes only; phone and address come from account + quote draft
+  7. `POST /api/quote/:quoteId/contact` finalizes contact + sets status `in_review` (`customer_status=pending`)
+  8. Confirmation page `/quote-confirmation/:quoteId`
 - Customer dashboard:
   - `/complete-profile/*` captures required phone number for any auth method
   - `/dashboard` for profile + owned quote list
@@ -132,6 +160,7 @@ Admin endpoints under `/api/admin/*` include:
 - quote editor (`/quotes/:quoteId/edit`) with full polygon tools, calculated vs actual quote panel, and version history
   - satellite basemap in editor for property verification context
   - persisted quote polygons hydrate immediately when editor opens
+  - editor now uses the same freehand `Draw lawn` / `Draw obstacle` workflow and shared draw-end simplifier as the public quote tool
 - service-area request map payload (`/service-area-requests/map`) for heatmap/cluster rendering
 - quote versioning APIs:
   - `GET /api/admin/quotes/:id/editor`
@@ -184,6 +213,7 @@ Default non-production station:
 - `npm run dev:all`: server + public app + admin
 - `npm run dev:admin`: admin app only
 - `npm run build:all`: build server + public app + admin
+- `npm --prefix server run cutover:freehand-reset-dev-data`: destructive dev-only reset for quote/leads/editor test data before freehand rollout
 
 ## Tests
 

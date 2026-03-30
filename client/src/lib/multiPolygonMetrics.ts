@@ -110,7 +110,7 @@ export const computeMultiPolygonMetrics = (polygons: EditablePolygon[]): MultiPo
   let selfIntersecting = false;
 
   for (const polygonState of polygons) {
-    const points = polygonState.points;
+    const points = polygonState.ringPoints;
     vertexCount += points.length;
     if (polygonState.kind === 'service') {
       servicePolygonCount += 1;
