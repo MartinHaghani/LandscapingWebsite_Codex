@@ -123,6 +123,10 @@ const startServer = async (options?: {
 };
 
 const closeRing = (ringPoints: Array<[number, number]>) => {
+  if (ringPoints.length === 0) {
+    return ringPoints;
+  }
+
   const [firstLng, firstLat] = ringPoints[0] ?? [];
   const [lastLng, lastLat] = ringPoints[ringPoints.length - 1] ?? [];
 
@@ -130,7 +134,7 @@ const closeRing = (ringPoints: Array<[number, number]>) => {
     return ringPoints;
   }
 
-  return [...ringPoints, ringPoints[0]!];
+  return [...ringPoints, ringPoints[0]];
 };
 
 const createPolygonGeometry = (ringPoints: Array<[number, number]>) => ({

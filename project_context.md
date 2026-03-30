@@ -41,6 +41,10 @@ Autoscape provides:
    - Geometry edits do not auto-reset map zoom.
    - Property center marker uses a green home icon inside the white location dot.
    - Satellite basemap remains default in quote mapping for boundary accuracy.
+   - A centered guide modal shell appears 1 second after a fresh map load succeeds for a newly entered address.
+   - The guide uses a soft scrim, muted close button, blank placeholder body, and bottom `Back` / `Next` navigation with a pill slider for future step content.
+   - Dismissing the guide keeps it closed for the current mapped address session; it reopens only after the next successful address-to-map load.
+   - Restored browser-local drafts do not auto-open the guide.
    - Floating top-right `Done` button is the primary map completion action.
    - Drawing controls/panels use warm-light surfaces and high-contrast action states.
 4. Review page owns cadence selection (`weekly` or `biweekly`) and billing selection before draft save.
@@ -59,9 +63,11 @@ Autoscape provides:
 8. Signed-in draft creation records quote address in Clerk account metadata (`addressHistory` + `defaultAddress`).
 9. Authenticated user claim step (`POST /api/quote/:quoteId/claim`) links quote ownership.
 10. Contact finalize calls `POST /api/quote/:quoteId/contact` with optional notes only.
-   - Server derives name/email/phone from authenticated account.
-   - Property address is derived from stored quote draft address (not a form field).
-   - Finalize moves quote directly to `in_review` with `customer_status=pending`.
+
+- Server derives name/email/phone from authenticated account.
+- Property address is derived from stored quote draft address (not a form field).
+- Finalize moves quote directly to `in_review` with `customer_status=pending`.
+
 11. Confirmation page loads quote for owner/admin only.
 
 ### Customer Accounts

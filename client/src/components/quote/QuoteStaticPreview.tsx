@@ -42,6 +42,7 @@ export const QuoteStaticPreview = ({
   const containerRef = useRef<HTMLDivElement | null>(null);
   const mapRef = useRef<Map | null>(null);
   const markerRef = useRef<Marker | null>(null);
+  const centerRef = useRef(center);
   const [previewUnavailable, setPreviewUnavailable] = useState(false);
 
   const featureCollection = useMemo(
@@ -52,6 +53,8 @@ export const QuoteStaticPreview = ({
     () => getQuotePreviewBounds(center, polygons),
     [center, polygons]
   );
+  const featureCollectionRef = useRef(featureCollection);
+  const previewBoundsRef = useRef(previewBounds);
 
   const applyPreviewViewport = (map: Map, bounds: LngLatBoundsLike | null, nextCenter: LngLat) => {
     if (bounds) {
@@ -65,6 +68,18 @@ export const QuoteStaticPreview = ({
 
     map.jumpTo({ center: nextCenter, zoom: 18.4 });
   };
+
+  useEffect(() => {
+    centerRef.current = center;
+  }, [center]);
+
+  useEffect(() => {
+    featureCollectionRef.current = featureCollection;
+  }, [featureCollection]);
+
+  useEffect(() => {
+    previewBoundsRef.current = previewBounds;
+  }, [previewBounds]);
 
   useEffect(() => {
     if (!token || !containerRef.current || mapRef.current || typeof window === 'undefined') {
@@ -91,7 +106,7 @@ export const QuoteStaticPreview = ({
         previewMap = new mapboxgl.Map({
           container: containerRef.current,
           style: MAP_STYLE,
-          center,
+          center: centerRef.current,
           zoom: 17,
           pitch: 0,
           bearing: 0,
@@ -112,7 +127,7 @@ export const QuoteStaticPreview = ({
 
           previewMap.addSource(PREVIEW_SOURCE_ID, {
             type: 'geojson',
-            data: featureCollection
+            data: featureCollectionRef.current
           });
 
           previewMap.addLayer({
@@ -146,13 +161,17 @@ export const QuoteStaticPreview = ({
             element: createHomeMarkerElement(),
             anchor: 'center'
           })
-            .setLngLat(center)
+            .setLngLat(centerRef.current)
             .addTo(previewMap);
 
           markerRef.current = previewMarker;
           mapRef.current = previewMap;
           previewMap.resize();
-          applyPreviewViewport(previewMap, previewBounds as LngLatBoundsLike | null, center);
+          applyPreviewViewport(
+            previewMap,
+            previewBoundsRef.current as LngLatBoundsLike | null,
+            centerRef.current
+          );
         });
       } catch {
         setPreviewUnavailable(true);

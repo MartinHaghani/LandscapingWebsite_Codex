@@ -19,7 +19,7 @@ Primary domains:
 - API runtime: `server/src/index.ts` -> `server/src/server.ts`
 - Public app routes: `client/src/App.tsx`
 - Services gallery: `client/src/pages/ServicesPage.tsx` + `client/src/components/service/ServiceIllustrations.tsx` (coverage-first entry page with five shared-style inline SVG service scenes)
-- Instant quote builder: `client/src/pages/InstantQuotePage.tsx` (badge-only header + non-interactive three-step progress rail, full-width map builder, prominent floating `Done` action, local draft autosave, and review handoff)
+- Instant quote builder: `client/src/pages/InstantQuotePage.tsx` (badge-only header + non-interactive three-step progress rail, full-width map builder, delayed map-guide modal shell for fresh address loads, prominent floating `Done` action, local draft autosave, and review handoff)
 - Instant quote review: `client/src/pages/InstantQuoteSummaryPage.tsx` (unified review card, address-first property details, area/perimeter directly under the address, live fitted property preview, visit-count context near service frequency, lighter side-by-side billing plan selection, and `POST /api/quote/draft` trigger)
 - Admin app routes/state: `admin/src/App.tsx`
 - Admin quote editor map module: `admin/src/components/QuoteEditorMap.tsx` (satellite raster basemap + immediate freehand polygon source hydration with the same shared draw-end simplifier used in public)

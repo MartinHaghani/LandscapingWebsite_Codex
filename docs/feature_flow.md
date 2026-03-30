@@ -57,13 +57,17 @@
 8. Geometry edits do not auto-reframe the map zoom.
 9. Quote map stays on satellite basemap by default; controls use warm-light, high-contrast UI surfaces.
 10. Map header chrome is reduced to a thin address pill with a subtle `Change address` action, and the address marker uses a green home icon inside the white dot.
-11. Builder page is full-width and uses a more prominent floating top-right `Done` action instead of the old embedded summary sidebar.
-12. Client auto-saves draft state in browser local storage (address + step + geometry + cadence + billing mode + unit mode) under `autoscape.quoteDraft.v2`.
-13. Client computes effective geometry and pricing with:
-   - `perSession = max(20 + 0.05*A + 0.10*P + 1.0*D, 50)`
-   - `D` from `POST /api/service-area/check` (`distanceToNearestStationKm`)
-   - fixed sessions: weekly=26, bi-weekly=14
-   - seasonal default discount: 20%
+11. After a fresh successful address-to-map transition, the client waits for the map to finish loading and reveals a centered guide modal shell after 1 second.
+12. The guide shell uses a soft scrim, blank placeholder body, subtle top-right close button, and bottom `Back` / `Next` controls with a pill slider for future multi-step guide content.
+13. Dismissing the guide keeps it closed for the current mapped-address session; changing address and loading a new map session re-arms it. Restored local drafts do not auto-open the guide.
+14. Builder page is full-width and uses a more prominent floating top-right `Done` action instead of the old embedded summary sidebar.
+15. Client auto-saves draft state in browser local storage (address + step + geometry + cadence + billing mode + unit mode) under `autoscape.quoteDraft.v2`.
+16. Client computes effective geometry and pricing with:
+
+- `perSession = max(20 + 0.05*A + 0.10*P + 1.0*D, 50)`
+- `D` from `POST /api/service-area/check` (`distanceToNearestStationKm`)
+- fixed sessions: weekly=26, bi-weekly=14
+- seasonal default discount: 20%
 
 ### Step 3: Review Quote
 

@@ -28,6 +28,8 @@ interface StatusMessage {
   text: string;
 }
 
+const EMPTY_POLYGONS: EditablePolygon[] = [];
+
 interface QuotePlanCardProps {
   title: string;
   eyebrow: string;
@@ -343,7 +345,7 @@ export const InstantQuoteSummaryPage = () => {
     saveQuoteDraftState(window.localStorage, draftState);
   }, [draftState]);
 
-  const polygons = draftState?.polygonHistory.present.polygons ?? [];
+  const polygons = draftState?.polygonHistory.present.polygons ?? EMPTY_POLYGONS;
   const metrics = useMemo(() => computeMultiPolygonMetrics(polygons), [polygons]);
   const recommendedPlan = useMemo(() => getRecommendedPlan(metrics.areaM2), [metrics.areaM2]);
   const safeDistanceToNearestStationKm =

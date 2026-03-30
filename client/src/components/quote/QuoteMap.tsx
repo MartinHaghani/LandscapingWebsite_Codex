@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef } from 'react';
 import mapboxgl, { type GeoJSONSource } from 'mapbox-gl';
-import type { FeatureCollection, LineString, Point, Polygon } from 'geojson';
+import type { FeatureCollection, LineString, Polygon } from 'geojson';
 import type { EditablePolygon, LngLat, PolygonKind, SelectionTarget } from '../../types';
 import {
   ADD_VERTEX_CURSOR,
@@ -20,9 +20,13 @@ interface QuoteMapProps {
   polygons: EditablePolygon[];
   activePolygonId: string | null;
   className?: string;
-  onPolygonDrawn: (kind: PolygonKind, shape: { ringPoints: LngLat[]; rawStrokePoints: LngLat[] }) => void;
+  onPolygonDrawn: (
+    kind: PolygonKind,
+    shape: { ringPoints: LngLat[]; rawStrokePoints: LngLat[] }
+  ) => void;
   onPolygonRingPointsChange: (polygonId: string, ringPoints: LngLat[]) => void;
   onSelectionChange: (selection: SelectionTarget) => void;
+  onMapReady: () => void;
 }
 
 const POLYGON_SOURCE_ID = 'quote-polygons-source';
@@ -165,7 +169,8 @@ export const QuoteMap = ({
   className,
   onPolygonDrawn,
   onPolygonRingPointsChange,
-  onSelectionChange
+  onSelectionChange,
+  onMapReady
 }: QuoteMapProps) => {
   const selectedPolygonId = useMemo(() => getSelectedPolygonId(selection), [selection]);
 
@@ -181,6 +186,7 @@ export const QuoteMap = ({
   const onPolygonDrawnRef = useRef(onPolygonDrawn);
   const onPolygonRingPointsChangeRef = useRef(onPolygonRingPointsChange);
   const onSelectionChangeRef = useRef(onSelectionChange);
+  const onMapReadyRef = useRef(onMapReady);
   const centerRef = useRef(center);
   const polygonsRef = useRef(polygons);
   const selectedPolygonIdRef = useRef<string | null>(selectedPolygonId);
@@ -211,6 +217,10 @@ export const QuoteMap = ({
   useEffect(() => {
     onSelectionChangeRef.current = onSelectionChange;
   }, [onSelectionChange]);
+
+  useEffect(() => {
+    onMapReadyRef.current = onMapReady;
+  }, [onMapReady]);
 
   useEffect(() => {
     centerRef.current = center;
@@ -258,9 +268,15 @@ export const QuoteMap = ({
         return;
       }
 
-      const activePolygon = polygonsRef.current.find((polygonState) => polygonState.id === activePolygonIdRef.current);
+      const activePolygon = polygonsRef.current.find(
+        (polygonState) => polygonState.id === activePolygonIdRef.current
+      );
       pathSource.setData(
-        activePathFeatureCollection(activePolygon, strokePointsRef.current, isStrokeDrawingRef.current ? drawModeRef.current : null)
+        activePathFeatureCollection(
+          activePolygon,
+          strokePointsRef.current,
+          isStrokeDrawingRef.current ? drawModeRef.current : null
+        )
       );
     };
 
@@ -281,7 +297,9 @@ export const QuoteMap = ({
         return null;
       }
 
-      const selectedPolygon = polygonsRef.current.find((polygonState) => polygonState.id === selectedPolygonId);
+      const selectedPolygon = polygonsRef.current.find(
+        (polygonState) => polygonState.id === selectedPolygonId
+      );
       if (!selectedPolygon || selectedPolygon.ringPoints.length < 2) {
         return null;
       }
@@ -347,7 +365,10 @@ export const QuoteMap = ({
         return;
       }
 
-      strokePointsRef.current = [...strokePointsRef.current, toLngLat(event.clientX, event.clientY)];
+      strokePointsRef.current = [
+        ...strokePointsRef.current,
+        toLngLat(event.clientX, event.clientY)
+      ];
       syncActivePath();
     };
 
@@ -410,7 +431,9 @@ export const QuoteMap = ({
       const selectedPolygonId = selectedPolygonIdRef.current;
 
       if (insertHit && selectedPolygonId) {
-        const selectedPolygon = polygonsRef.current.find((polygonState) => polygonState.id === selectedPolygonId);
+        const selectedPolygon = polygonsRef.current.find(
+          (polygonState) => polygonState.id === selectedPolygonId
+        );
         if (selectedPolygon) {
           const nextPoints = insertPointIntoRing(
             selectedPolygon.ringPoints,
@@ -475,12 +498,7 @@ export const QuoteMap = ({
         source: POLYGON_SOURCE_ID,
         type: 'fill',
         paint: {
-          'fill-color': [
-            'case',
-            ['==', ['get', 'polygonKind'], 'obstacle'],
-            '#DC2626',
-            '#329F5B'
-          ],
+          'fill-color': ['case', ['==', ['get', 'polygonKind'], 'obstacle'], '#DC2626', '#329F5B'],
           'fill-opacity': [
             'case',
             ['==', ['get', 'polygonKind'], 'obstacle'],
@@ -510,17 +528,13 @@ export const QuoteMap = ({
         source: PATH_SOURCE_ID,
         type: 'line',
         paint: {
-          'line-color': [
-            'case',
-            ['==', ['get', 'polygonKind'], 'obstacle'],
-            '#FDA4AF',
-            '#7DE8A6'
-          ],
+          'line-color': ['case', ['==', ['get', 'polygonKind'], 'obstacle'], '#FDA4AF', '#7DE8A6'],
           'line-width': 2,
           'line-dasharray': [2, 1]
         }
       });
 
+      onMapReadyRef.current();
     });
 
     centerMarkerRef.current = new mapboxgl.Marker({
@@ -602,7 +616,13 @@ export const QuoteMap = ({
     const pathSource = map.getSource(PATH_SOURCE_ID) as GeoJSONSource | undefined;
     if (pathSource) {
       const activePolygon = polygons.find((polygonState) => polygonState.id === activePolygonId);
-      pathSource.setData(activePathFeatureCollection(activePolygon, strokePointsRef.current, isStrokeDrawingRef.current ? drawMode : null));
+      pathSource.setData(
+        activePathFeatureCollection(
+          activePolygon,
+          strokePointsRef.current,
+          isStrokeDrawingRef.current ? drawMode : null
+        )
+      );
     }
   }, [polygons, selectedPolygonId, activePolygonId, drawMode]);
 
@@ -660,7 +680,9 @@ export const QuoteMap = ({
 
       marker.on('dragend', () => {
         const lngLat = marker.getLngLat();
-        const nextPoints = selectedPolygon.ringPoints.map((existingPoint) => [...existingPoint] as LngLat);
+        const nextPoints = selectedPolygon.ringPoints.map(
+          (existingPoint) => [...existingPoint] as LngLat
+        );
         nextPoints[index] = [lngLat.lng, lngLat.lat];
         onPolygonRingPointsChangeRef.current(selectedPolygonId, nextPoints);
 

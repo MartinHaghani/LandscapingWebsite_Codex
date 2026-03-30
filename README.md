@@ -122,6 +122,10 @@ Default local URLs:
   - billing modes: `seasonal` (default, 20% discount) and `per_session`
   - quote drawing map keeps satellite basemap by default, with warm-light control panels for readability
   - `/instant-quote` is now a map-first builder page with a stronger floating top-right `Done` action
+  - after a fresh successful address-to-map transition, the map now reveals a centered guide modal shell 1 second after the map finishes loading
+    - the guide shell uses a soft scrim, warm-light glass card, subtle top-right close button, blank placeholder body, and bottom `Back` / `Next` controls with a pill slider
+    - dismissing the guide keeps it closed for the current mapped address session and it reappears only after the next successful address load
+    - restored local drafts do not auto-open the guide
   - `/instant-quote/summary` now uses one unified review card with address-first property details, area/perimeter directly under the address, a live fitted property preview, one `Back to Map` action, visit-count context near service frequency, and lighter side-by-side billing plan cards
   - address suggestions support keyboard navigation (`ArrowUp/ArrowDown/Enter/Escape`)
   - browser-local draft persistence auto-saves address, step state, polygons, units, cadence, and billing mode

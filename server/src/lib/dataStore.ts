@@ -599,68 +599,6 @@ const getCentroidFromGeometry = (geometry: QuoteGeometry): { lat: number; lng: n
   };
 };
 
-const isValidLngLat = (lng: number, lat: number) =>
-  Number.isFinite(lng) &&
-  Number.isFinite(lat) &&
-  lng >= -180 &&
-  lng <= 180 &&
-  lat >= -90 &&
-  lat <= 90;
-
-const swapCoordinateOrder = (point: [number, number]): [number, number] | null => {
-  const [lng, lat] = point;
-  const swappedLng = lat;
-  const swappedLat = lng;
-  if (!isValidLngLat(swappedLng, swappedLat)) {
-    return null;
-  }
-
-  return [swappedLng, swappedLat];
-};
-
-const swapQuoteGeometryPointOrder = (geometry: QuoteGeometry): QuoteGeometry | null => {
-  if (geometry.type === 'Polygon') {
-    const swappedRings: [number, number][][] = [];
-    for (const ring of geometry.coordinates) {
-      const swappedRing: [number, number][] = [];
-      for (const point of ring) {
-        const swapped = swapCoordinateOrder(point as [number, number]);
-        if (!swapped) {
-          return null;
-        }
-        swappedRing.push(swapped);
-      }
-      swappedRings.push(swappedRing);
-    }
-    return {
-      type: 'Polygon',
-      coordinates: swappedRings
-    };
-  }
-
-  const swappedPolygons: [number, number][][][] = [];
-  for (const polygonCoordinates of geometry.coordinates) {
-    const swappedRings: [number, number][][] = [];
-    for (const ring of polygonCoordinates) {
-      const swappedRing: [number, number][] = [];
-      for (const point of ring) {
-        const swapped = swapCoordinateOrder(point as [number, number]);
-        if (!swapped) {
-          return null;
-        }
-        swappedRing.push(swapped);
-      }
-      swappedRings.push(swappedRing);
-    }
-    swappedPolygons.push(swappedRings);
-  }
-
-  return {
-    type: 'MultiPolygon',
-    coordinates: swappedPolygons
-  };
-};
-
 const toFiniteNumber = (value: number, fallback = 0) =>
   Number.isFinite(value) ? value : fallback;
 const roundMoney = (value: number) => Number(toFiniteNumber(value).toFixed(2));
@@ -714,20 +652,6 @@ const closePolygonRing = (points: [number, number][]) => {
   }
 
   return [...points, points[0]];
-};
-
-const toOpenRing = (ring: [number, number][]) => {
-  if (ring.length < 2) {
-    return [...ring];
-  }
-
-  const [firstLng, firstLat] = ring[0];
-  const [lastLng, lastLat] = ring[ring.length - 1];
-  if (firstLng === lastLng && firstLat === lastLat) {
-    return ring.slice(0, -1);
-  }
-
-  return [...ring];
 };
 
 const hasThreeDistinctPoints = (points: [number, number][]) =>
@@ -938,51 +862,6 @@ const centroidDistanceM = (
   return haversineDistanceM([left.lng, left.lat], [right.lng, right.lat]);
 };
 
-const resolveEditorGeometryForLocation = (
-  geometry: QuoteGeometry,
-  location: { lat: number; lng: number } | null
-): QuoteGeometry => {
-  if (!location || !isValidLngLat(location.lng, location.lat)) {
-    return geometry;
-  }
-
-  const sourceCentroid = getCentroidFromGeometry(geometry);
-  if (!sourceCentroid) {
-    return geometry;
-  }
-
-  const sourceDistanceM = centroidDistanceM(sourceCentroid, location);
-  if (!Number.isFinite(sourceDistanceM) || sourceDistanceM <= 500_000) {
-    return geometry;
-  }
-
-  const swapped = swapQuoteGeometryPointOrder(geometry);
-  if (!swapped) {
-    return geometry;
-  }
-
-  try {
-    const swappedMeasured = validateAndMeasureGeometry(swapped);
-    const swappedCentroid = getCentroidFromGeometry(swappedMeasured.normalizedGeometry);
-    if (!swappedCentroid) {
-      return geometry;
-    }
-
-    const swappedDistanceM = centroidDistanceM(swappedCentroid, location);
-    if (
-      Number.isFinite(swappedDistanceM) &&
-      swappedDistanceM < 250_000 &&
-      swappedDistanceM + 50_000 < sourceDistanceM
-    ) {
-      return swappedMeasured.normalizedGeometry;
-    }
-  } catch {
-    return geometry;
-  }
-
-  return geometry;
-};
-
 const isPolygonSourceConsistentWithGeometry = (
   source: PolygonSourcePayload,
   geometry: QuoteGeometry
@@ -1010,89 +889,6 @@ const isPolygonSourceConsistentWithGeometry = (
   } catch {
     return false;
   }
-};
-
-const swapPointOrder = (point: [number, number]): [number, number] | null => {
-  const [lng, lat] = point;
-  const swappedLng = lat;
-  const swappedLat = lng;
-  if (
-    !Number.isFinite(swappedLng) ||
-    swappedLng < -180 ||
-    swappedLng > 180 ||
-    !Number.isFinite(swappedLat) ||
-    swappedLat < -90 ||
-    swappedLat > 90
-  ) {
-    return null;
-  }
-
-  return [swappedLng, swappedLat];
-};
-
-const trySwapPolygonSourcePointOrder = (source: PolygonSourcePayload): PolygonSourcePayload | null => {
-  const polygons: PolygonSourcePolygon[] = [];
-
-  for (const polygon of source.polygons) {
-    const ringPoints: [number, number][] = [];
-    for (const point of polygon.ringPoints) {
-      const swapped = swapPointOrder(point);
-      if (!swapped) {
-        return null;
-      }
-      ringPoints.push(swapped);
-    }
-
-    const rawStrokePoints: [number, number][] | null = polygon.rawStrokePoints
-      ? []
-      : null;
-
-    for (const point of polygon.rawStrokePoints ?? []) {
-      const swapped = swapPointOrder(point);
-      if (!swapped) {
-        return null;
-      }
-      rawStrokePoints?.push(swapped);
-    }
-
-    polygons.push({
-      id: polygon.id,
-      kind: polygon.kind,
-      ringPoints,
-      rawStrokePoints
-    });
-  }
-
-  return {
-    schemaVersion: 2,
-    activePolygonId: source.activePolygonId,
-    polygons
-  };
-};
-
-const derivePolygonSourceFromGeometry = (geometry: QuoteGeometry): PolygonSourcePayload => {
-  const polygons: PolygonSourcePolygon[] =
-    geometry.type === 'Polygon'
-      ? [
-          {
-            id: 'derived-service-1',
-            kind: 'service',
-            ringPoints: toOpenRing(geometry.coordinates[0] as [number, number][]),
-            rawStrokePoints: null
-          }
-        ]
-      : geometry.coordinates.map((polygonCoordinates, index) => ({
-          id: `derived-service-${index + 1}`,
-          kind: 'service' as const,
-          ringPoints: toOpenRing(polygonCoordinates[0] as [number, number][]),
-          rawStrokePoints: null
-        }));
-
-  return {
-    schemaVersion: 2,
-    activePolygonId: polygons[0]?.id ?? null,
-    polygons
-  };
 };
 
 const resolvePolygonSourceForEditor = (
@@ -1202,32 +998,6 @@ const parseQuoteGeometryJson = (value: string | null): QuoteGeometry | null => {
   }
 
   return null;
-};
-
-const parsePointGeoJson = (value: string | null): { lat: number; lng: number } | null => {
-  if (!value) {
-    return null;
-  }
-
-  try {
-    const parsed = JSON.parse(value) as {
-      type?: unknown;
-      coordinates?: unknown;
-    };
-
-    if (!parsed || parsed.type !== 'Point' || !Array.isArray(parsed.coordinates) || parsed.coordinates.length !== 2) {
-      return null;
-    }
-
-    const [lng, lat] = parsed.coordinates;
-    if (typeof lng !== 'number' || typeof lat !== 'number' || !isValidLngLat(lng, lat)) {
-      return null;
-    }
-
-    return { lng, lat };
-  } catch {
-    return null;
-  }
 };
 
 const parseDateBound = (value?: string) => {

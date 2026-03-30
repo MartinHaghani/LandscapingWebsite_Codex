@@ -253,6 +253,9 @@ Implementation:
 - top-of-page step chrome is a non-interactive three-step rail for `Enter address`, `Map your lawn`, and `Review quote`
 - rail states show `Current step`, `Complete`, and `Up next` instead of button-like cards
 - map step uses a thin low-contrast address pill instead of a larger step header/instruction card
+- after a fresh successful address-to-map transition, the map step reveals a centered guide modal shell 1 second after the map finishes loading
+- the guide shell is intentionally blank for now, with a soft scrim, warm-light glass treatment, subtle top-right close control, and bottom `Back` / `Next` navigation paired with a pill slider for future guided steps
+- guide dismissal is scoped to the current mapped-address session; restored local drafts do not auto-open it
 - map step removes the embedded quote summary and uses a full-width map-first layout with a more prominent floating top-right `Done` action
 - review step uses one unified summary card with address-first property details, area/perimeter directly under the address, a live fitted property preview on the right, one `Back to Map` action beneath it, visit-count context near service frequency, and lighter billing-plan cards across the bottom
 - review step moves the main CTA to a single page-bottom `Submit Quote` button

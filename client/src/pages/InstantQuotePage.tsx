@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState, type FormEvent, type KeyboardEvent } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { QuoteDoneButton } from '../components/quote/QuoteDoneButton';
+import { QuoteGuideModal } from '../components/quote/QuoteGuideModal';
 import { QuoteMap } from '../components/quote/QuoteMap';
 import { QuoteProgressRail } from '../components/quote/QuoteProgressRail';
 import { Badge } from '../components/ui/Badge';
@@ -28,6 +29,14 @@ import {
   getSubmissionStatus
 } from '../lib/quoteFlow';
 import {
+  createQuoteGuideSessionState,
+  dismissActiveQuoteGuideSession,
+  getNextQuoteGuideStepIndex,
+  getPreviousQuoteGuideStepIndex,
+  isActiveQuoteGuideSessionDismissed,
+  startNextQuoteGuideSession
+} from '../lib/quoteGuide';
+import {
   clearQuoteDraftState,
   loadQuoteDraftState,
   saveQuoteDraftState
@@ -53,6 +62,7 @@ const EMPTY_EDITOR_STATE: PolygonEditorState = {
   polygons: [],
   activePolygonId: null
 };
+const QUOTE_GUIDE_REVEAL_DELAY_MS = 1000;
 
 const getAddressKey = (suggestion: MapboxSuggestion) => {
   const id = suggestion.id.trim();
@@ -76,6 +86,7 @@ export const InstantQuotePage = () => {
   const polygonCounterRef = useRef(0);
   const mapStepRef = useRef<HTMLDivElement | null>(null);
   const restoredFromStorageRef = useRef(false);
+  const guideRevealTimeoutRef = useRef<number | null>(null);
 
   const [addressInput, setAddressInput] = useState('');
   const [selectedAddress, setSelectedAddress] = useState('');
@@ -99,6 +110,12 @@ export const InstantQuotePage = () => {
     type: 'error' | 'info';
     text: string;
   } | null>(null);
+  const [quoteGuideSessionState, setQuoteGuideSessionState] = useState(
+    createQuoteGuideSessionState
+  );
+  const [quoteGuideWaitingForMapReady, setQuoteGuideWaitingForMapReady] = useState(false);
+  const [quoteGuideVisible, setQuoteGuideVisible] = useState(false);
+  const [quoteGuideActiveStepIndex, setQuoteGuideActiveStepIndex] = useState(0);
 
   const editorState = polygonHistory.present;
   const polygons = editorState.polygons;
@@ -126,6 +143,38 @@ export const InstantQuotePage = () => {
     selfIntersecting: metrics.selfIntersecting,
     effectiveGeometryEmpty: metrics.effectiveGeometryEmpty
   });
+
+  const clearQuoteGuideRevealTimer = () => {
+    if (guideRevealTimeoutRef.current === null || typeof window === 'undefined') {
+      return;
+    }
+
+    window.clearTimeout(guideRevealTimeoutRef.current);
+    guideRevealTimeoutRef.current = null;
+  };
+
+  const resetQuoteGuideState = () => {
+    clearQuoteGuideRevealTimer();
+    setQuoteGuideSessionState(createQuoteGuideSessionState());
+    setQuoteGuideWaitingForMapReady(false);
+    setQuoteGuideVisible(false);
+    setQuoteGuideActiveStepIndex(0);
+  };
+
+  const beginQuoteGuideSession = () => {
+    clearQuoteGuideRevealTimer();
+    setQuoteGuideSessionState((current) => startNextQuoteGuideSession(current));
+    setQuoteGuideWaitingForMapReady(true);
+    setQuoteGuideVisible(false);
+    setQuoteGuideActiveStepIndex(0);
+  };
+
+  const dismissQuoteGuide = () => {
+    clearQuoteGuideRevealTimer();
+    setQuoteGuideSessionState((current) => dismissActiveQuoteGuideSession(current));
+    setQuoteGuideWaitingForMapReady(false);
+    setQuoteGuideVisible(false);
+  };
 
   useEffect(() => {
     const trimmed = addressInput.trim();
@@ -214,6 +263,30 @@ export const InstantQuotePage = () => {
   }, []);
 
   useEffect(() => {
+    return () => {
+      if (guideRevealTimeoutRef.current === null || typeof window === 'undefined') {
+        return;
+      }
+
+      window.clearTimeout(guideRevealTimeoutRef.current);
+      guideRevealTimeoutRef.current = null;
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!quoteGuideVisible || typeof document === 'undefined') {
+      return;
+    }
+
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+
+    return () => {
+      document.body.style.overflow = previousOverflow;
+    };
+  }, [quoteGuideVisible]);
+
+  useEffect(() => {
     if (!restoredFromStorageRef.current || typeof window === 'undefined') {
       return;
     }
@@ -275,6 +348,7 @@ export const InstantQuotePage = () => {
 
     if (isDifferentAddress) {
       clearEditorForNewAddress();
+      resetQuoteGuideState();
     }
   };
 
@@ -372,6 +446,7 @@ export const InstantQuotePage = () => {
     }
 
     setCurrentStep('map');
+    beginQuoteGuideSession();
     setSelection({ kind: 'none' });
     setStatusMessage(null);
   };
@@ -382,6 +457,7 @@ export const InstantQuotePage = () => {
   };
 
   const goToAddressStep = () => {
+    resetQuoteGuideState();
     setCurrentStep('address');
     setDrawMode(null);
     setClearAllConfirmation(false);
@@ -434,6 +510,7 @@ export const InstantQuotePage = () => {
   };
 
   const resetQuoteDraft = () => {
+    resetQuoteGuideState();
     setAddressInput('');
     setSelectedAddress('');
     setSelectedAddressKey(null);
@@ -461,6 +538,32 @@ export const InstantQuotePage = () => {
     });
   };
 
+  const handleQuoteMapReady = () => {
+    if (
+      currentStep !== 'map' ||
+      !quoteGuideWaitingForMapReady ||
+      isActiveQuoteGuideSessionDismissed(quoteGuideSessionState) ||
+      typeof window === 'undefined'
+    ) {
+      return;
+    }
+
+    clearQuoteGuideRevealTimer();
+    guideRevealTimeoutRef.current = window.setTimeout(() => {
+      setQuoteGuideVisible(true);
+      guideRevealTimeoutRef.current = null;
+    }, QUOTE_GUIDE_REVEAL_DELAY_MS);
+    setQuoteGuideWaitingForMapReady(false);
+  };
+
+  const handleQuoteGuidePrevious = () => {
+    setQuoteGuideActiveStepIndex((current) => getPreviousQuoteGuideStepIndex(current));
+  };
+
+  const handleQuoteGuideNext = () => {
+    setQuoteGuideActiveStepIndex((current) => getNextQuoteGuideStepIndex(current));
+  };
+
   const applyPolygonPointsEdit = (polygonId: string, nextPoints: LngLat[]) => {
     setPolygonHistory((current) => {
       const nextPolygons = current.present.polygons.map((polygon) =>
@@ -478,7 +581,11 @@ export const InstantQuotePage = () => {
     setStatusMessage(null);
   };
 
-  const createDrawnPolygon = (kind: PolygonKind, ringPoints: LngLat[], rawStrokePoints: LngLat[]) => {
+  const createDrawnPolygon = (
+    kind: PolygonKind,
+    ringPoints: LngLat[],
+    rawStrokePoints: LngLat[]
+  ) => {
     polygonCounterRef.current += 1;
     const polygonId = `${createPolygonId()}-${polygonCounterRef.current}`;
 
@@ -536,7 +643,10 @@ export const InstantQuotePage = () => {
 
     if (selection.kind === 'polygon') {
       setPolygonHistory((current) => {
-        return applyPolygonEdit(current, removePolygonFromEditorState(current.present, selection.polygonId));
+        return applyPolygonEdit(
+          current,
+          removePolygonFromEditorState(current.present, selection.polygonId)
+        );
       });
       setSelection({ kind: 'none' });
       setStatusMessage(null);
@@ -781,11 +891,15 @@ export const InstantQuotePage = () => {
           ) : (
             <div className="space-y-4">
               {metrics.selfIntersecting ? (
-                <p className="status-error">Overlapping boundary edges detected. Adjust vertices to continue.</p>
+                <p className="status-error">
+                  Overlapping boundary edges detected. Adjust vertices to continue.
+                </p>
               ) : null}
 
               {metrics.effectiveGeometryEmpty ? (
-                <p className="status-error">Obstacles remove the entire service area. Adjust boundaries to continue.</p>
+                <p className="status-error">
+                  Obstacles remove the entire service area. Adjust boundaries to continue.
+                </p>
               ) : null}
 
               <div className="relative">
@@ -804,7 +918,17 @@ export const InstantQuotePage = () => {
                     applyPolygonPointsEdit(polygonId, nextPoints);
                   }}
                   onSelectionChange={handleMapSelectionChange}
+                  onMapReady={handleQuoteMapReady}
                 />
+
+                {quoteGuideVisible ? (
+                  <QuoteGuideModal
+                    activeStepIndex={quoteGuideActiveStepIndex}
+                    onClose={dismissQuoteGuide}
+                    onPrevious={handleQuoteGuidePrevious}
+                    onNext={handleQuoteGuideNext}
+                  />
+                ) : null}
 
                 <div className="absolute left-3 top-3 z-20 rounded-2xl border border-stroke bg-surface/95 p-2 shadow-soft backdrop-blur-sm">
                   <div className="flex items-center gap-2">
@@ -904,17 +1028,23 @@ export const InstantQuotePage = () => {
                       <p className="mt-2 text-base font-semibold text-ink">{areaValue}</p>
                     </div>
                     <div className="rounded-2xl border border-stroke bg-surface-raised px-4 py-3">
-                      <p className="text-xs uppercase tracking-[0.12em] text-copy-muted">Perimeter</p>
+                      <p className="text-xs uppercase tracking-[0.12em] text-copy-muted">
+                        Perimeter
+                      </p>
                       <p className="mt-2 text-base font-semibold text-ink">{perimeterValue}</p>
                     </div>
                     <div className="rounded-2xl border border-stroke bg-surface-raised px-4 py-3">
-                      <p className="text-xs uppercase tracking-[0.12em] text-copy-muted">Lawn shapes</p>
+                      <p className="text-xs uppercase tracking-[0.12em] text-copy-muted">
+                        Lawn shapes
+                      </p>
                       <p className="mt-2 text-base font-semibold text-ink">
                         {metrics.validServicePolygonCount} valid / {servicePolygons.length}
                       </p>
                     </div>
                     <div className="rounded-2xl border border-stroke bg-surface-raised px-4 py-3">
-                      <p className="text-xs uppercase tracking-[0.12em] text-copy-muted">Obstacle shapes</p>
+                      <p className="text-xs uppercase tracking-[0.12em] text-copy-muted">
+                        Obstacle shapes
+                      </p>
                       <p className="mt-2 text-base font-semibold text-ink">
                         {metrics.validObstaclePolygonCount} valid / {obstaclePolygons.length}
                       </p>
