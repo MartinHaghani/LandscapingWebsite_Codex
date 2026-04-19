@@ -2,6 +2,8 @@ node_modules
 .DS_Store
 .env
 .env.local
+.do/*.local.yaml
+.do/*.secret.yaml
 client/.env
 server/.env
 client/dist

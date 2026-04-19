@@ -17,21 +17,26 @@ Primary domains:
 ## 2) Runtime and Entry Points
 
 - API runtime: `server/src/index.ts` -> `server/src/server.ts`
+- Hosted runtime: DigitalOcean App Platform runs two isolated apps from the GitHub repo: staging from `staging` with auto-deploy and production from `main` with manual deploys.
+- Hosted components per environment: `public-web` static site from `client/`, `admin-web` static site from `admin/`, `api` Node service from `server/`, and a `migrate` pre-deploy job that runs `npm run prisma:migrate:deploy`.
+- Hosted domains: staging uses `staging.autoscape.ca`, `api-staging.autoscape.ca`, and `admin-staging.autoscape.ca`; production uses `autoscape.ca`, `www.autoscape.ca`, `api.autoscape.ca`, and `admin.autoscape.ca`.
+- Local dev connectivity: public/admin frontends default to `VITE_API_BASE_URL=http://localhost:4000`; the API reflects loopback origins (`localhost`, `127.0.0.1`, `[::1]`) across arbitrary local ports to avoid Vite port drift breaking quote writes.
 - Public app routes: `client/src/App.tsx`
 - Services gallery: `client/src/pages/ServicesPage.tsx` + `client/src/components/service/ServiceIllustrations.tsx` (coverage-first entry page with five shared-style inline SVG service scenes)
-- Instant quote builder: `client/src/pages/InstantQuotePage.tsx` (badge-only header + non-interactive three-step progress rail, full-width map builder, delayed map-guide modal shell for fresh address loads, prominent floating `Done` action, local draft autosave, and review handoff)
-- Instant quote review: `client/src/pages/InstantQuoteSummaryPage.tsx` (unified review card, address-first property details, area/perimeter directly under the address, live fitted property preview, visit-count context near service frequency, lighter side-by-side billing plan selection, and `POST /api/quote/draft` trigger)
+- Instant quote builder: `client/src/pages/InstantQuotePage.tsx` (badge-only header + non-interactive three-step progress rail, full-width map builder, delayed map-guide modal shell for fresh address loads, cleaner editorial guide chrome with one white panel, a slowly fading unified demo-and-caption media unit, no divider or white caption box between SVG and guide text, a right-sized demo viewport with the camera layer aligned to the map-body clip window so the SVG starts centered and the bottom remains visible, a tighter centered caption strip directly under the demo, equal-width toolbar buttons above the artwork, separate bottom navigation/progress chrome, looping first-step miniature draw-lawn demo using the refreshed brighter popup-house SVG background to draw both left-side lawn zones inside the same framed viewport treatment used by step 2, with a shared 1.6-second camera transform that does not slow cursor/edit phases, plus loop-edge fades that soften the demo restart, animated second-step SVG lesson that carries those two completed left-side lawns forward while drawing and correcting the right-side backyard zone with the same decoupled camera transform timing, matching framed background treatment, shorter `Add extra points` / `Delete extra points` captions, and the same loop-edge fade behavior, animated third-step SVG obstacle lesson that keeps that same house background and finished lawn state while clicking `Draw obstacle`, tracing a selected red obstacle polygon around the front tree in the bottom-left lawn, holding the completed obstacle scene for 2 seconds before looping again, and swapping the last-slide nav control from `Next` to a green `Done` button that slowly fades the popup back into the tool, floating `Guide` plus `Done` action cluster, local draft autosave, and review handoff)
+- Instant quote review: `client/src/pages/InstantQuoteSummaryPage.tsx` (two-section quote-ready review layout without the progress rail, one top `Back to Map` action, a desktop top row with address-first quote details plus a right-side fitted property preview, quiet whole-number area/perimeter metadata, a full-width lower payment-plan section with accessible side-by-side radio plan cards, and `POST /api/quote/draft` trigger)
 - Admin app routes/state: `admin/src/App.tsx`
 - Admin quote editor map module: `admin/src/components/QuoteEditorMap.tsx` (satellite raster basemap + immediate freehand polygon source hydration with the same shared draw-end simplifier used in public)
 - Public layout shell: `client/src/components/layout/SiteLayout.tsx` (`Navbar`, `Footer`, `ScrollToTop`)
 - Public theming system: `client/tailwind.config.ts` + `client/src/index.css` (warm-light semantic tokens, shared form/focus/map-control styling)
 - Home hero system: `client/src/pages/HomePage.tsx` + `client/src/components/home/HomeHeroLawnGraphic.tsx` + `client/src/lib/homeHeroLawn.ts` + `client/src/lib/homeHeroLawnCoverage.ts` (true desktop 50/50 split, CTA helper copy, fixed parcel geometry constants, perimeter wall-trace metadata, rounded 11-pass boustrophedon infill path with sampled motion/denser arrows, direct mowing spawn on the first scanline, multi-phase hero timing, slightly heavier white outline, and a dynamically sized ticker-flip status capsule stacked directly below the lawn)
-- Home sustainability proof system: `client/src/components/home/HomeSustainabilitySection.tsx` + `client/src/pages/HomePage.tsx` (two-column narrative + comparison card, compact electric-vs-gas bars, and qualified copy limited to point-of-use exhaust, measured 25 ft noise, and lifecycle CO2e framing)
+- Home page marketing composition: `client/src/pages/HomePage.tsx` + `client/src/components/home/HomePricingComparisonSection.tsx` + `client/src/components/home/HomeLawnmowersSection.tsx` (hero-adjacent pricing comparison using existing client quote helpers for a 3,000 sq ft weekly sample lawn, followed by a two-column mower section with an editorial four-point unnumbered spec list on the left and the cleaned transparent asset `client/public/images/home/mower-technology-transparent.png` floating directly on the right-side background, then a streamlined flow into services, FAQ, and the closing quote CTA without separate Why Electric, How It Works, Why Autoscape, Testimonials, or About surfaces)
 
 ## 3) Persistence Layer
 
 - ORM: Prisma (`server/prisma/schema.prisma`)
 - DB: PostgreSQL + PostGIS
+- Hosted persistence: staging and production each use their own DigitalOcean Managed PostgreSQL database; production traffic must never rely on the local/dev in-memory fallback.
 - Migrations:
   - `server/prisma/migrations/20260304120000_admin_platform_v1/migration.sql`
   - `server/prisma/migrations/20260305103000_quote_session_ranges/migration.sql`
@@ -65,6 +70,8 @@ Spatial storage:
 - `POST /api/quote/:quoteId/claim` (auth required)
 - `POST /api/quote/:quoteId/contact` (idempotent, auth required, optional notes payload only)
 - `GET /api/quote/:quoteId` (auth required, owner/admin only)
+- `GET /api/approved-quote-preview/:token` (tokenized public Mapbox Static Images proxy for approved-quote emails/pages)
+- client request wrapper converts network-level failures into a direct API reachability message so quote/contact flows do not fall back to a generic submit error
 
 ### Account
 
@@ -78,8 +85,10 @@ Client-side quote draft resilience:
   - address input + selected address metadata
   - map center + step state
   - polygon history (past/present/future)
-  - unit mode + service frequency + billing mode
+  - unit mode + billing mode
   - internal `distanceToNearestStationKm` from service-area check
+- restore hydration completes before auto-save writes back, so map-step snapshots reopen on the Mapbox builder rather than being overwritten by the initial address state
+- legacy local `serviceFrequency` fields are accepted and stripped during restore
 - Reset/clear controls are UI-level only and do not mutate server quote records.
 
 Quote editor/source geometry contract:
@@ -105,17 +114,17 @@ Shared quote-drawing simplification:
 
 Quote pricing contract:
 
-- `quoteTotal` remains compatibility alias for per-session total
-- formula: `max(20 + 0.05*A + 0.10*P + 1.0*D, 50)`
+- `quoteTotal` remains compatibility alias for per-visit total
+- formula: `max(20 + 0.05*A + 0.10*P + 1.0*D, 45)`
   - `D` = nearest active base-station distance in km
 - canonical fields:
   - `serviceFrequency`, `perSessionTotal`, `sessionsMin`, `sessionsMax`
   - `seasonalTotalMin`, `seasonalTotalMax` (compatibility alias pair, now fixed to one total)
   - `fullSeasonTotal`, `seasonalDiscountedTotal`, `seasonalSavingsTotal`
   - `seasonalDiscountRate`, `billingMode`
-- cadence session counts are fixed:
-  - `weekly` => `26`
-  - `biweekly` => `14`
+- service frequency is weekly-only:
+  - `weekly` => `20` visits from May to September
+- migration `20260415163000_weekly_only_service_frequency` normalizes any stored non-weekly rows to weekly 20-visit totals before tightening the Prisma enum; older historical migrations are left intact for migration-history safety
 
 Customer profile sync contract:
 
@@ -134,6 +143,7 @@ Customer profile sync contract:
 - `GET /api/service-area` (ETag + cache)
 - `POST /api/service-area/check` (includes `distanceToNearestStationKm`)
 - `POST /api/service-area/request` (idempotent)
+- Service-area generation uses server-side base-station config and falls back to the default Vaughan station when no base-station env is provided, including production.
 
 Idempotency behavior:
 
@@ -152,6 +162,7 @@ All admin endpoints are under `/api/admin/*` and return cursor pagination payloa
 - `GET /api/admin/quotes/:id/editor`
 - `POST /api/admin/quotes/:id/versions`
 - `POST /api/admin/quotes/:id/versions/:versionNumber/submit`
+- `POST /api/admin/quotes/:id/approval-email/resend`
 - `POST /api/admin/quotes/:id/notes`
 - `GET /api/admin/service-area-requests`
 - `GET /api/admin/service-area-requests/map`
@@ -178,7 +189,7 @@ Response envelope for list endpoints:
 Admin list query model:
 
 - all list endpoints accept `q`, `sortBy`, `sortDir`, `limit`, `cursor`
-- each endpoint supports additional tab-specific filters (status, cadence, source, channel, actor role, etc.)
+- each endpoint supports additional tab-specific filters (status, source, channel, actor role, etc.)
 
 ## 6) Quote State Machine
 
@@ -218,9 +229,13 @@ Revisions:
 - Keep quote in `in_review`.
 - Append immutable `quote_versions` row.
 - Update `customer_status` to `updated`.
-- Revise endpoint treats per-session total as canonical and recomputes seasonal range fields.
+- Revise endpoint treats per-visit total as canonical and recomputes seasonal range fields.
 - Quote editor versions include `actor_type` (`client` or `admin`) + `version_number` + `changed_at`.
 - Version submit endpoint applies selected version and sets `status=verified` + `customer_status=awaiting_payment`.
+- Successful verification attempts a payment-focused Resend-backed approved-quote email and records the result in `approved_quote_email_deliveries`.
+- Email preview image URLs must be built from a public API origin (`PUBLIC_API_BASE_URL`) so inbox image proxies can fetch them.
+- Email preview maps require `MAPBOX_STATIC_ACCESS_TOKEN` and are rendered from saved client/admin `polygonSource` versions as approved, added, and removed service-area overlays.
+- Quote lookup responses now include `customerStatus`, `verifiedAt`, `paymentPageUrl`, and `approvedQuotePreviewImageUrl`.
 
 Development cutover:
 
@@ -256,7 +271,7 @@ Customer profile completeness:
 
 - required account field: phone number
 - client gate route: `/complete-profile/*`
-- dashboard and quote-contact flows redirect to profile gate when phone is missing
+- dashboard and quote-confirmation flows redirect to profile gate when phone is missing
 - phone source of truth: Clerk `unsafeMetadata.autoscapeProfile.phone` (fallback from Clerk primary phone when available)
 
 RBAC roles:
