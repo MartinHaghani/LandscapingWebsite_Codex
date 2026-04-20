@@ -4,6 +4,7 @@
 
 1. User opens `/services`.
 2. Page loads `GET /api/service-area` and renders approximate coverage overlay on a light basemap.
+   - The API builds coverage from server-side base-station config and falls back to the default Vaughan station when no base-station env is provided.
 3. Page presents five illustrated service cards: Autonomous Mowing, Smart Edging, Cleanup & Debris, Seasonal Maintenance, and Performance Reporting.
 4. User clicks `Check my address` CTA to start Instant Quote.
 
@@ -19,15 +20,48 @@
    - `Mowing...`: mower appears directly at the first scanline point, follows the full generated infill path, then the mower/path fade out before the next learning cycle
 6. The status capsule is stacked directly beneath the lawn shape, resizes to the active label width, and uses a ticker-flip transition with no separate stats strip beneath the two-column hero.
 
-## Home: Sustainability Proof
+## Home: Pricing Comparison
 
-1. User continues below the hero into a compact electric-vs-gas proof section.
-2. Left column explains the homeowner-facing value in plain language: no exhaust where the work happens, lower neighborhood noise, and lower lifecycle emissions versus gas equipment.
-3. Right column shows three compact bar comparisons:
-   - point-of-use exhaust
-   - measured noise at 25 ft
-   - 10-year lifecycle CO2e from the cited push mower study
-4. Homepage copy keeps "zero emissions" limited to exhaust at the point of use and avoids silent/absolute wording.
+1. User continues directly below the hero into a tighter pricing comparison section.
+2. Section anchors the example around a 3,000 sq ft weekly sample lawn and keeps the portrait asymmetrical lawn SVG as supporting context only, with the same downward-facing driveway cutout, no decorative interior strokes, and the same solid brand-green fill treatment used by the hero parcel.
+3. Autoscape pricing is derived from existing client quote helpers, not separate marketing-only constants:
+   - `$45` per visit
+   - `$720` per season after the default 20% seasonal savings
+4. Layout uses two parts instead of three equal cards:
+   - left: slimmer sample context block with the reduced lawn visual, `3,000 sq ft lawn`, and `20 weekly visits`
+   - right: one shared comparison panel with larger `Autoscape` and `Local competitors` columns kept adjacent on mobile
+5. Shared comparison panel shows:
+   - `Per visit`: `$45` vs `$55`
+   - `Per season`: `$720` vs `$1,100`
+   - summary copy: save `$10` per visit and `$380` per season
+6. Desktop layout stretches the shared comparison panel to match the sample box height, enlarges the `Per visit` and `Per season` row labels, and keeps the bottom disclaimer in smaller grey supporting text.
+
+## Home: Lawnmower Section
+
+1. User continues below the pricing comparison into a dedicated `Meet our lawnmowers` section.
+2. Layout uses a responsive two-column split:
+   - left: product copy and four unnumbered selling points
+   - right: a cleaned transparent mower asset placed directly into the page background with ambient glow, not a framed card
+3. Selling points highlight:
+   - `Centimetre precision`
+   - `5 sensor types`
+   - `Tested rigorously`
+   - `Built-in safety features`
+4. Section remains informational only and is intended to build trust before the visitor reaches the services overview.
+
+## Home: Streamlined Marketing Flow
+
+1. After the pricing comparison, the page moves into the mower technology section and then the services overview.
+2. The retired Why Electric, How It Works, Why Autoscape, and Testimonials sections are no longer part of the landing-page flow.
+3. The page closes with FAQ cards and the final instant-quote CTA.
+
+## Deployment Promotion Flow
+
+1. Codex/local work happens on feature branches and is verified locally before merge.
+2. Staging deploys automatically from the `staging` branch to the DigitalOcean `autoscape-staging` app.
+3. Staging smoke tests cover API health, public/admin SPA refreshes, quote creation, Clerk auth, admin review, approved-quote preview images, CORS, and persistence after API redeploy.
+4. Production deploys manually from `main` to the DigitalOcean `autoscape-production` app only after staging passes.
+5. Schema migrations run through the App Platform `migrate` pre-deploy job before the API rollout in each environment.
 
 ## Instant Quote: Draft + Finalize
 
@@ -58,22 +92,32 @@
 9. Quote map stays on satellite basemap by default; controls use warm-light, high-contrast UI surfaces.
 10. Map header chrome is reduced to a thin address pill with a subtle `Change address` action, and the address marker uses a green home icon inside the white dot.
 11. After a fresh successful address-to-map transition, the client waits for the map to finish loading and reveals a centered guide modal shell after 1 second.
-12. The guide shell uses a soft scrim, blank placeholder body, subtle top-right close button, and bottom `Back` / `Next` controls with a pill slider for future multi-step guide content.
-13. Dismissing the guide keeps it closed for the current mapped-address session; changing address and loading a new map session re-arms it. Restored local drafts do not auto-open the guide.
-14. Builder page is full-width and uses a more prominent floating top-right `Done` action instead of the old embedded summary sidebar.
-15. Client auto-saves draft state in browser local storage (address + step + geometry + cadence + billing mode + unit mode) under `autoscape.quoteDraft.v2`.
-16. Client computes effective geometry and pricing with:
+12. Guide step 1 loops a miniature draw-lawn demo using the real map-tool chrome, the polished popup-house SVG as the live background, and a visible cursor.
+13. The tutorial clicks `Draw lawn`, traces one loose curvy freehand outline around the front down lawn zone, and finalizes that stroke through the same shared freehand logic used by the live tool.
+14. The completed front-down tutorial polygon first appears with vertices on the freehand-derived shape inside the same framed viewport treatment used by step 2, then the demo camera uses the shared 1.6-second transform timing while cursor movement and vertex dragging stay at normal guide speed before drawing the top-left lawn zone so both left-side polygons are complete.
+15. Guide step 2 starts from those two completed left-side lawn polygons, clicks `Draw lawn`, and traces only the right-side backyard zone.
+16. Step 2 keeps completed non-active lawn polygons unselected with the same green fill/outline styling used in the live quote map, then shows vertices on a deliberately imperfect selected right-side draft with one missing garden-notch corner and one extra redundant point.
+17. The step-2 cursor then teaches two edit tools in sequence: it uses the same shared 1.6-second camera transform without slowing cursor/edit phases while inserting and dragging a new point, then zooms into the extra point, selects it with a live-tool-style highlighted vertex marker, moves directly to the toolbar `Delete` button, shows a stronger click pulse, removes that point, and eases back out before ending on a corrected three-zone lawn layout.
+18. Guide step 3 keeps the same SVG house background and finished three-zone lawn state from step 2, clicks `Draw obstacle`, traces a selected red obstacle polygon around the front tree in the bottom-left lawn, then holds that completed obstacle scene for 2 seconds before looping again.
+19. The guide shell now uses a cleaner editorial panel: one white modal, a slowly fading unified demo-and-caption media unit with no divider or white caption box between SVG and text, a right-sized demo stage whose camera layer is aligned to the map-body clip window so the SVG starts centered and the bottom remains visible, a tighter centered caption strip directly under the demo, equal-width toolbar buttons, and segmented progress pills in the separate Back/Next navigation row.
+20. The animated SVG steps now fade in softly when they appear, fade back out as each loop finishes, and use a slower fade-based transition between slides.
+21. On the third slide, the right-side nav control changes from `Next` to a green `Done` button that slowly fades the popup back into the quote tool without dismissing the current guide session.
+22. The caption strip is now step-aware: step 1 uses `Draw loosely around your lawn.` and `Move the points to match your lawn.`, step 2 uses `Draw each separate lawn area on its own.`, `Add extra points`, and `Delete extra points`, and step 3 uses `Use Draw obstacle for gardens, pools, and other no-mow areas.`
+23. Dismissing the guide keeps it closed for the current mapped-address session; changing address and loading a new map session re-arms it. Restored local drafts do not auto-open the guide.
+22. Builder page is full-width and uses a floating top-right action cluster with a manual `Guide` help button beside the primary `Done` action instead of the old embedded summary sidebar.
+23. Client auto-saves draft state in browser local storage (address + step + geometry + billing mode + unit mode) under `autoscape.quoteDraft.v2`; restore hydration completes before auto-save writes back, so map-step drafts reopen directly on the Mapbox builder, and legacy local `serviceFrequency` fields are stripped.
+24. Client computes effective geometry and pricing with:
 
-- `perSession = max(20 + 0.05*A + 0.10*P + 1.0*D, 50)`
+- `perVisit = max(20 + 0.05*A + 0.10*P + 1.0*D, 45)`
 - `D` from `POST /api/service-area/check` (`distanceToNearestStationKm`)
-- fixed sessions: weekly=26, bi-weekly=14
+- fixed visits: weekly=20 from May to September
 - seasonal default discount: 20%
 
 ### Step 3: Review Quote
 
 1. `Done` navigates to `/instant-quote/summary` only when the mapped draft passes the existing geometry guardrails.
-2. Review page shows one unified review card with address first, area/perimeter directly under the address, cadence controls with visit-count context, a live fitted property preview, and one `Back to Map` button directly under the preview.
-3. Review page presents `Per Season` and `Per Session` as side-by-side plan cards; `Per Season` shows a struck-through regular price plus savings, `Per Session` shows the seasonal total inline, and `billingMode` stays in sync with the selected card.
+2. Review page removes the step progress rail and shows a two-section quote-ready layout: one top `Back to Map` action, a desktop top row with address-first quote details on the left and the map preview with quiet whole-number area/perimeter metadata on the right, then a full-width lower payment-plan section.
+3. Review page presents `Per Season` and `Per Visit` as side-by-side radio plan cards under `Choose how to pay`; `Per Season` shows a struck-through regular price plus savings, `Per Visit` shows the full-season total inline, and `billingMode` stays in sync with the selected card.
 4. User taps the bottom `Submit Quote` button, which still creates the draft and then routes to contact details.
 5. Client submits idempotent draft from the review page:
 
@@ -84,12 +128,13 @@
 
 6. Server validates geometry, derives canonical quote geometry from `ringPoints`, and stores draft quote + version 1 history row.
 7. If request is authenticated, server records draft address to Clerk account metadata (`addressHistory`, latest as `defaultAddress`).
-8. Client clears local draft snapshot and routes to `/quote-contact/:quoteId`.
+8. Client clears local draft snapshot and routes to `/quote-confirmation/:quoteId`.
+9. If the API is unreachable instead, client keeps the local draft and shows a direct API reachability error so the user can retry after the backend is available.
 
 ### Contact Finalize (Required)
 
-1. User lands on `/quote-contact/:quoteId`.
-2. If signed out, page shows auth wall (sign-in/sign-up).
+1. User lands on `/quote-confirmation/:quoteId` (legacy `/quote-contact/:quoteId` routes redirect here).
+2. If signed out, client redirects to `/sign-in/*` with a return URL for the confirmation page.
 3. User signs in (email/password, Google, forgot/reset supported by Clerk).
 4. If signed-in account has no phone (legacy profile), user is redirected to `/complete-profile/*`.
 5. Client claims ownership of draft quote:
@@ -97,7 +142,7 @@
 - `POST /api/quote/:quoteId/claim`
 - header: `Authorization: Bearer <clerk session token>`
 
-6. User submits optional notes only. Name/email/phone are derived from account profile and address comes from quote draft.
+6. Confirmation page fetches the draft quote and auto-finalizes it when `contactPending === true`.
 7. Client calls idempotent finalize endpoint:
 
 - `POST /api/quote/:quoteId/contact`
@@ -106,7 +151,7 @@
 
 8. Server marks quote `in_review`, `customer_status=pending`, `contact_pending=false`, and writes lead contact event.
 9. Server records quote address again into Clerk metadata as a secondary sync pass.
-10. Client routes to `/quote-confirmation/:quoteId`.
+10. Confirmation page renders the in-review workflow summary and 24-hour response-time note.
 
 ### Customer Dashboard
 
@@ -123,6 +168,7 @@
 - profile summary
 - linked quote list/statuses
 - quote detail screen (`/dashboard/quotes/:quoteId`)
+- approved quote placeholder payment screen (`/dashboard/quotes/:quoteId/payment`)
 - placeholder Billing and Messages cards
 
 ## Out-of-Area Expansion Capture
@@ -173,7 +219,11 @@
 - save new version (`POST /api/admin/quotes/:id/versions`)
 - submit selected version (`POST /api/admin/quotes/:id/versions/:versionNumber/submit`)
   - sets `status=verified`, `customer_status=awaiting_payment`
-  - writes deferred verification-email audit placeholder (delivery integration pending)
+  - attempts payment-focused approved-quote email delivery through Resend with subject `Quote Approved, Payment Required`
+  - stores sent/failed delivery attempts with a tokenized preview-image URL
+  - preview URL must be publicly reachable by inbox image proxies and requires `MAPBOX_STATIC_ACCESS_TOKEN`
+  - preview image is a Mapbox satellite delta map computed from exact saved client/admin `polygonSource` versions
+- resend approved quote email (`POST /api/admin/quotes/:id/approval-email/resend`)
 - legacy revise endpoint remains for backward compatibility
 - add internal note
 

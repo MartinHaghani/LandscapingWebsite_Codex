@@ -35,8 +35,9 @@ Implementation:
 - map builder stays local first, with server draft creation deferred to the review step
 - dedicated `/instant-quote/summary` review page before draft creation
 - `POST /api/quote/draft` from the review step
-- dedicated `/quote-contact/:quoteId` page
+- confirmation-first `/quote-confirmation/:quoteId` handoff with a legacy redirect from `/quote-contact/:quoteId`
 - `POST /api/quote/:quoteId/contact` finalizes submission and moves quote to `in_review` with `customer_status=pending`
+- client keeps the browser-local draft and shows a direct API reachability error when the backend is unavailable, rather than a generic submit failure
 - confirmation shown after finalize
 
 ## 4) Idempotency by Default on Retry-Prone Writes
@@ -66,6 +67,7 @@ Implementation:
 - quote polygons in `geometry(MultiPolygon,4326)`
 - points in `geography(Point,4326)`
 - spatial GIST indexes for query performance
+- staging and production run on separate DigitalOcean Managed PostgreSQL databases with PostGIS enabled
 
 ## 6) Lead vs Contact vs Quote Separation
 
@@ -79,7 +81,21 @@ Implementation:
 - `lead_contacts` = communication events (`contact_form`, `quote_finalize`)
 - `quotes` = transactional object + workflow state
 
-## 7) Immutable Revision History
+## 7) Isolated Hosted Environments
+
+Decision:
+
+- Use staging as the hosted integration environment before production promotion.
+
+Implementation:
+
+- DigitalOcean App Platform runs separate staging and production apps.
+- Staging auto-deploys from `staging`; production deploys manually from `main`.
+- Each environment has isolated public/admin/API components and a separate managed Postgres/PostGIS database.
+- Prisma migrations run as a pre-deploy job so schema changes block rollout if they fail.
+- Secrets live in DigitalOcean environment variables, not committed app specs or `.env` files.
+
+## 8) Immutable Revision History
 
 Decision:
 
@@ -92,7 +108,7 @@ Implementation:
 - version metadata includes `actor_type` (`client`/`admin`) + `changed_at`
 - revisions keep internal status in `in_review`
 
-## 8) Option-A Quote Workflow
+## 9) Option-A Quote Workflow
 
 Decision:
 
@@ -105,8 +121,10 @@ Transitions:
 - revision updates `customer_status` while remaining `in_review`
 - runtime finalize path moves `draft -> in_review` directly (while preserving enum compatibility for `submitted`)
 - selected version submit sets `status=verified`, `customer_status=awaiting_payment`
+- verified submit now attempts a payment-focused Resend-backed approved-quote email with subject `Quote Approved, Payment Required`, a tokenized preview image, and no approval rollback when delivery fails
+- email preview images require a public `PUBLIC_API_BASE_URL` plus `MAPBOX_STATIC_ACCESS_TOKEN`; the image endpoint proxies a Mapbox satellite delta map using exact saved client/admin `polygonSource` versions
 
-## 9) Event-Oriented Audit Logging
+## 10) Event-Oriented Audit Logging
 
 Decision:
 
@@ -118,7 +136,7 @@ Implementation:
 - full snapshots reserved for high-risk events (e.g., revisions)
 - correlation metadata (`request_id`, `correlation_id`, `ip_hash`, `user_agent`)
 
-## 10) Role-Based PII and Export Controls
+## 11) Role-Based PII and Export Controls
 
 Decision:
 
@@ -130,7 +148,7 @@ Implementation:
 - MARKETING sees masked PII in API and CSV exports
 - full PII export restricted to OWNER/ADMIN/REVIEWER
 
-## 11) Launch-Cutoff Analytics Guard
+## 12) Launch-Cutoff Analytics Guard
 
 Decision:
 
@@ -140,19 +158,18 @@ Implementation:
 
 - `SYSTEM_LAUNCH_AT` cutoff applied to attribution summary queries
 
-## 12) Distance-Aware Seasonal Pricing Model
+## 13) Distance-Aware Seasonal Pricing Model
 
 Decision:
 
-- expose quote value in two forms: per-session and seasonal discounted billing.
+- expose quote value in two forms: per-visit and seasonal discounted billing.
 
 Implementation:
 
-- cadence selector in public quote flow: `weekly` or `biweekly`
-- session counts:
-  - weekly: `26`
-  - bi-weekly: `14`
-- pricing formula: `max(20 + 0.05*A + 0.10*P + 1.0*D, 50)`
+- service frequency is weekly-only in the public and admin quote flows
+- visit count:
+  - weekly: `20` visits from May to September
+- pricing formula: `max(20 + 0.05*A + 0.10*P + 1.0*D, 45)`
   - `D` uses nearest active base-station distance in km
 - seasonal billing defaults to a 20% discount and can be configured later
 - persistence fields on quotes:
@@ -163,9 +180,9 @@ Implementation:
   - `billing_mode`
   - `seasonal_discount_rate`
   - `distance_to_nearest_station_km` (internal-only)
-- `quoteTotal` kept as compatibility alias for per-session value
+- `quoteTotal` kept as compatibility alias for per-visit value
 
-## 13) Admin Usability-First Redesign
+## 14) Admin Usability-First Redesign
 
 Decision:
 
@@ -178,6 +195,7 @@ Implementation:
 - route-based quote editor (`/quotes/:quoteId/edit`) with full polygon controls and version submit flow
   - satellite basemap to align map context with on-site property imagery
   - immediate polygon hydration on load to avoid blank-editor states
+  - latest approved-quote email attempt is visible in the editor with manual resend support for verified quotes
 - unified toolbar pattern on all tabs:
   - search
   - tab-specific filters
@@ -187,7 +205,7 @@ Implementation:
   - hotspot list
   - request table
 
-## 14) Launch-Ready Public Content
+## 15) Launch-Ready Public Content
 
 Decision:
 
@@ -195,13 +213,13 @@ Decision:
 
 Implementation:
 
-- home/services/about/contact pages now use production content
+- home/services/contact pages now use production content
 - services page uses five shared-style inline SVG illustrations and removes the old mixed photo/placeholder card treatment, including removal of `Multi-Zone Scheduling`
 - footer uses real contact links (`tel:` + `mailto:`) and quick navigation links
 - mobile navigation includes in-header menu with quote CTA
 - metadata updates in `client/index.html` improve social preview and launch polish
 
-## 15) Quote Draft Recovery UX
+## 16) Quote Draft Recovery UX
 
 Decision:
 
@@ -214,12 +232,14 @@ Implementation:
   - step state
   - selected address metadata + map center
   - polygon history and active editing state (`ringPoints` + nullable `rawStrokePoints`)
-  - unit mode and cadence
+  - unit mode and billing mode
+- restore hydration completes before auto-save writes back, preserving map-step refreshes
+- legacy local `serviceFrequency` fields are accepted and stripped during restore
 - UI controls:
   - clear all geometry (map controls)
   - reset saved draft (address + map panels)
 
-## 16) Unified Clerk Authentication
+## 17) Unified Clerk Authentication
 
 Decision:
 
@@ -233,7 +253,7 @@ Implementation:
   - email/password with forgot/reset
   - required phone captured through in-app `/complete-profile/*`
   - phone persisted to `unsafeMetadata.autoscapeProfile.phone`
-  - users missing phone are routed to `/complete-profile/*` before dashboard/finalize
+  - users missing phone are routed to `/complete-profile/*` before dashboard/confirmation
 - admin app:
   - Clerk sign-in required before rendering admin shell
   - bearer token sent on all `/api/admin/*` requests
@@ -241,7 +261,7 @@ Implementation:
   - verifies bearer JWT via Clerk issuer/JWKS
   - derives customer profile identity (name/email/phone) for quote finalize actions
 
-## 17) Progress-First Quote Entry
+## 18) Progress-First Quote Entry
 
 Decision:
 
@@ -254,13 +274,23 @@ Implementation:
 - rail states show `Current step`, `Complete`, and `Up next` instead of button-like cards
 - map step uses a thin low-contrast address pill instead of a larger step header/instruction card
 - after a fresh successful address-to-map transition, the map step reveals a centered guide modal shell 1 second after the map finishes loading
-- the guide shell is intentionally blank for now, with a soft scrim, warm-light glass treatment, subtle top-right close control, and bottom `Back` / `Next` navigation paired with a pill slider for future guided steps
+- guide step 1 now plays a looping miniature of the real draw-lawn workspace, including the live toolbar styling, no mini address pill, the polished popup-house SVG as the live background, and a visible cursor
+- the tutorial now traces the front down lawn zone inside the same framed viewport treatment used by step 2, first as one loose curvy freehand outline and then with a shared 1.6-second camera transform while cursor movement and vertex dragging stay at normal guide speed, before drawing the top-left lawn so both left-side zones are complete
+- the demo still uses the shared freehand finalizer so the first completed polygon lands on a plausible freehand-cleanup shape before the edit pass snaps it into place
+- guide step 2 now starts from those two finished left-side lawns, draws only the right-side backyard zone as a separate service polygon, keeps the non-selected polygons on the lighter live-map styling, and uses the same 1.6-second camera transform timing without slowing cursor/edit phases while teaching one missing garden-notch point plus one explicit direct toolbar-Delete click/removal of an extra redundant point on the selected right-side polygon
+- guide step 3 now keeps the same popup-house SVG background and completed three-zone lawn state from step 2, clicks `Draw obstacle`, traces a selected red obstacle polygon around the front tree in the bottom-left lawn, then holds that finished obstacle scene for 2 seconds before looping again
+- selected guide vertices now use a live-tool-style marker treatment with a larger green core, pale green border, white outer ring, and soft halo so add, move, and delete selections are obvious
+- the guide shell now uses a cleaner editorial panel with fewer nested rounded boxes: one white modal, a slowly fading unified demo-and-caption media unit with no divider or white caption box between SVG and text, a right-sized demo stage whose camera layer aligns with the map-body clip window so the SVG starts centered and the bottom stays visible, a tighter centered caption strip directly under the demo, equal-width toolbar buttons, and progress pills in a flat navigation row between Back and Next
+- the animated SVG guide stages now fade in softly when they appear, fade back out as each loop finishes, and use a slower fade-based transition between slides so resets feel less abrupt
+- on the third slide, the right-side nav control changes from `Next` to a green `Done` button that slowly fades the popup back into the quote tool instead of dismissing the guide session
+- the popup-house SVG now uses brighter greens and warmer accent materials so the background feels more vivid and less dull
+- the caption strip is now step-aware: step 1 fades from `Draw loosely around your lawn.` to `Move the points to match your lawn.`, step 2 moves through `Draw each separate lawn area on its own.`, `Add extra points`, and `Delete extra points`, and step 3 shows `Use Draw obstacle for gardens, pools, and other no-mow areas.`
 - guide dismissal is scoped to the current mapped-address session; restored local drafts do not auto-open it
-- map step removes the embedded quote summary and uses a full-width map-first layout with a more prominent floating top-right `Done` action
-- review step uses one unified summary card with address-first property details, area/perimeter directly under the address, a live fitted property preview on the right, one `Back to Map` action beneath it, visit-count context near service frequency, and lighter billing-plan cards across the bottom
+- map step removes the embedded quote summary and uses a full-width map-first layout with a floating top-right `Guide` plus `Done` action cluster
+- review step removes the progress rail and uses a two-section quote-ready layout: one top `Back to Map` action, a desktop top row with address-first property details and a right-side fitted map preview with quiet whole-number area/perimeter metadata, then a full-width lower payment-plan section with accessible side-by-side radio plan cards under `Choose how to pay`
 - review step moves the main CTA to a single page-bottom `Submit Quote` button
 
-## 18) Freehand Quote Mapping
+## 19) Freehand Quote Mapping
 
 Decision:
 
@@ -292,7 +322,7 @@ Implementation:
 - legacy point-list `schemaVersion: 1` editor payloads are intentionally unsupported after the cutover
 - development/test data can be wiped with `npm --prefix server run cutover:freehand-reset-dev-data` before rollout
 
-## 19) Home Hero Visual Language
+## 20) Home Hero Visual Language
 
 Decision:
 
@@ -312,7 +342,7 @@ Implementation:
 - the mower status cycles through `learning your lawn...`, `Generating path`, and `Mowing...` inside a compact glass-like capsule stacked immediately beneath the lawn, with width that follows the active label and a ticker-flip transition for state changes
 - no separate stats strip sits beneath the hero; the lawn animation and under-lawn status capsule carry the right-side emphasis on their own
 
-## 20) Quote Ownership + Account Dashboard
+## 21) Quote Ownership + Account Dashboard
 
 Decision:
 
@@ -323,7 +353,7 @@ Implementation:
 - quote ownership column: `quotes.auth_user_id`
 - ownership claim endpoint: `POST /api/quote/:quoteId/claim`
 - owner/admin-only quote lookup: `GET /api/quote/:quoteId`
-- finalize endpoint now auth-required and accepts optional notes only
+- finalize endpoint now auth-required and is triggered from the confirmation handoff
 - finalize uses account name/email/phone server-side, with address sourced from quote draft
 - signed-in draft creation and finalize sync quote address to Clerk private metadata:
   - `autoscapeProfile.defaultAddress`
@@ -335,8 +365,10 @@ Implementation:
   - `/complete-profile/*`
   - `/dashboard`
   - `/dashboard/quotes/:quoteId`
+  - `/dashboard/quotes/:quoteId/payment`
+- approved-quote placeholder payment page uses the same tokenized preview image as the email, shows approved service area plus added-by-admin and removed-by-admin colors, and keeps payment copy explicitly "coming soon"; the email itself centers the payment button as the primary action
 
-## 21) Warm-Light Premium Public Refresh
+## 22) Warm-Light Premium Public Refresh
 
 Decision:
 
@@ -348,20 +380,60 @@ Implementation:
 - larger default reading scale, higher text contrast, and clearer spacing rhythm for older homeowners
 - standardized focus-visible treatment and form primitives (`form-label`, `form-input`, `status-*`)
 - service-area map remains privacy-hardened but now uses light-compatible controls/popup treatment
+- service-area coverage falls back to the default Vaughan station when no base-station env is provided, so deployment without station env still exposes non-empty approximate coverage
 - instant-quote mapping keeps satellite basemap default for property precision, with warm-light control and review panels
 
-## 22) Home Page Sustainability Proof
+## 23) Home Page Pricing Comparison
 
 Decision:
 
-- Add a short evidence-based electric proof section near the top of the home page without turning the landing page into a research report.
+- Keep the tighter two-part comparison layout while removing only the sample-lawn lead-in from the intro copy.
 
 Implementation:
 
 - inserted directly below the hero
-- two-column layout with marketing copy on the left and a premium comparison card on the right
-- three compact electric-vs-gas bars:
-  - point-of-use exhaust
-  - measured noise at 25 ft
-  - qualified 10-year lifecycle CO2e from the cited push mower study
-- copy keeps "zero emissions" explicitly tied to exhaust at the point of use and avoids silent/absolute environmental phrasing
+- uses a 3,000 sq ft weekly sample lawn so visitors can compare one simple example quickly
+- top copy keeps the sales sentence but drops the sample-lawn opener:
+  - badge: `Price Check`
+  - heading: `Save with Autoscape`
+  - intro: `Get a cheaper visit rate and 20% off when you choose the seasonal plan.`
+- Autoscape values come from existing quote helpers: `$45` per visit and `$720` per season after the default 20% seasonal savings
+- layout keeps one slimmer sample context block on the left and one shared comparison panel on the right instead of three tall marketing cards
+- the lawn visual stays as supporting context only, using a reduced realistic lawn-only SVG that reads like lawn masked out of a top-view property, with asymmetrical broad lawn areas, firmer corners, a downward-facing driveway cutout, the same solid brand-green fill treatment as the hero parcel, a white outline, hero-style shadow, and no decorative interior line strokes
+- the shared comparison panel shows larger `Autoscape` and `Local competitors` labels, larger `Per visit` and `Per season` row headers, and a green `$720` vs `$1,100` season row
+- on desktop, the shared comparison panel stretches to match the sample context box height
+- summary copy states `Save $10 per visit and $380 per season.`
+- footer copy keeps the benchmark source and final-quote caveats close to the comparison in smaller grey supporting text, and the two price columns stay visually adjacent on mobile
+
+## 24) Streamlined Home Page Narrative
+
+Decision:
+
+- Reduce the landing page to the highest-signal sections and remove secondary marketing blocks that slow the path to quote.
+
+Implementation:
+
+- home page now flows from hero to pricing comparison, then into the mower technology section, services, FAQ, and the closing quote CTA
+- removed the standalone `Why Electric`, `How It Works`, `Why Autoscape`, and `Testimonials` sections
+- removed the separate `/about` page and its navbar link so the public marketing surface is limited to home, services, contact, and the quote flow
+
+## 25) Home Page Lawnmower Section
+
+Decision:
+
+- Add a dedicated trust-building mower section below pricing so visitors understand the product hardware before the services overview.
+
+Implementation:
+
+- inserted directly below `Save with Autoscape`
+- uses a responsive two-column layout with information on the left and the mower image on the right
+- the right-side asset is a cleaned transparent export derived from `/Users/martinhaghani/Downloads/Gemini_Generated_Image_7pnfyf7pnfyf7pnf.png` and stored as `client/public/images/home/mower-technology-transparent.png`
+- left-side content uses:
+  - heading: `Meet our lawnmowers`
+  - premium product intro copy focused on repeatable route execution, disciplined coverage, and property-aware sensing
+- an unnumbered editorial spec list calls out:
+  - `Centimetre precision`
+  - `5 sensor types`
+  - `Tested rigorously`
+  - `Built-in safety features`
+- section remains informational only, with no CTA, and removes the boxed artwork treatment so the transparent mower sits directly in the page background with only ambient glow and drop shadow

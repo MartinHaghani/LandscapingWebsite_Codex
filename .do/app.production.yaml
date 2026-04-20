@@ -1,0 +1,230 @@
+# DigitalOcean App Platform spec template for Autoscape production.
+# Replace every __SET_IN_DIGITALOCEAN__ value in the DigitalOcean UI or
+# by editing a private copy of this spec before applying it with doctl.
+name: autoscape-production
+region: tor
+features:
+  - buildpack-stack=ubuntu-22
+
+alerts:
+  - rule: DEPLOYMENT_FAILED
+  - rule: DOMAIN_FAILED
+
+databases:
+  - name: autoscape-production-db
+    engine: PG
+    version: "16"
+    production: true
+    cluster_name: autoscape-production-db
+    db_name: autoscape_production
+    db_user: autoscape_production
+
+static_sites:
+  - name: public-web
+    environment_slug: node-js
+    github:
+      repo: MartinHaghani/LandscapingWebsite_Codex
+      branch: main
+      deploy_on_push: false
+    source_dir: client
+    build_command: npm ci && npm run build
+    output_dir: dist
+    index_document: index.html
+    catchall_document: index.html
+    envs:
+      - key: VITE_API_BASE_URL
+        value: https://api.autoscape.ca
+        scope: BUILD_TIME
+        type: GENERAL
+      - key: VITE_MAPBOX_TOKEN
+        value: __SET_IN_DIGITALOCEAN__
+        scope: BUILD_TIME
+        type: SECRET
+      - key: VITE_CLERK_PUBLISHABLE_KEY
+        value: __SET_IN_DIGITALOCEAN__
+        scope: BUILD_TIME
+        type: SECRET
+      - key: VITE_SYSTEM_LAUNCH_AT
+        value: "2026-03-04T00:00:00.000Z"
+        scope: BUILD_TIME
+        type: GENERAL
+
+  - name: admin-web
+    environment_slug: node-js
+    github:
+      repo: MartinHaghani/LandscapingWebsite_Codex
+      branch: main
+      deploy_on_push: false
+    source_dir: admin
+    build_command: npm ci && npm run build
+    output_dir: dist
+    index_document: index.html
+    catchall_document: index.html
+    envs:
+      - key: VITE_API_BASE_URL
+        value: https://api.autoscape.ca
+        scope: BUILD_TIME
+        type: GENERAL
+      - key: VITE_CLERK_PUBLISHABLE_KEY
+        value: __SET_IN_DIGITALOCEAN__
+        scope: BUILD_TIME
+        type: SECRET
+      - key: VITE_CLERK_ADMIN_ORG_ID
+        value: __SET_IN_DIGITALOCEAN__
+        scope: BUILD_TIME
+        type: SECRET
+      - key: VITE_SYSTEM_LAUNCH_AT
+        value: "2026-03-04T00:00:00.000Z"
+        scope: BUILD_TIME
+        type: GENERAL
+
+services:
+  - name: api
+    environment_slug: node-js
+    github:
+      repo: MartinHaghani/LandscapingWebsite_Codex
+      branch: main
+      deploy_on_push: false
+    source_dir: server
+    build_command: npm ci && npm run prisma:generate && npm run build
+    run_command: npm start
+    http_port: 8080
+    instance_count: 1
+    instance_size_slug: apps-s-1vcpu-1gb
+    health_check:
+      http_path: /api/health
+    envs:
+      - key: NODE_ENV
+        value: production
+        scope: RUN_TIME
+        type: GENERAL
+      - key: DATABASE_URL
+        value: ${autoscape-production-db.DATABASE_URL}
+        scope: RUN_TIME
+        type: GENERAL
+      - key: CLIENT_ORIGIN
+        value: https://autoscape.ca,https://www.autoscape.ca,https://admin.autoscape.ca
+        scope: RUN_TIME
+        type: GENERAL
+      - key: PUBLIC_APP_BASE_URL
+        value: https://autoscape.ca
+        scope: RUN_TIME
+        type: GENERAL
+      - key: PUBLIC_API_BASE_URL
+        value: https://api.autoscape.ca
+        scope: RUN_TIME
+        type: GENERAL
+      - key: SERVICE_AREA_REGIONS
+        value: Vaughan, Ontario
+        scope: RUN_TIME
+        type: GENERAL
+      - key: AUTOSCAPE_BASE_STATIONS_JSON
+        value: __SET_IN_DIGITALOCEAN__
+        scope: RUN_TIME
+        type: SECRET
+      - key: CLERK_SECRET_KEY
+        value: __SET_IN_DIGITALOCEAN__
+        scope: RUN_TIME
+        type: SECRET
+      - key: CLERK_JWT_ISSUER
+        value: __SET_IN_DIGITALOCEAN__
+        scope: RUN_TIME
+        type: SECRET
+      - key: CLERK_ADMIN_ORG_ID
+        value: __SET_IN_DIGITALOCEAN__
+        scope: RUN_TIME
+        type: SECRET
+      - key: SYSTEM_LAUNCH_AT
+        value: "2026-03-04T00:00:00.000Z"
+        scope: RUN_TIME
+        type: GENERAL
+      - key: RESEND_API_KEY
+        value: __SET_IN_DIGITALOCEAN__
+        scope: RUN_TIME
+        type: SECRET
+      - key: APPROVED_QUOTE_EMAIL_FROM
+        value: Autoscape <contact@autoscape.ca>
+        scope: RUN_TIME
+        type: GENERAL
+      - key: APPROVED_QUOTE_EMAIL_REPLY_TO
+        value: contact@autoscape.ca
+        scope: RUN_TIME
+        type: GENERAL
+      - key: MAPBOX_STATIC_ACCESS_TOKEN
+        value: __SET_IN_DIGITALOCEAN__
+        scope: RUN_TIME
+        type: SECRET
+
+jobs:
+  - name: migrate
+    environment_slug: node-js
+    github:
+      repo: MartinHaghani/LandscapingWebsite_Codex
+      branch: main
+      deploy_on_push: false
+    source_dir: server
+    build_command: npm ci && npm run prisma:generate && npm run build
+    run_command: npm run prisma:migrate:deploy
+    instance_count: 1
+    instance_size_slug: apps-s-1vcpu-0.5gb
+    kind: PRE_DEPLOY
+    envs:
+      - key: DATABASE_URL
+        value: ${autoscape-production-db.DATABASE_URL}
+        scope: RUN_TIME
+        type: GENERAL
+
+domains:
+  - domain: autoscape.ca
+    type: PRIMARY
+    zone: autoscape.ca
+    minimum_tls_version: "1.2"
+  - domain: www.autoscape.ca
+    type: ALIAS
+    zone: autoscape.ca
+    minimum_tls_version: "1.2"
+  - domain: api.autoscape.ca
+    type: ALIAS
+    zone: autoscape.ca
+    minimum_tls_version: "1.2"
+  - domain: admin.autoscape.ca
+    type: ALIAS
+    zone: autoscape.ca
+    minimum_tls_version: "1.2"
+
+ingress:
+  rules:
+    - match:
+        authority:
+          exact: api.autoscape.ca
+        path:
+          prefix: /
+      component:
+        name: api
+        preserve_path_prefix: true
+    - match:
+        authority:
+          exact: admin.autoscape.ca
+        path:
+          prefix: /
+      component:
+        name: admin-web
+    - match:
+        authority:
+          exact: www.autoscape.ca
+        path:
+          prefix: /
+      component:
+        name: public-web
+    - match:
+        authority:
+          exact: autoscape.ca
+        path:
+          prefix: /
+      component:
+        name: public-web
+    - match:
+        path:
+          prefix: /
+      component:
+        name: public-web
