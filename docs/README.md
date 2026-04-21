@@ -8,3 +8,5 @@
 - [`coding_standards.md`](./coding_standards.md): TypeScript, linting, formatting, test, and doc-update expectations.
 - [`changelog.md`](./changelog.md): commit history snapshot generated from git log.
 - [`troubleshooting.md`](./troubleshooting.md): runbook for local port drift, stale frontend servers, and verification steps.
+
+Current deployment note: staging is active and authenticated quote/admin smoke tests pass through redeploy persistence, but production remains blocked until the approval-email resend and approved-quote preview API gap is resolved or removed from launch scope.

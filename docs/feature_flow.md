@@ -59,9 +59,9 @@
 
 1. Codex/local work happens on feature branches and is verified locally before merge.
 2. Staging deploys automatically from the `staging` branch to the DigitalOcean `autoscape-staging` app.
-3. Current staging status on 2026-04-21: the app deployment and migration job are active, custom domains use self-managed GoDaddy CNAME records, and unauthenticated API/public/admin checks pass. Authenticated Clerk/admin/editor/approval checks must pass before production is created.
-4. Staging smoke tests cover API health, public/admin SPA refreshes, quote creation, Clerk auth, admin review, approved-quote preview images, CORS, and persistence after API redeploy.
-5. Production deploys manually from `main` to the DigitalOcean `autoscape-production` app only after staging passes.
+3. Current staging status on 2026-04-21: the app deployment and migration job are active, custom domains use self-managed GoDaddy CNAME records, and authenticated customer/admin quote smoke tests pass through admin verification plus persistence after redeploy.
+4. Staging smoke tests cover API health, public/admin SPA refreshes, quote creation, Clerk auth, admin review, CORS, and persistence after API redeploy. Production remains blocked until the approval-email resend and public approved-quote preview API gap is resolved or removed from launch scope.
+5. Production deploys manually from `main` to the DigitalOcean `autoscape-production` app only after staging blockers are cleared and launch is confirmed.
 6. Schema migrations run through the App Platform `migrate` pre-deploy job before the API rollout in each environment.
 
 ## Instant Quote: Draft + Finalize
@@ -220,11 +220,7 @@
 - save new version (`POST /api/admin/quotes/:id/versions`)
 - submit selected version (`POST /api/admin/quotes/:id/versions/:versionNumber/submit`)
   - sets `status=verified`, `customer_status=awaiting_payment`
-  - attempts payment-focused approved-quote email delivery through Resend with subject `Quote Approved, Payment Required`
-  - stores sent/failed delivery attempts with a tokenized preview-image URL
-  - preview URL must be publicly reachable by inbox image proxies and requires `MAPBOX_STATIC_ACCESS_TOKEN`
-  - preview image is a Mapbox satellite delta map computed from exact saved client/admin `polygonSource` versions
-- resend approved quote email (`POST /api/admin/quotes/:id/approval-email/resend`)
+  - currently records `quote.verification_email_deferred`; Resend delivery/resend and public preview-image APIs are not exposed in the deployed API yet
 - legacy revise endpoint remains for backward compatibility
 - add internal note
 

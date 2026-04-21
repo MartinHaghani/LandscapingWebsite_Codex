@@ -12,9 +12,9 @@ Staging is created and active in DigitalOcean:
 - Default ingress: `https://autoscape-staging-w9537.ondigitalocean.app`
 - Database cluster: `autoscape-staging-db`, PostgreSQL 16, size `db-s-1vcpu-1gb`
 - Database/user names: `autoscape_staging`
-- Migration status: the `migrate` pre-deploy job applied all committed Prisma migrations successfully.
-- Smoke-test status: partial pass. Staging custom domains are active, API health passes, public/admin SPA routes load, CORS allows only the configured staging origins, service-area check passes, and a draft quote was created successfully. Authenticated Clerk/admin/editor/approval-preview checks still require an interactive staging admin/customer session.
-- Production status: not created. Do not create or route production until the remaining authenticated staging smoke tests pass.
+- Migration status: the `migrate` pre-deploy job applied all committed Prisma migrations successfully; redeploy `9d5878fa-20e7-4f60-a33d-d876f456cdd4` completed `ACTIVE` with no pending migrations.
+- Smoke-test status: authenticated staging smoke mostly passes. Custom domains, API health, public/admin SPA routes, CORS, service-area check, draft quote creation, customer Clerk claim/finalize/dashboard, admin Clerk health/list/editor/version submit, verified quote page, CSV export, audit logging, and persistence after redeploy passed for quote `Q-D6S4ZMR2`. Production remains blocked because the documented approval email resend endpoint and public approved-quote preview image endpoint are not present in the deployed API.
+- Production status: not created. Do not create or route production until the approval-email/preview API gap is resolved or explicitly removed from launch scope, production Clerk/Mapbox/Resend values are confirmed, and Martin confirms launch.
 
 Staging custom domains use self-managed DNS at GoDaddy:
 
@@ -24,7 +24,7 @@ Staging custom domains use self-managed DNS at GoDaddy:
 | `api-staging.autoscape.ca` | `ACTIVE` | CNAME to `autoscape-staging-w9537.ondigitalocean.app` |
 | `admin-staging.autoscape.ca` | `ACTIVE` | CNAME to `autoscape-staging-w9537.ondigitalocean.app` |
 
-Current public DNS for `autoscape.ca` remains delegated to `ns63.domaincontrol.com` and `ns64.domaincontrol.com`. Keep the existing Google Workspace, SPF, DKIM, DMARC, Resend, `www`, and `_domainconnect` records in place. Do not switch production traffic until the staging domains validate and the smoke test checklist passes.
+Current public DNS for `autoscape.ca` remains delegated to `ns63.domaincontrol.com` and `ns64.domaincontrol.com`. Keep the existing Google Workspace, SPF, DKIM, DMARC, Resend, `www`, and `_domainconnect` records in place. Do not switch production traffic until the staging blocker above is resolved and production launch is confirmed.
 
 Passed staging checks:
 
@@ -34,15 +34,18 @@ Passed staging checks:
 - public/admin CORS preflight from configured staging origins
 - service-area check for the Vaughan staging coordinate
 - draft quote creation with confirmation route load
+- Clerk customer sign-in with a real staging account
+- customer quote claim, contact finalization, dashboard list, and dashboard detail
+- admin sign-in with a real staging admin organization member
+- admin quote inbox, quote editor, version creation, version submit, audit log, and CSV export
+- verified quote confirmation page and admin editor page
+- quote persistence after App Platform redeploy `9d5878fa-20e7-4f60-a33d-d876f456cdd4`
 - bundle scan for accidental `localhost`/loopback API origins
 
-Remaining staging checks before production:
+Remaining staging blockers before production:
 
-- Clerk customer sign-in with a real staging account
-- admin sign-in with a real staging admin organization member
-- admin quote detail/editor workflow
-- approval email resend and approved quote preview URL
-- quote persistence after an API redeploy using an authenticated quote read or admin check
+- `GET /api/approved-quote-preview/:token` returned `404` for a smoke token, and no matching route exists in the deployed API.
+- Authenticated `POST /api/admin/quotes/:id/approval-email/resend` returned `404`; the deployed API currently records `quote.verification_email_deferred` instead of sending/resending email.
 
 Staging environment variable audit, names only:
 
@@ -209,7 +212,7 @@ Mapbox:
 Resend:
 
 - Use a staging-safe API key/sender until production launch.
-- Confirm approved quote preview images load from `https://api-staging.autoscape.ca/api/approved-quote-preview/:token`.
+- Before production launch, implement and smoke-test approved quote email delivery/resend plus `https://api-staging.autoscape.ca/api/approved-quote-preview/:token`, or explicitly remove that requirement from the launch checklist. The current deployed API records `quote.verification_email_deferred`.
 
 DNS:
 
@@ -239,8 +242,8 @@ Manual checks:
 - Clerk sign-in and required-phone gate work.
 - Dashboard quote list/detail loads for the owner.
 - Admin quote inbox/editor loads with Clerk bearer auth.
-- Admin approve/resend flow records approved quote email status.
-- Preview image URL is publicly reachable.
+- Admin version submit verifies the quote and records `quote.verification_email_deferred`.
+- Approval email resend and preview image URL are implemented and publicly reachable, or explicitly out of launch scope.
 - CSV/admin list endpoints work for allowed roles.
 - CORS allows only the configured public/admin origins.
 
