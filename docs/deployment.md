@@ -6,20 +6,23 @@ Autoscape deploys to DigitalOcean App Platform as two isolated apps: staging fir
 
 Staging is created and active in DigitalOcean:
 
-- App: `autoscape-staging`
+- App: `autoscape-staging` (`658f8cc6-fda5-4d71-a436-606b887bb76e`)
 - Region: App Platform `tor`; database `tor1`
 - Components: `public-web`, `admin-web`, `api`, `migrate`
 - Default ingress: `https://autoscape-staging-w9537.ondigitalocean.app`
 - Database cluster: `autoscape-staging-db`, PostgreSQL 16, size `db-s-1vcpu-1gb`
 - Database/user names: `autoscape_staging`
 - Migration status: the `migrate` pre-deploy job applied all committed Prisma migrations successfully.
+- Smoke-test status: partial. The default ingress loads the public static app, the API process is running, and Prisma migrations have applied.
 - Production status: not created. Do not create or route production until staging custom domains resolve and smoke tests pass.
 
-Staging custom domains are still blocked on DNS. DigitalOcean reports `DomainUnexpectedNameserver` for:
+Staging custom domains are still blocked on DNS:
 
-- `staging.autoscape.ca`
-- `api-staging.autoscape.ca`
-- `admin-staging.autoscape.ca`
+| Domain | DigitalOcean state | Blocker |
+| --- | --- | --- |
+| `staging.autoscape.ca` | `CONFIGURING` | `DomainUnexpectedNameserver` |
+| `api-staging.autoscape.ca` | `CONFIGURING` | `DomainUnexpectedNameserver` |
+| `admin-staging.autoscape.ca` | `CONFIGURING` | `DomainUnexpectedNameserver` |
 
 Current public DNS for `autoscape.ca` is delegated to `ns63.domaincontrol.com` and `ns64.domaincontrol.com`. DigitalOcean is waiting for the domain to be delegated to:
 
@@ -30,6 +33,32 @@ ns3.digitalocean.com
 ```
 
 Add those nameservers at the domain registrar, or keep DNS at the current provider and manually mirror the App Platform records DigitalOcean provides there. Do not switch production traffic until the staging domains validate and the smoke test checklist passes.
+
+Blocked smoke tests until DNS validates:
+
+- custom-domain API health at `https://api-staging.autoscape.ca/api/health`
+- quote creation and quote ID confirmation
+- Clerk sign-in and admin editor
+- approved quote preview URL
+- quote persistence after API redeploy
+
+Staging environment variable audit, names only:
+
+| Key | Status |
+| --- | --- |
+| `VITE_CLERK_PUBLISHABLE_KEY` | found |
+| `CLERK_SECRET_KEY` | found |
+| `CLERK_JWT_ISSUER` | found |
+| `CLERK_ADMIN_ORG_ID` | found |
+| `VITE_CLERK_ADMIN_ORG_ID` | found |
+| `VITE_MAPBOX_TOKEN` | found |
+| `MAPBOX_STATIC_ACCESS_TOKEN` | no dedicated value found; staging uses the allowed browser-token fallback until a separate static token is added |
+| `RESEND_API_KEY` | found |
+| `AUTOSCAPE_BASE_STATIONS_JSON` | found |
+| `SERVICE_AREA_REGIONS` | found |
+| `SYSTEM_LAUNCH_AT` | found |
+| `VITE_SYSTEM_LAUNCH_AT` | found |
+| `DATABASE_URL` | DigitalOcean managed database binding only |
 
 ## 1) Deployment Topology
 
