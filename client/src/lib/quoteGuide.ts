@@ -1,5 +1,25 @@
+export type QuoteGuideStepKind =
+  | 'draw-demo'
+  | 'multi-zone-edit-demo'
+  | 'obstacle-draw-demo';
+
+export type QuoteGuideInstructionKey =
+  | 'step-1-draw'
+  | 'step-1-edit'
+  | 'step-2-draw'
+  | 'step-2-add'
+  | 'step-2-remove'
+  | 'step-3-obstacle';
+
 export interface QuoteGuideStep {
   id: string;
+  kind: QuoteGuideStepKind;
+  ariaLabel: string;
+  defaultInstructionKey: QuoteGuideInstructionKey;
+}
+
+export interface QuoteGuideInstructionContent {
+  text: string;
 }
 
 export interface QuoteGuideSessionState {
@@ -8,9 +28,24 @@ export interface QuoteGuideSessionState {
 }
 
 export const QUOTE_GUIDE_STEPS: QuoteGuideStep[] = [
-  { id: 'quote-guide-step-1' },
-  { id: 'quote-guide-step-2' },
-  { id: 'quote-guide-step-3' }
+  {
+    id: 'quote-guide-step-1',
+    kind: 'draw-demo',
+    ariaLabel: 'Guide step 1: Draw lawn demo',
+    defaultInstructionKey: 'step-1-draw'
+  },
+  {
+    id: 'quote-guide-step-2',
+    kind: 'multi-zone-edit-demo',
+    ariaLabel: 'Guide step 2: Multi-zone lawn demo',
+    defaultInstructionKey: 'step-2-draw'
+  },
+  {
+    id: 'quote-guide-step-3',
+    kind: 'obstacle-draw-demo',
+    ariaLabel: 'Guide step 3: Draw obstacle demo',
+    defaultInstructionKey: 'step-3-obstacle'
+  }
 ];
 
 export const createQuoteGuideSessionState = (): QuoteGuideSessionState => ({
@@ -65,4 +100,32 @@ export const getQuoteGuideSliderOffsetPercent = (
   }
 
   return (getBoundedQuoteGuideStepIndex(stepIndex, stepCount) / (stepCount - 1)) * 100;
+};
+
+export const getQuoteGuideStep = (stepIndex: number) =>
+  QUOTE_GUIDE_STEPS[getBoundedQuoteGuideStepIndex(stepIndex)];
+
+export const getQuoteGuideInstructionContent = (
+  stepIndex: number,
+  instructionKey?: QuoteGuideInstructionKey
+): QuoteGuideInstructionContent | null => {
+  const step = getQuoteGuideStep(stepIndex);
+  const effectiveInstructionKey = instructionKey ?? step.defaultInstructionKey;
+
+  switch (effectiveInstructionKey) {
+    case 'step-1-draw':
+      return { text: 'Draw loosely around your lawn.' };
+    case 'step-1-edit':
+      return { text: 'Move the points to match your lawn.' };
+    case 'step-2-draw':
+      return { text: 'Draw each separate lawn area on its own.' };
+    case 'step-2-add':
+      return { text: 'Add extra points' };
+    case 'step-2-remove':
+      return { text: 'Delete extra points' };
+    case 'step-3-obstacle':
+      return { text: 'Use Draw obstacle for gardens, pools, and other no-mow areas.' };
+    default:
+      return null;
+  }
 };

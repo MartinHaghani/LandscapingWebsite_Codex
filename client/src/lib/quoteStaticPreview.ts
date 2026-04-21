@@ -3,7 +3,10 @@ import type { EditablePolygon, LngLat } from '../types';
 import { buildPolygonFeature } from './geometry';
 import { getLngLatBounds, mergeLngLatBounds, padLngLatBounds, type LngLatBounds } from './mapBounds';
 
-const toPreviewFeature = (polygon: EditablePolygon): Feature<Polygon> | null => {
+const toPreviewFeature = (
+  polygon: EditablePolygon,
+  selectedPolygonId: string | null
+): Feature<Polygon> | null => {
   const feature = buildPolygonFeature(polygon.ringPoints);
   if (!feature) {
     return null;
@@ -13,17 +16,19 @@ const toPreviewFeature = (polygon: EditablePolygon): Feature<Polygon> | null => 
     ...feature,
     properties: {
       polygonId: polygon.id,
-      polygonKind: polygon.kind
+      polygonKind: polygon.kind,
+      selected: polygon.id === selectedPolygonId
     }
   };
 };
 
 export const buildQuotePreviewFeatureCollection = (
-  polygons: EditablePolygon[]
+  polygons: EditablePolygon[],
+  selectedPolygonId: string | null = null
 ): FeatureCollection<Polygon> => ({
   type: 'FeatureCollection',
   features: polygons
-    .map((polygon) => toPreviewFeature(polygon))
+    .map((polygon) => toPreviewFeature(polygon, selectedPolygonId))
     .filter((feature): feature is Feature<Polygon> => feature !== null)
 });
 

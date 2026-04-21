@@ -1,0 +1,167 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 220 120" width="220" height="120" fill="none">
+  <defs>
+    <linearGradient id="guide-house-base" x1="14" y1="8" x2="206" y2="112" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#F3F8EF" />
+      <stop offset="1" stop-color="#E1EBDE" />
+    </linearGradient>
+    <linearGradient id="guide-house-lawn" x1="18" y1="10" x2="180" y2="112" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#4ACF72" />
+      <stop offset="1" stop-color="#23944F" />
+    </linearGradient>
+    <linearGradient id="guide-house-driveway-surface" x1="10" y1="16" x2="90" y2="82" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#DCD8D1" />
+      <stop offset="1" stop-color="#B8B1A7" />
+    </linearGradient>
+    <linearGradient id="guide-house-roof-main" x1="70" y1="22" x2="156" y2="102" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#69737E" />
+      <stop offset="1" stop-color="#3E4751" />
+    </linearGradient>
+    <linearGradient id="guide-house-roof-accent" x1="68" y1="22" x2="154" y2="102" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#88939E" />
+      <stop offset="1" stop-color="#59636F" />
+    </linearGradient>
+    <linearGradient id="guide-house-shed-roof" x1="202" y1="92" x2="215" y2="115" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#7D8893" />
+      <stop offset="1" stop-color="#505A65" />
+    </linearGradient>
+    <linearGradient id="guide-house-garden-bed" x1="165" y1="103" x2="195" y2="114.5" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#A45A34" />
+      <stop offset="1" stop-color="#7E351B" />
+    </linearGradient>
+    <linearGradient id="guide-house-deck" x1="157" y1="22" x2="186" y2="92" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#DEAA67" />
+      <stop offset="1" stop-color="#C27639" />
+    </linearGradient>
+    <linearGradient id="guide-house-driveway-base" x1="6" y1="14" x2="113" y2="74" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#E8E1D8" />
+      <stop offset="1" stop-color="#CCC1B3" />
+    </linearGradient>
+    <linearGradient id="guide-house-tree" x1="30" y1="77" x2="48" y2="95" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#65B15F" />
+      <stop offset="1" stop-color="#275A31" />
+    </linearGradient>
+    <pattern id="guide-house-driveway-pavers" width="12" height="8" patternUnits="userSpaceOnUse">
+      <rect width="12" height="8" fill="url(#guide-house-driveway-base)" />
+      <rect x="0.45" y="0.45" width="3.1" height="2.35" rx="0.35" fill="#E3DCD2" />
+      <rect x="4.2" y="0.45" width="3.1" height="2.35" rx="0.35" fill="#D5CDBF" />
+      <rect x="7.95" y="0.45" width="3.1" height="2.35" rx="0.35" fill="#ECE5DB" />
+      <rect x="-1.45" y="4.1" width="3.1" height="2.35" rx="0.35" fill="#DDD5C9" />
+      <rect x="2.3" y="4.1" width="3.1" height="2.35" rx="0.35" fill="#CEC3B5" />
+      <rect x="6.05" y="4.1" width="3.1" height="2.35" rx="0.35" fill="#E6DED4" />
+      <rect x="9.8" y="4.1" width="3.1" height="2.35" rx="0.35" fill="#D8CEBF" />
+    </pattern>
+    <pattern id="guide-house-deck-boards" width="5" height="5" patternUnits="userSpaceOnUse">
+      <rect width="5" height="5" fill="transparent" />
+      <path d="M0 0V5" stroke="#9F7752" stroke-width="0.45" opacity="0.55" />
+    </pattern>
+    <filter id="guide-house-shadow" x="-18%" y="-18%" width="136%" height="136%" color-interpolation-filters="sRGB">
+      <feDropShadow dx="0" dy="2.3" stdDeviation="2.2" flood-color="#101713" flood-opacity="0.11" />
+      <feDropShadow dx="0" dy="0.8" stdDeviation="0.95" flood-color="#101713" flood-opacity="0.07" />
+    </filter>
+  </defs>
+
+  <g id="site-base">
+    <rect x="4.5" y="4.5" width="211" height="111" rx="6" fill="url(#guide-house-base)" />
+    <rect x="4.5" y="4.5" width="211" height="111" rx="6" stroke="#D7E5D4" stroke-width="1" />
+  </g>
+
+  <g id="lawn-back" filter="url(#guide-house-shadow)">
+    <path d="M6 6H114V13H60L52 20H6Z" fill="url(#guide-house-lawn)" />
+    <path d="M6 6H114V13H60L52 20H6Z" stroke="rgba(255,255,255,0.74)" stroke-width="1.85" stroke-linecap="round" stroke-linejoin="round" />
+  </g>
+
+  <g id="lawn-front-left" filter="url(#guide-house-shadow)">
+    <path d="M6 58H37L45 74H67L74 74V103H114V114H6V95Z" fill="url(#guide-house-lawn)" />
+    <path d="M6 58H37L45 74H67L74 74V103H114V114H6V95Z" stroke="rgba(255,255,255,0.74)" stroke-width="1.85" stroke-linecap="round" stroke-linejoin="round" />
+  </g>
+
+  <g id="lawn-front-right" filter="url(#guide-house-shadow)">
+    <path d="M114 6H198L208 18V92H203V114H195V103H166V114H114V103H156V92H179L186 83V31L176 21H114Z" fill="url(#guide-house-lawn)" />
+    <path d="M114 6H198L208 18V92H203V114H195V103H166V114H114V103H156V92H179L186 83V31L176 21H114Z" stroke="rgba(255,255,255,0.74)" stroke-width="1.85" stroke-linecap="round" stroke-linejoin="round" />
+  </g>
+
+  <g id="driveway">
+    <path d="M6 20H52L60 14H113V22H67V74H45L37 58H6Z" fill="url(#guide-house-driveway-pavers)" />
+    <path d="M6 20H52L60 14H113V22H67V74H45L37 58H6Z" fill="url(#guide-house-driveway-surface)" opacity="0.3" />
+    <path d="M6 20H52L60 14H113V22H67V74H45L37 58H6Z" stroke="#FBF7F2" stroke-width="0.95" stroke-linejoin="round" />
+  </g>
+
+  <g id="house" filter="url(#guide-house-shadow)">
+    <path d="M67 22H156V102H74V74H68Z" fill="url(#guide-house-roof-main)" />
+    <path d="M67 22H156L112 61H68Z" fill="url(#guide-house-roof-accent)" />
+    <path d="M68 74L112 61L74 102H68Z" fill="#545B63" />
+    <path d="M74 102L112 61L156 102H74Z" fill="#3F464E" />
+    <path d="M67 22H156V102H74V74H68Z" stroke="rgba(255,255,255,0.16)" stroke-width="0.95" stroke-linejoin="round" />
+    <path d="M112 61V102M67 22L112 61L156 22" stroke="rgba(255,255,255,0.18)" stroke-width="0.8" stroke-linecap="round" stroke-linejoin="round" />
+  </g>
+
+  <g id="garden" filter="url(#guide-house-shadow)">
+    <rect x="165" y="103" width="30" height="11.5" rx="1.8" fill="url(#guide-house-garden-bed)" />
+    <rect x="165" y="103" width="30" height="11.5" rx="1.8" stroke="#F1DDCA" stroke-width="0.92" />
+    <circle cx="170.5" cy="108.4" r="2.1" fill="#E45954" />
+    <circle cx="176" cy="110.1" r="2.2" fill="#FFBE35" />
+    <circle cx="183.8" cy="108.8" r="2.2" fill="#33A56B" />
+    <circle cx="190.2" cy="108.1" r="2.15" fill="#8A68F7" />
+  </g>
+
+  <g id="deck" filter="url(#guide-house-shadow)">
+    <path d="M157 21H176L186 31V83L179 92H157Z" fill="url(#guide-house-deck)" />
+    <path d="M157 21H176L186 31V83L179 92H157Z" fill="url(#guide-house-deck-boards)" opacity="0.92" />
+    <path d="M157 21H176L186 31V83L179 92H157Z" stroke="#F5E4D0" stroke-width="0.94" stroke-linejoin="round" />
+    <path d="M164 25V88M172 24V90M180 27V85" stroke="#A66133" stroke-width="0.48" opacity="0.54" />
+    <path d="M157 25H176M157 88H179M160 21V92" stroke="#F7EBDD" stroke-width="0.7" opacity="0.82" stroke-linecap="round" />
+  </g>
+
+  <g id="shed" filter="url(#guide-house-shadow)">
+    <rect x="201.7" y="91.7" width="13.6" height="23.4" rx="1.5" fill="#C1BCB0" opacity="0.24" />
+    <path d="M202.4 92.4H208.6V114.4H202.4Z" fill="#6F7780" />
+    <path d="M208.6 92.4H214.6V114.4H208.6Z" fill="#535A63" />
+    <path d="M202.4 92.4H214.6V114.4H202.4Z" stroke="rgba(255,255,255,0.18)" stroke-width="0.8" />
+    <path d="M208.6 92.4V114.4" stroke="rgba(255,255,255,0.3)" stroke-width="0.82" />
+    <path d="M202.4 92.4L208.6 96.1L214.6 92.4" stroke="rgba(255,255,255,0.22)" stroke-width="0.82" stroke-linecap="round" stroke-linejoin="round" />
+    <path d="M202.4 114.4L208.6 110.8L214.6 114.4" stroke="rgba(17,22,26,0.15)" stroke-width="0.78" stroke-linecap="round" stroke-linejoin="round" />
+  </g>
+
+  <g id="backyard-trees">
+    <path d="M198 5L209 18.5V92H216V5Z" fill="#8B6941" opacity="0.9" />
+    <path d="M198 5L209 18.5V92H216V5Z" fill="#A47E55" opacity="0.24" />
+    <g transform="translate(0 4)">
+      <circle cx="208.4" cy="12.7" r="4.7" fill="#82BB64" />
+      <circle cx="212.3" cy="10.8" r="3.7" fill="#56904A" />
+      <circle cx="213" cy="15.2" r="4.2" fill="#2E6A37" />
+      <circle cx="210.7" cy="13.9" r="2.7" fill="#458346" />
+      <circle cx="210.9" cy="13.3" r="1.16" fill="#6C4D31" opacity="0.75" />
+    </g>
+    <g transform="translate(0 23)">
+      <circle cx="211" cy="17.2" r="3.6" fill="#6DA553" />
+      <circle cx="207.2" cy="20.1" r="4.3" fill="#8DCC6B" />
+      <circle cx="212.7" cy="21.9" r="4.8" fill="#2D6232" />
+      <circle cx="209.8" cy="23.4" r="3" fill="#4B8746" />
+      <circle cx="210.6" cy="21.1" r="1.22" fill="#6C4D31" opacity="0.75" />
+    </g>
+    <g transform="translate(0 47)">
+      <circle cx="208.9" cy="17.7" r="4" fill="#75B160" />
+      <circle cx="213.3" cy="16.4" r="3.5" fill="#4C8744" />
+      <circle cx="210.7" cy="20.8" r="4.9" fill="#275833" />
+      <circle cx="214.1" cy="21.2" r="2.6" fill="#65A057" />
+      <circle cx="211.2" cy="19.2" r="1.14" fill="#6C4D31" opacity="0.75" />
+    </g>
+    <g transform="translate(0 68)">
+      <circle cx="209.6" cy="18.1" r="4.1" fill="#7CBD65" />
+      <circle cx="213.5" cy="16.1" r="4.5" fill="#43823F" />
+      <circle cx="211.4" cy="20.7" r="3.8" fill="#2B6030" />
+      <circle cx="215" cy="20.1" r="2.9" fill="#57934D" />
+      <circle cx="211.8" cy="18.7" r="1.16" fill="#6C4D31" opacity="0.75" />
+    </g>
+  </g>
+
+  <g id="front-tree" filter="url(#guide-house-shadow)">
+    <circle cx="39.3" cy="86" r="9.7" fill="#D9C29B" />
+    <circle cx="39.3" cy="86" r="8.35" fill="none" stroke="#FBF3E6" stroke-width="1.05" opacity="0.84" />
+    <circle cx="39.3" cy="86" r="7.9" fill="url(#guide-house-tree)" />
+    <circle cx="35.2" cy="82.9" r="4.1" fill="#4F8C48" />
+    <circle cx="42.9" cy="82.4" r="4.5" fill="#3A7039" />
+    <circle cx="36.1" cy="88.7" r="4.6" fill="#469447" />
+    <circle cx="43.8" cy="89.4" r="4.1" fill="#2D5D33" />
+  </g>
+</svg>

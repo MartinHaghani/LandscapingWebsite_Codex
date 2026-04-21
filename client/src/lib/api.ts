@@ -50,10 +50,18 @@ const request = async <T>(path: string, init?: RequestOptions): Promise<T> => {
     headers.set('Authorization', `Bearer ${init.authToken}`);
   }
 
-  const response = await fetch(`${API_BASE_URL}${path}`, {
-    headers,
-    ...init
-  });
+  let response: Response;
+  try {
+    response = await fetch(`${API_BASE_URL}${path}`, {
+      headers,
+      ...init
+    });
+  } catch {
+    throw new ApiError(
+      `Unable to reach the API at ${API_BASE_URL}. Check that the backend is running and this frontend origin is allowed.`,
+      0
+    );
+  }
 
   const json = (await response.json().catch(() => ({}))) as { error?: string } & T;
 

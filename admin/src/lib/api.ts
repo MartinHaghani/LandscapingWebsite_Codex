@@ -61,7 +61,7 @@ export interface AdminQuoteItem {
   createdAt: string;
   submittedAt: string | null;
   addressText: string;
-  serviceFrequency: 'weekly' | 'biweekly';
+  serviceFrequency: 'weekly';
   sessionsMin: number;
   sessionsMax: number;
   perSessionTotal: number;
@@ -100,7 +100,7 @@ export interface AdminQuoteVersionItem {
   changeType: string;
   changedBy: string;
   changedAt: string;
-  serviceFrequency: 'weekly' | 'biweekly';
+  serviceFrequency: 'weekly';
   sessionsMin: number;
   sessionsMax: number;
   perSessionTotal: number;
@@ -131,7 +131,7 @@ export interface AdminQuoteEditorResponse {
     phone: string | null;
   };
   editable: {
-    serviceFrequency: 'weekly' | 'biweekly';
+    serviceFrequency: 'weekly';
     perSessionTotal: number;
     finalTotal: number;
     overrideReason: string | null;
@@ -151,6 +151,18 @@ export interface AdminQuoteEditorResponse {
   polygonSource: AdminPolygonSource;
   polygonSourceFallback: boolean;
   versions: AdminQuoteVersionItem[];
+  approvedQuoteEmail: {
+    status: 'sent' | 'failed';
+    triggerSource: 'approval' | 'manual_resend';
+    recipientEmail: string | null;
+    provider: string;
+    providerMessageId: string | null;
+    errorMessage: string | null;
+    approvedVersionNumber: number;
+    createdAt: string;
+    paymentPageUrl: string | null;
+    previewImageUrl: string | null;
+  } | null;
 }
 
 export interface AdminRequestItem {
@@ -240,7 +252,6 @@ export interface QuoteListParams {
   limit?: number;
   q?: string;
   status?: string;
-  serviceFrequency?: 'weekly' | 'biweekly';
   contactPending?: boolean;
   createdFrom?: string;
   createdTo?: string;
@@ -324,7 +335,6 @@ export const adminApi = {
     appendParam(query, 'limit', params.limit);
     appendParam(query, 'q', params.q);
     appendParam(query, 'status', params.status);
-    appendParam(query, 'serviceFrequency', params.serviceFrequency);
     appendParam(query, 'contactPending', params.contactPending);
     appendParam(query, 'createdFrom', params.createdFrom);
     appendParam(query, 'createdTo', params.createdTo);
@@ -436,7 +446,7 @@ export const adminApi = {
     quoteId: string,
     payload: {
       polygonSource: AdminPolygonSource;
-      serviceFrequency: 'weekly' | 'biweekly';
+      serviceFrequency: 'weekly';
       perSessionTotal: number;
       finalTotal: number;
       overrideReason?: string;
@@ -447,7 +457,7 @@ export const adminApi = {
       status: string;
       customerStatus: string;
       version: number;
-      serviceFrequency: 'weekly' | 'biweekly';
+      serviceFrequency: 'weekly';
       perSessionTotal: number;
       finalTotal: number;
       sessionsMin: number;
@@ -471,7 +481,24 @@ export const adminApi = {
       verifiedAt: string | null;
       verifiedBy: string | null;
       selectedVersion: number;
+      approvedQuoteEmail?: {
+        deliveryStatus?: 'sent' | 'failed';
+        errorMessage?: string | null;
+      };
     }>(`/api/admin/quotes/${encodeURIComponent(quoteId)}/versions/${versionNumber}/submit`, getToken, {
+      method: 'POST'
+    });
+  },
+
+  resendApprovedQuoteEmail(getToken: AuthTokenProvider, quoteId: string) {
+    return request<{
+      ok: boolean;
+      quoteId: string;
+      approvedQuoteEmail: {
+        deliveryStatus?: 'sent' | 'failed';
+        errorMessage?: string | null;
+      };
+    }>(`/api/admin/quotes/${encodeURIComponent(quoteId)}/approval-email/resend`, getToken, {
       method: 'POST'
     });
   },

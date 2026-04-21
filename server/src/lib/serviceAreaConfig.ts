@@ -12,7 +12,7 @@ const baseStationSchema = z.object({
 
 const baseStationListSchema = z.array(baseStationSchema).max(200);
 
-const demoStations = [
+const defaultStations = [
   {
     label: 'internal-l6a1m7-station',
     address: 'L6A1M7',
@@ -52,7 +52,7 @@ export const loadBaseStationsFromEnv = (env: NodeJS.ProcessEnv = process.env): B
   const raw = readStationConfigRaw(env).trim();
 
   if (!raw) {
-    return env.NODE_ENV === 'production' ? [] : [...demoStations];
+    return [...defaultStations];
   }
 
   const stations = parseStationPayload(raw);

@@ -107,7 +107,7 @@ export const CompleteProfilePage = () => {
           <p className="text-xs uppercase tracking-[0.15em] text-brand">Complete Profile</p>
           <h1 className="mt-3 text-3xl font-semibold text-ink md:text-4xl">Add your phone number to continue</h1>
           <p className="mt-3 text-sm text-copy-muted">
-            We require a phone number on every account before dashboard access and quote finalization.
+            We require a phone number on every account before dashboard access and quote review.
           </p>
         </div>
 

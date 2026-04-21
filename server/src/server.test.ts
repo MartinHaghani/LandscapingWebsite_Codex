@@ -4,6 +4,7 @@ import type { AddressInfo } from 'node:net';
 import type http from 'node:http';
 import { createServer } from './server.js';
 import type { AdminIdentity, CustomerIdentity } from './lib/adminAuth.js';
+import type { ApprovedQuoteEmailSender } from './lib/approvedQuoteEmail.js';
 import type { BaseStationConfig } from './lib/serviceAreaConfig.js';
 
 const stations: BaseStationConfig[] = [
@@ -71,6 +72,15 @@ const adminIdentityFromToken = (token: string): AdminIdentity | null => {
 const startServer = async (options?: {
   customerIdentityFromToken?: (token: string) => CustomerIdentity | null;
   recordAddress?: (input: { userId: string; addressText: string }) => Promise<void>;
+  approvedQuoteEmailSender?: ApprovedQuoteEmailSender;
+  publicUrls?: {
+    appBaseUrl?: string;
+    apiBaseUrl?: string;
+  };
+  approvedQuotePreview?: {
+    mapboxAccessToken?: string;
+    fetchImpl?: typeof fetch;
+  };
 }) => {
   const customerIdentityResolver = options?.customerIdentityFromToken ?? customerIdentityFromToken;
   const recordAddress = options?.recordAddress ?? (async () => {});
@@ -107,7 +117,12 @@ const startServer = async (options?: {
     },
     customerProfile: {
       recordAddress
-    }
+    },
+    publicUrls: options?.publicUrls,
+    approvedQuoteEmail: {
+      sender: options?.approvedQuoteEmailSender
+    },
+    approvedQuotePreview: options?.approvedQuotePreview
   });
 
   await new Promise<void>((resolve) => {
@@ -159,6 +174,97 @@ const createPolygonSource = (
     }
   ]
 });
+
+const createMapboxImageFetch = (urls: string[]) =>
+  (async (input: Parameters<typeof fetch>[0]) => {
+    urls.push(typeof input === 'string' ? input : input.toString());
+    return new Response(Buffer.from([0xff, 0xd8, 0xff, 0xd9]), {
+      status: 200,
+      headers: {
+        'content-type': 'image/jpeg'
+      }
+    });
+  }) as typeof fetch;
+
+const extractAttribute = (markup: string, attribute: 'src' | 'href', pattern: RegExp) => {
+  const match = markup.match(new RegExp(`${attribute}="([^"]*${pattern.source}[^"]*)"`, pattern.flags));
+  return match?.[1] ?? null;
+};
+
+const createReviewQuoteVersion = async (
+  baseUrl: string,
+  idPrefix: string,
+  adminRing: Array<[number, number]> = [
+    [-79.5204, 43.8437],
+    [-79.519, 43.8437],
+    [-79.519, 43.8445],
+    [-79.5204, 43.8445]
+  ]
+) => {
+  const reviewRing: Array<[number, number]> = [
+    [-79.5203, 43.8437],
+    [-79.5192, 43.8437],
+    [-79.5192, 43.8446],
+    [-79.5203, 43.8446]
+  ];
+
+  const draftResponse = await fetch(`${baseUrl}/api/quote/draft`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Idempotency-Key': `${idPrefix}-draft`
+    },
+    body: JSON.stringify({
+      address: '88 Review Crescent, Vaughan, ON',
+      location: {
+        lat: 43.844147,
+        lng: -79.51962
+      },
+      polygon: createPolygonGeometry(reviewRing),
+      polygonSource: createPolygonSource('service-1', reviewRing),
+      plan: 'Precision Weekly Plan',
+      quoteTotal: 210.25,
+      serviceFrequency: 'weekly',
+      baseTotal: 49,
+      pricingVersion: 'v1',
+      currency: 'CAD'
+    })
+  });
+  assert.equal(draftResponse.status, 201);
+  const draftBody = (await draftResponse.json()) as { quoteId: string };
+
+  const finalizeResponse = await fetch(`${baseUrl}/api/quote/${draftBody.quoteId}/contact`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Idempotency-Key': `${idPrefix}-contact`,
+      Authorization: 'Bearer customer-reviewer'
+    },
+    body: JSON.stringify({})
+  });
+  assert.equal(finalizeResponse.status, 200);
+
+  const versionResponse = await fetch(`${baseUrl}/api/admin/quotes/${draftBody.quoteId}/versions`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: 'Bearer admin-admin'
+    },
+    body: JSON.stringify({
+      polygonSource: createPolygonSource('service-1', adminRing),
+      serviceFrequency: 'weekly',
+      perSessionTotal: 199.99,
+      finalTotal: 225
+    })
+  });
+  assert.equal(versionResponse.status, 200);
+  const versionBody = (await versionResponse.json()) as { version: number };
+
+  return {
+    quoteId: draftBody.quoteId,
+    version: versionBody.version
+  };
+};
 
 afterEach(async () => {
   const pending = startedServers.splice(0, startedServers.length);
@@ -253,6 +359,28 @@ describe('/api/service-area', () => {
   });
 });
 
+describe('CORS policy', () => {
+  it('reflects loopback frontend origins on arbitrary local dev ports', async () => {
+    const { baseUrl } = await startServer();
+
+    const loopbackResponse = await fetch(`${baseUrl}/api/health`, {
+      headers: {
+        Origin: 'http://127.0.0.1:5182'
+      }
+    });
+    assert.equal(loopbackResponse.status, 200);
+    assert.equal(loopbackResponse.headers.get('access-control-allow-origin'), 'http://127.0.0.1:5182');
+
+    const localhostResponse = await fetch(`${baseUrl}/api/health`, {
+      headers: {
+        Origin: 'http://localhost:5199'
+      }
+    });
+    assert.equal(localhostResponse.status, 200);
+    assert.equal(localhostResponse.headers.get('access-control-allow-origin'), 'http://localhost:5199');
+  });
+});
+
 describe('quote draft + contact finalize flow', () => {
   it('creates draft quote with idempotent replay and finalizes contact', async () => {
     const { baseUrl } = await startServer();
@@ -273,7 +401,7 @@ describe('quote draft + contact finalize flow', () => {
       polygonSource: createPolygonSource('service-1', draftRing),
       plan: 'Premium Weekly',
       quoteTotal: 245.55,
-      serviceFrequency: 'biweekly',
+      serviceFrequency: 'weekly',
       baseTotal: 120,
       pricingVersion: 'v1',
       currency: 'CAD'
@@ -293,12 +421,14 @@ describe('quote draft + contact finalize flow', () => {
       quoteId: string;
       status: string;
       contactPending: boolean;
+      nextStepUrl?: string;
       replayed: boolean;
     };
     assert.equal(firstDraftBody.status, 'draft');
     assert.equal(firstDraftBody.contactPending, true);
     assert.equal(firstDraftBody.replayed, false);
     assert.ok(firstDraftBody.quoteId.length > 4);
+    assert.equal(firstDraftBody.nextStepUrl, `/quote-confirmation/${firstDraftBody.quoteId}`);
 
     const replayDraft = await fetch(`${baseUrl}/api/quote/draft`, {
       method: 'POST',
@@ -310,9 +440,10 @@ describe('quote draft + contact finalize flow', () => {
     });
 
     assert.equal(replayDraft.status, 201);
-    const replayBody = (await replayDraft.json()) as { quoteId: string; replayed: boolean };
+    const replayBody = (await replayDraft.json()) as { quoteId: string; replayed: boolean; nextStepUrl?: string };
     assert.equal(replayBody.quoteId, firstDraftBody.quoteId);
     assert.equal(replayBody.replayed, true);
+    assert.equal(replayBody.nextStepUrl, `/quote-confirmation/${firstDraftBody.quoteId}`);
 
     const conflictDraft = await fetch(`${baseUrl}/api/quote/draft`, {
       method: 'POST',
@@ -385,12 +516,12 @@ describe('quote draft + contact finalize flow', () => {
     assert.equal(quote.id, firstDraftBody.quoteId);
     assert.equal(quote.status, 'in_review');
     assert.equal(quote.contactPending, false);
-    assert.equal(quote.serviceFrequency, 'biweekly');
+    assert.equal(quote.serviceFrequency, 'weekly');
     assert.equal(quote.billingMode, 'seasonal');
-    assert.equal(quote.sessionsMin, 14);
-    assert.equal(quote.sessionsMax, 14);
+    assert.equal(quote.sessionsMin, 20);
+    assert.equal(quote.sessionsMax, 20);
     assert.notEqual(quote.perSessionTotal, draftPayload.quoteTotal);
-    assert.equal(quote.seasonalTotalMin, Number((quote.perSessionTotal * 14).toFixed(2)));
+    assert.equal(quote.seasonalTotalMin, Number((quote.perSessionTotal * 20).toFixed(2)));
     assert.equal(quote.seasonalTotalMax, quote.seasonalTotalMin);
     assert.equal(quote.fullSeasonTotal, quote.seasonalTotalMax);
     assert.equal(quote.seasonalDiscountRate, 0.2);
@@ -844,7 +975,7 @@ describe('admin quote editor workflow', () => {
           [-79.5191, 43.8447],
           [-79.5204, 43.8447]
         ]),
-        serviceFrequency: 'biweekly',
+        serviceFrequency: 'weekly',
         perSessionTotal: 199.99,
         finalTotal: 225
       })
@@ -901,6 +1032,384 @@ describe('admin quote editor workflow', () => {
     assert.equal(finalEditorBody.status, 'verified');
     assert.equal(finalEditorBody.customerStatus, 'awaiting_payment');
     assert.equal(finalEditorBody.versions.some((item) => item.actorType === 'admin'), true);
+  });
+
+  it('sends an approved quote email, exposes preview/payment metadata, and supports resend', async () => {
+    const sentEmails: Array<{ to: string; subject: string; html: string; text: string }> = [];
+    const mapboxUrls: string[] = [];
+    const { baseUrl } = await startServer({
+      approvedQuoteEmailSender: {
+        async send(message) {
+          sentEmails.push(message);
+          return {
+            provider: 'resend',
+            messageId: `msg-${sentEmails.length}`
+          };
+        }
+      },
+      publicUrls: {
+        appBaseUrl: 'https://client.autoscape.test',
+        apiBaseUrl: 'https://api.autoscape.test'
+      },
+      approvedQuotePreview: {
+        mapboxAccessToken: 'test-mapbox-token',
+        fetchImpl: createMapboxImageFetch(mapboxUrls)
+      }
+    });
+
+    const reviewRing: Array<[number, number]> = [
+      [-79.5203, 43.8437],
+      [-79.5192, 43.8437],
+      [-79.5192, 43.8446],
+      [-79.5203, 43.8446]
+    ];
+
+    const draftResponse = await fetch(`${baseUrl}/api/quote/draft`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Idempotency-Key': 'approved-email-draft-1'
+      },
+      body: JSON.stringify({
+        address: '88 Review Crescent, Vaughan, ON',
+        location: {
+          lat: 43.844147,
+          lng: -79.51962
+        },
+        polygon: createPolygonGeometry(reviewRing),
+        polygonSource: createPolygonSource('service-1', reviewRing),
+        plan: 'Precision Weekly Plan',
+        quoteTotal: 210.25,
+        serviceFrequency: 'weekly',
+        baseTotal: 49,
+        pricingVersion: 'v1',
+        currency: 'CAD'
+      })
+    });
+    assert.equal(draftResponse.status, 201);
+    const draftBody = (await draftResponse.json()) as { quoteId: string };
+
+    const finalizeResponse = await fetch(`${baseUrl}/api/quote/${draftBody.quoteId}/contact`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Idempotency-Key': 'approved-email-contact-1',
+        Authorization: 'Bearer customer-reviewer'
+      },
+      body: JSON.stringify({})
+    });
+    assert.equal(finalizeResponse.status, 200);
+
+    const versionResponse = await fetch(`${baseUrl}/api/admin/quotes/${draftBody.quoteId}/versions`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: 'Bearer admin-admin'
+      },
+      body: JSON.stringify({
+        polygonSource: createPolygonSource('service-1', [
+          [-79.5204, 43.8437],
+          [-79.519, 43.8437],
+          [-79.519, 43.8445],
+          [-79.5204, 43.8445]
+        ]),
+        serviceFrequency: 'weekly',
+        perSessionTotal: 199.99,
+        finalTotal: 225
+      })
+    });
+    assert.equal(versionResponse.status, 200);
+    const versionBody = (await versionResponse.json()) as { version: number };
+
+    const submitResponse = await fetch(
+      `${baseUrl}/api/admin/quotes/${draftBody.quoteId}/versions/${versionBody.version}/submit`,
+      {
+        method: 'POST',
+        headers: {
+          Authorization: 'Bearer admin-reviewer'
+        }
+      }
+    );
+    assert.equal(submitResponse.status, 200);
+    const submitBody = (await submitResponse.json()) as {
+      status: string;
+      customerStatus: string;
+      approvedQuoteEmail?: { sent?: boolean };
+    };
+    assert.equal(submitBody.status, 'verified');
+    assert.equal(submitBody.customerStatus, 'awaiting_payment');
+    assert.equal(sentEmails.length, 1);
+    assert.equal(sentEmails[0]?.to, 'customer-reviewer@example.com');
+    assert.equal(sentEmails[0]?.subject, 'Quote Approved, Payment Required');
+    assert.match(sentEmails[0]?.html ?? '', /Approved service area/);
+    assert.match(sentEmails[0]?.html ?? '', /Added by admin review/);
+    assert.match(sentEmails[0]?.html ?? '', /Removed by admin review/);
+    assert.match(sentEmails[0]?.html ?? '', /PAYMENT BUTTON - CONTINUE TO PAYMENT/);
+    assert.match(sentEmails[0]?.html ?? '', /PAYMENT BUTTON - OPEN PAYMENT PAGE/);
+    assert.match(sentEmails[0]?.text ?? '', /Payment is required to continue/);
+    assert.match(sentEmails[0]?.html ?? '', /payment page/i);
+    assert.doesNotMatch(sentEmails[0]?.html ?? '', /test-mapbox-token/);
+
+    const previewUrl = sentEmails[0]?.html.match(/src="([^"]*\/api\/approved-quote-preview\/[^"]+)"/)?.[1] ?? null;
+    assert.ok(previewUrl);
+    assert.doesNotMatch(previewUrl, /test-mapbox-token/);
+    const previewResponse = await fetch(`${baseUrl}${new URL(previewUrl).pathname}`);
+    assert.equal(previewResponse.status, 200);
+    assert.match(previewResponse.headers.get('content-type') ?? '', /image\/jpeg/);
+    const previewImage = Buffer.from(await previewResponse.arrayBuffer());
+    assert.deepEqual([...previewImage], [0xff, 0xd8, 0xff, 0xd9]);
+    assert.equal(mapboxUrls.length, 1);
+    assert.match(mapboxUrls[0] ?? '', /mapbox\/satellite-v9/);
+    assert.match(mapboxUrls[0] ?? '', /%23BFEBCF/i);
+    assert.match(mapboxUrls[0] ?? '', /%23DC2626/i);
+    assert.match(mapboxUrls[0] ?? '', /access_token=test-mapbox-token/);
+
+    const customerQuoteResponse = await fetch(`${baseUrl}/api/quote/${draftBody.quoteId}`, {
+      headers: {
+        Authorization: 'Bearer customer-reviewer'
+      }
+    });
+    assert.equal(customerQuoteResponse.status, 200);
+    const customerQuoteBody = (await customerQuoteResponse.json()) as {
+      customerStatus: string;
+      verifiedAt: string | null;
+      paymentPageUrl: string | null;
+      approvedQuotePreviewImageUrl: string | null;
+    };
+    assert.equal(customerQuoteBody.customerStatus, 'awaiting_payment');
+    assert.equal(typeof customerQuoteBody.verifiedAt, 'string');
+    assert.equal(
+      customerQuoteBody.paymentPageUrl,
+      `https://client.autoscape.test/dashboard/quotes/${draftBody.quoteId}/payment`
+    );
+    assert.match(
+      customerQuoteBody.approvedQuotePreviewImageUrl ?? '',
+      /^https:\/\/api\.autoscape\.test\/api\/approved-quote-preview\//
+    );
+
+    const editorResponse = await fetch(`${baseUrl}/api/admin/quotes/${draftBody.quoteId}/editor`, {
+      headers: {
+        Authorization: 'Bearer admin-admin'
+      }
+    });
+    assert.equal(editorResponse.status, 200);
+    const editorBody = (await editorResponse.json()) as {
+      approvedQuoteEmail: {
+        status: string;
+        triggerSource: string;
+        recipientEmail: string | null;
+        paymentPageUrl: string | null;
+        previewImageUrl: string | null;
+      } | null;
+    };
+    assert.equal(editorBody.approvedQuoteEmail?.status, 'sent');
+    assert.equal(editorBody.approvedQuoteEmail?.triggerSource, 'approval');
+    assert.equal(editorBody.approvedQuoteEmail?.recipientEmail, 'customer-reviewer@example.com');
+    assert.equal(
+      editorBody.approvedQuoteEmail?.paymentPageUrl,
+      `https://client.autoscape.test/dashboard/quotes/${draftBody.quoteId}/payment`
+    );
+    assert.match(editorBody.approvedQuoteEmail?.previewImageUrl ?? '', /^\/api\/approved-quote-preview\//);
+
+    const resendResponse = await fetch(
+      `${baseUrl}/api/admin/quotes/${draftBody.quoteId}/approval-email/resend`,
+      {
+        method: 'POST',
+        headers: {
+          Authorization: 'Bearer admin-admin'
+        }
+      }
+    );
+    assert.equal(resendResponse.status, 200);
+    assert.equal(sentEmails.length, 2);
+
+    const finalEditorResponse = await fetch(`${baseUrl}/api/admin/quotes/${draftBody.quoteId}/editor`, {
+      headers: {
+        Authorization: 'Bearer admin-admin'
+      }
+    });
+    assert.equal(finalEditorResponse.status, 200);
+    const finalEditorBody = (await finalEditorResponse.json()) as {
+      approvedQuoteEmail: {
+        status: string;
+        triggerSource: string;
+      } | null;
+    };
+    assert.equal(finalEditorBody.approvedQuoteEmail?.status, 'sent');
+    assert.equal(finalEditorBody.approvedQuoteEmail?.triggerSource, 'manual_resend');
+  });
+
+  it('keeps quote approval successful when approved quote email map configuration is missing', async () => {
+    const sentEmails: Array<{ to: string; subject: string; html: string; text: string }> = [];
+    const { baseUrl } = await startServer({
+      approvedQuoteEmailSender: {
+        async send(message) {
+          sentEmails.push(message);
+          return {
+            provider: 'resend',
+            messageId: 'msg-unexpected'
+          };
+        }
+      },
+      publicUrls: {
+        appBaseUrl: 'https://client.autoscape.test'
+      },
+      approvedQuotePreview: {
+        mapboxAccessToken: 'test-mapbox-token',
+        fetchImpl: createMapboxImageFetch([])
+      }
+    });
+    const scenario = await createReviewQuoteVersion(baseUrl, 'approved-email-missing-public-api');
+
+    const submitResponse = await fetch(
+      `${baseUrl}/api/admin/quotes/${scenario.quoteId}/versions/${scenario.version}/submit`,
+      {
+        method: 'POST',
+        headers: {
+          Authorization: 'Bearer admin-reviewer'
+        }
+      }
+    );
+    assert.equal(submitResponse.status, 200);
+    const submitBody = (await submitResponse.json()) as {
+      status: string;
+      customerStatus: string;
+      approvedQuoteEmail?: { sent?: boolean; errorMessage?: string };
+    };
+    assert.equal(submitBody.status, 'verified');
+    assert.equal(submitBody.customerStatus, 'awaiting_payment');
+    assert.equal(submitBody.approvedQuoteEmail?.sent, false);
+    assert.match(submitBody.approvedQuoteEmail?.errorMessage ?? '', /PUBLIC_API_BASE_URL/);
+    assert.equal(sentEmails.length, 0);
+  });
+
+  it('keeps quote approval successful when approved quote email delivery fails', async () => {
+    const { baseUrl } = await startServer({
+      approvedQuoteEmailSender: {
+        async send() {
+          throw new Error('Resend test failure');
+        }
+      },
+      publicUrls: {
+        appBaseUrl: 'https://client.autoscape.test',
+        apiBaseUrl: 'https://api.autoscape.test'
+      },
+      approvedQuotePreview: {
+        mapboxAccessToken: 'test-mapbox-token',
+        fetchImpl: createMapboxImageFetch([])
+      }
+    });
+
+    const reviewRing: Array<[number, number]> = [
+      [-79.5203, 43.8437],
+      [-79.5192, 43.8437],
+      [-79.5192, 43.8446],
+      [-79.5203, 43.8446]
+    ];
+
+    const draftResponse = await fetch(`${baseUrl}/api/quote/draft`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Idempotency-Key': 'approved-email-failure-draft-1'
+      },
+      body: JSON.stringify({
+        address: '99 Failure Crescent, Vaughan, ON',
+        location: {
+          lat: 43.844147,
+          lng: -79.51962
+        },
+        polygon: createPolygonGeometry(reviewRing),
+        polygonSource: createPolygonSource('service-1', reviewRing),
+        plan: 'Precision Weekly Plan',
+        quoteTotal: 210.25,
+        serviceFrequency: 'weekly',
+        baseTotal: 49,
+        pricingVersion: 'v1',
+        currency: 'CAD'
+      })
+    });
+    assert.equal(draftResponse.status, 201);
+    const draftBody = (await draftResponse.json()) as { quoteId: string };
+
+    const finalizeResponse = await fetch(`${baseUrl}/api/quote/${draftBody.quoteId}/contact`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Idempotency-Key': 'approved-email-failure-contact-1',
+        Authorization: 'Bearer customer-reviewer'
+      },
+      body: JSON.stringify({})
+    });
+    assert.equal(finalizeResponse.status, 200);
+
+    const versionResponse = await fetch(`${baseUrl}/api/admin/quotes/${draftBody.quoteId}/versions`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: 'Bearer admin-admin'
+      },
+      body: JSON.stringify({
+        polygonSource: createPolygonSource('service-1', [
+          [-79.5204, 43.8437],
+          [-79.5191, 43.8437],
+          [-79.5191, 43.8447],
+          [-79.5204, 43.8447]
+        ]),
+        serviceFrequency: 'weekly',
+        perSessionTotal: 199.99,
+        finalTotal: 225
+      })
+    });
+    assert.equal(versionResponse.status, 200);
+    const versionBody = (await versionResponse.json()) as { version: number };
+
+    const submitResponse = await fetch(
+      `${baseUrl}/api/admin/quotes/${draftBody.quoteId}/versions/${versionBody.version}/submit`,
+      {
+        method: 'POST',
+        headers: {
+          Authorization: 'Bearer admin-reviewer'
+        }
+      }
+    );
+    assert.equal(submitResponse.status, 200);
+    const submitBody = (await submitResponse.json()) as {
+      status: string;
+      customerStatus: string;
+      approvedQuoteEmail?: { sent?: boolean; errorMessage?: string };
+    };
+    assert.equal(submitBody.status, 'verified');
+    assert.equal(submitBody.customerStatus, 'awaiting_payment');
+    assert.equal(submitBody.approvedQuoteEmail?.sent, false);
+    assert.match(submitBody.approvedQuoteEmail?.errorMessage ?? '', /Resend test failure/);
+
+    const customerQuoteResponse = await fetch(`${baseUrl}/api/quote/${draftBody.quoteId}`, {
+      headers: {
+        Authorization: 'Bearer customer-reviewer'
+      }
+    });
+    assert.equal(customerQuoteResponse.status, 200);
+    const customerQuoteBody = (await customerQuoteResponse.json()) as { status: string; customerStatus: string };
+    assert.equal(customerQuoteBody.status, 'verified');
+    assert.equal(customerQuoteBody.customerStatus, 'awaiting_payment');
+
+    const editorResponse = await fetch(`${baseUrl}/api/admin/quotes/${draftBody.quoteId}/editor`, {
+      headers: {
+        Authorization: 'Bearer admin-admin'
+      }
+    });
+    assert.equal(editorResponse.status, 200);
+    const editorBody = (await editorResponse.json()) as {
+      approvedQuoteEmail: {
+        status: string;
+        triggerSource: string;
+        errorMessage: string | null;
+      } | null;
+    };
+    assert.equal(editorBody.approvedQuoteEmail?.status, 'failed');
+    assert.equal(editorBody.approvedQuoteEmail?.triggerSource, 'approval');
+    assert.match(editorBody.approvedQuoteEmail?.errorMessage ?? '', /Resend test failure/);
   });
 
   it('blocks marketing from mutating quote endpoints', async () => {

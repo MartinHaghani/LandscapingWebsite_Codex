@@ -68,10 +68,8 @@ describe('serviceArea geometry hardening', () => {
 });
 
 describe('serviceArea default config', () => {
-  it('defaults to one active L6A1M7 base station in non-production', () => {
-    const stations = loadBaseStationsFromEnv({
-      NODE_ENV: 'development'
-    });
+  it('defaults to one active L6A1M7 base station when station config is absent', () => {
+    const stations = loadBaseStationsFromEnv({});
 
     assert.equal(stations.length, 1);
     assert.equal(stations[0].label, 'internal-l6a1m7-station');
@@ -79,6 +77,15 @@ describe('serviceArea default config', () => {
     assert.equal(stations[0].lat, 43.844147);
     assert.equal(stations[0].lng, -79.51962);
     assert.equal(stations[0].active, true);
+  });
+
+  it('uses the default station in production when station config is absent', () => {
+    const stations = loadBaseStationsFromEnv({
+      NODE_ENV: 'production'
+    });
+
+    assert.equal(stations.length, 1);
+    assert.equal(stations[0].label, 'internal-l6a1m7-station');
   });
 
   it('defaults served regions to Vaughan, Ontario', () => {

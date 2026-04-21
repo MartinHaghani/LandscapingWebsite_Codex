@@ -11,6 +11,12 @@ import {
 import { finalizeFreehandStroke } from '../../lib/freehand';
 import { cn } from '../../lib/cn';
 import { buildPolygonFeature } from '../../lib/geometry';
+import {
+  quotePolygonFillColorExpression,
+  quotePolygonFillOpacityExpression,
+  quotePolygonOutlineColorExpression,
+  quotePolygonOutlineWidthExpression
+} from '../../lib/polygonPresentation';
 
 interface QuoteMapProps {
   token: string;
@@ -498,13 +504,8 @@ export const QuoteMap = ({
         source: POLYGON_SOURCE_ID,
         type: 'fill',
         paint: {
-          'fill-color': ['case', ['==', ['get', 'polygonKind'], 'obstacle'], '#DC2626', '#329F5B'],
-          'fill-opacity': [
-            'case',
-            ['==', ['get', 'polygonKind'], 'obstacle'],
-            ['case', ['==', ['get', 'selected'], true], 0.42, 0.2],
-            ['case', ['==', ['get', 'selected'], true], 0.54, 0.24]
-          ]
+          'fill-color': quotePolygonFillColorExpression,
+          'fill-opacity': quotePolygonFillOpacityExpression
         }
       });
 
@@ -513,13 +514,8 @@ export const QuoteMap = ({
         source: POLYGON_SOURCE_ID,
         type: 'line',
         paint: {
-          'line-color': [
-            'case',
-            ['==', ['get', 'polygonKind'], 'obstacle'],
-            ['case', ['==', ['get', 'selected'], true], '#FFE4E6', '#FDA4AF'],
-            ['case', ['==', ['get', 'selected'], true], '#FFFFFF', '#BFEBCF']
-          ],
-          'line-width': ['case', ['==', ['get', 'selected'], true], 3.2, 2.1]
+          'line-color': quotePolygonOutlineColorExpression,
+          'line-width': quotePolygonOutlineWidthExpression
         }
       });
 

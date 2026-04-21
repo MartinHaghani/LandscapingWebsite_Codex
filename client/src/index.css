@@ -221,10 +221,19 @@ select {
   }
 }
 
-@keyframes quoteGuideStepShift {
+@keyframes quoteGuideModalDoneExit {
+  from {
+    opacity: 1;
+  }
+  to {
+    opacity: 0;
+  }
+}
+
+@keyframes quoteGuideStepFadeIn {
   from {
     opacity: 0;
-    transform: translateY(8px) scale(0.99);
+    transform: translateY(10px) scale(0.992);
   }
   to {
     opacity: 1;
@@ -232,8 +241,48 @@ select {
   }
 }
 
+@keyframes quoteGuideStepFadeOut {
+  from {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+  to {
+    opacity: 0;
+    transform: translateY(8px) scale(0.992);
+  }
+}
+
+@keyframes quoteGuideMediaFade {
+  from {
+    opacity: 0;
+    transform: scale(0.992);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+@keyframes quoteGuideCaptionSwap {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+    filter: blur(3px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+    filter: blur(0);
+  }
+}
+
 .quote-guide-modal-enter {
   animation: quoteGuideModalEnter 360ms cubic-bezier(0.2, 0.9, 0.24, 1) both;
+}
+
+.quote-guide-modal-host--done-exit {
+  pointer-events: none;
+  animation: quoteGuideModalDoneExit 920ms cubic-bezier(0.2, 0.9, 0.24, 1) both;
 }
 
 .quote-guide-step-shell {
@@ -241,11 +290,40 @@ select {
 }
 
 .quote-guide-step-shell--animate {
-  animation: quoteGuideStepShift 240ms cubic-bezier(0.2, 0.9, 0.24, 1) both;
+  will-change: transform, opacity;
+}
+
+.quote-guide-step-shell--phase-idle {
+  opacity: 1;
+  transform: translateY(0) scale(1);
+}
+
+.quote-guide-step-shell--phase-in {
+  animation: quoteGuideStepFadeIn 760ms cubic-bezier(0.2, 0.9, 0.24, 1) both;
+}
+
+.quote-guide-step-shell--phase-out {
+  animation: quoteGuideStepFadeOut 520ms cubic-bezier(0.24, 0.76, 0.24, 1) both;
+}
+
+.quote-guide-media-unit {
+  will-change: opacity, transform;
+}
+
+.quote-guide-media-unit--fade {
+  animation: quoteGuideMediaFade 760ms cubic-bezier(0.2, 0.9, 0.24, 1) both;
 }
 
 .quote-guide-slider-thumb {
-  transition: left 220ms cubic-bezier(0.2, 0.9, 0.24, 1);
+  transition: left 260ms cubic-bezier(0.2, 0.9, 0.24, 1);
+}
+
+.quote-guide-caption-copy {
+  will-change: transform, opacity, filter;
+}
+
+.quote-guide-caption-copy--animate {
+  animation: quoteGuideCaptionSwap 260ms cubic-bezier(0.2, 0.9, 0.24, 1) both;
 }
 
 .hero-status-capsule {
@@ -335,7 +413,12 @@ select {
   .hero-status-burst-a,
   .hero-status-burst-b,
   .quote-guide-modal-enter,
-  .quote-guide-step-shell--animate {
+  .quote-guide-modal-host--done-exit,
+  .quote-guide-media-unit--fade,
+  .quote-guide-step-shell--animate,
+  .quote-guide-step-shell--phase-in,
+  .quote-guide-step-shell--phase-out,
+  .quote-guide-caption-copy--animate {
     animation: none;
   }
 

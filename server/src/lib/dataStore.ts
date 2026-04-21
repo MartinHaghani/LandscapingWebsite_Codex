@@ -2,7 +2,7 @@ import { nanoid } from 'nanoid';
 import type { QuoteStatus } from '@prisma/client';
 import { Prisma } from '@prisma/client';
 import difference from '@turf/difference';
-import { featureCollection, polygon } from '@turf/helpers';
+import { featureCollection, multiPolygon, polygon } from '@turf/helpers';
 import kinks from '@turf/kinks';
 import union from '@turf/union';
 import type { Feature, MultiPolygon, Polygon } from 'geojson';
@@ -135,8 +135,12 @@ interface QuotePublicRecord {
   billingMode: BillingMode;
   quoteTotal: number;
   status: string;
+  customerStatus: 'pending' | 'updated' | 'verified' | 'awaiting_payment' | 'rejected';
   contactPending: boolean;
   submittedAt: string | null;
+  verifiedAt: string | null;
+  paymentPageUrl: string | null;
+  approvedQuotePreviewImageUrl: string | null;
 }
 
 interface QuoteAccessContext {
@@ -253,6 +257,7 @@ interface ReviseQuoteInput {
 interface GetQuoteEditorInput {
   quotePublicId: string;
   role: AdminRole;
+  paymentPageUrl?: string;
 }
 
 interface CreateQuoteVersionInput {
@@ -269,6 +274,51 @@ interface SubmitQuoteVersionInput {
   quotePublicId: string;
   versionNumber: number;
   actor: ActorContext;
+}
+
+type ApprovedQuoteEmailTriggerSource = 'approval' | 'manual_resend';
+type ApprovedQuoteEmailDeliveryStatus = 'sent' | 'failed';
+
+interface RecordApprovedQuoteEmailDeliveryInput {
+  quotePublicId: string;
+  approvedVersionNumber: number;
+  recipientEmail: string;
+  triggerSource: ApprovedQuoteEmailTriggerSource;
+  deliveryStatus: ApprovedQuoteEmailDeliveryStatus;
+  provider: string;
+  providerMessageId?: string;
+  errorMessage?: string;
+  publicPreviewToken: string;
+  actor: ActorContext;
+}
+
+interface QuoteApprovedEmailContext {
+  internalQuoteId: string;
+  publicQuoteId: string;
+  recipientName: string | null;
+  recipientEmail: string | null;
+  addressText: string;
+  serviceFrequency: ServiceFrequency;
+  sessionsMin: number;
+  sessionsMax: number;
+  perSessionTotal: number;
+  seasonalTotalMin: number;
+  seasonalTotalMax: number;
+  fullSeasonTotal: number;
+  seasonalDiscountedTotal: number;
+  seasonalSavingsTotal: number;
+  seasonalDiscountRate: number;
+  verifiedAt: string | null;
+}
+
+interface ApprovedQuotePreviewRecord {
+  publicQuoteId: string;
+  addressText: string;
+  previewToken: string;
+  originalGeometry: QuoteGeometry;
+  approvedGeometry: QuoteGeometry;
+  addedGeometry: QuoteGeometry | null;
+  removedGeometry: QuoteGeometry | null;
 }
 
 interface PaginatedResponse<T> {
@@ -450,6 +500,20 @@ interface MemoryIdempotencyRecord {
   responseHash: string;
   resourceType: string | null;
   resourceId: string | null;
+  createdAt: string;
+}
+
+interface MemoryApprovedQuoteEmailDelivery {
+  id: string;
+  quoteId: string;
+  approvedVersionNumber: number;
+  recipientEmail: string;
+  triggerSource: ApprovedQuoteEmailTriggerSource;
+  deliveryStatus: ApprovedQuoteEmailDeliveryStatus;
+  provider: string;
+  providerMessageId: string | null;
+  errorMessage: string | null;
+  publicPreviewToken: string;
   createdAt: string;
 }
 
@@ -855,6 +919,70 @@ const polygonSourceToEffectiveGeometry = (source: PolygonSourcePayload): QuoteGe
   };
 };
 
+const quoteGeometryToFeature = (geometry: QuoteGeometry): Feature<Polygon | MultiPolygon> =>
+  geometry.type === 'Polygon'
+    ? polygon(geometry.coordinates)
+    : multiPolygon(geometry.coordinates);
+
+const geoJsonGeometryToQuoteGeometry = (geometry: Polygon | MultiPolygon): QuoteGeometry =>
+  geometry.type === 'Polygon'
+    ? {
+        type: 'Polygon',
+        coordinates: geometry.coordinates as [number, number][][]
+      }
+    : {
+        type: 'MultiPolygon',
+        coordinates: geometry.coordinates as [number, number][][][]
+      };
+
+const normalizeEffectivePreviewGeometry = (geometry: QuoteGeometry): QuoteGeometry => {
+  const measured = validateAndMeasureGeometry(geometry);
+  return toMultiPolygonGeometry(measured.normalizedGeometry);
+};
+
+const subtractQuoteGeometry = (left: QuoteGeometry, right: QuoteGeometry): QuoteGeometry | null => {
+  const delta = difference(featureCollection([quoteGeometryToFeature(left), quoteGeometryToFeature(right)]));
+  if (!delta) {
+    return null;
+  }
+
+  try {
+    return normalizeEffectivePreviewGeometry(
+      geoJsonGeometryToQuoteGeometry(delta.geometry as Polygon | MultiPolygon)
+    );
+  } catch {
+    return null;
+  }
+};
+
+const buildApprovedQuotePreviewRecordFromSources = (input: {
+  publicQuoteId: string;
+  addressText: string;
+  previewToken: string;
+  originalPolygonSourceJson: unknown | null;
+  approvedPolygonSourceJson: unknown | null;
+}): ApprovedQuotePreviewRecord => {
+  const originalSource = normalizePolygonSource(input.originalPolygonSourceJson);
+  const approvedSource = normalizePolygonSource(input.approvedPolygonSourceJson);
+
+  if (!originalSource || !approvedSource) {
+    throw new Error('APPROVED_QUOTE_PREVIEW_SOURCE_MISSING');
+  }
+
+  const originalGeometry = normalizeEffectivePreviewGeometry(polygonSourceToEffectiveGeometry(originalSource));
+  const approvedGeometry = normalizeEffectivePreviewGeometry(polygonSourceToEffectiveGeometry(approvedSource));
+
+  return {
+    publicQuoteId: input.publicQuoteId,
+    addressText: input.addressText,
+    previewToken: input.previewToken,
+    originalGeometry,
+    approvedGeometry,
+    addedGeometry: subtractQuoteGeometry(approvedGeometry, originalGeometry),
+    removedGeometry: subtractQuoteGeometry(originalGeometry, approvedGeometry)
+  };
+};
+
 const centroidDistanceM = (
   left: { lng: number; lat: number },
   right: { lng: number; lat: number }
@@ -1039,6 +1167,46 @@ const cleanAttribution = (attribution?: AttributionInput): AttributionInput => (
 
 const nowIso = () => new Date().toISOString();
 
+const getLatestMemoryApprovedQuoteEmailDelivery = (
+  deliveries: MemoryApprovedQuoteEmailDelivery[],
+  quoteId: string
+) =>
+  deliveries
+    .filter((delivery) => delivery.quoteId === quoteId)
+    .sort((left, right) => right.createdAt.localeCompare(left.createdAt))[0] ?? null;
+
+const buildApprovedQuoteEmailMetadata = (input: {
+  delivery: {
+    deliveryStatus: ApprovedQuoteEmailDeliveryStatus;
+    triggerSource: ApprovedQuoteEmailTriggerSource;
+    recipientEmail: string | null;
+    provider: string;
+    providerMessageId: string | null;
+    errorMessage: string | null;
+    approvedVersionNumber: number;
+    createdAt: string;
+  } | null;
+  paymentPageUrl?: string | null;
+  previewImageUrl?: string | null;
+}) => {
+  if (!input.delivery) {
+    return null;
+  }
+
+  return {
+    status: input.delivery.deliveryStatus,
+    triggerSource: input.delivery.triggerSource,
+    recipientEmail: input.delivery.recipientEmail,
+    provider: input.delivery.provider,
+    providerMessageId: input.delivery.providerMessageId,
+    errorMessage: input.delivery.errorMessage,
+    approvedVersionNumber: input.delivery.approvedVersionNumber,
+    createdAt: input.delivery.createdAt,
+    paymentPageUrl: input.paymentPageUrl ?? null,
+    previewImageUrl: input.previewImageUrl ?? null
+  };
+};
+
 export class DataStore {
   private readonly prisma = getPrisma();
 
@@ -1046,6 +1214,7 @@ export class DataStore {
     leads: new Map<string, MemoryLead>(),
     quotes: new Map<string, MemoryQuote>(),
     quoteVersions: [] as MemoryQuoteVersion[],
+    approvedQuoteEmailDeliveries: [] as MemoryApprovedQuoteEmailDelivery[],
     contacts: [] as MemoryLeadContact[],
     requests: [] as MemoryServiceAreaRequest[],
     attributionTouches: [] as MemoryAttributionTouch[],
@@ -1569,7 +1738,7 @@ export class DataStore {
               quoteId: publicQuoteId,
               status: 'draft',
               contactPending: true,
-              nextStepUrl: `/quote-contact/${publicQuoteId}`
+              nextStepUrl: `/quote-confirmation/${publicQuoteId}`
             },
             resourceType: 'quote',
             resourceId: quoteId
@@ -1776,7 +1945,7 @@ export class DataStore {
             quoteId: publicQuoteId,
             status: 'draft',
             contactPending: true,
-            nextStepUrl: `/quote-contact/${publicQuoteId}`
+            nextStepUrl: `/quote-confirmation/${publicQuoteId}`
           },
           resourceType: 'quote',
           resourceId: quoteId
@@ -2365,7 +2534,11 @@ export class DataStore {
 
   async getQuoteByPublicId(
     quotePublicId: string,
-    access: QuoteAccessContext = {}
+    access: QuoteAccessContext = {},
+    links: {
+      paymentPageUrl?: string | null;
+      previewImageBaseUrl?: string | null;
+    } = {}
   ): Promise<QuotePublicRecord | null> {
     const isAdmin = access.isAdmin === true;
     const authUserId = access.authUserId?.trim();
@@ -2387,6 +2560,14 @@ export class DataStore {
         quote.seasonalTotalMax,
         quote.seasonalDiscountRate ?? PRICING_CONSTANTS.defaultSeasonalDiscountRate
       );
+      const latestDelivery = getLatestMemoryApprovedQuoteEmailDelivery(
+        this.memory.approvedQuoteEmailDeliveries,
+        quote.id
+      );
+      const previewImageUrl =
+        latestDelivery && links.previewImageBaseUrl
+          ? `${links.previewImageBaseUrl.replace(/\/$/, '')}/${encodeURIComponent(latestDelivery.publicPreviewToken)}`
+          : null;
 
       return {
         id: quote.publicQuoteId,
@@ -2410,14 +2591,26 @@ export class DataStore {
         billingMode: normalizeBillingMode(quote.billingMode),
         quoteTotal: quote.finalTotal,
         status: quote.status,
+        customerStatus: quote.customerStatus,
         contactPending: quote.contactPending,
-        submittedAt: quote.submittedAt
+        submittedAt: quote.submittedAt,
+        verifiedAt: quote.verifiedAt,
+        paymentPageUrl: links.paymentPageUrl ?? null,
+        approvedQuotePreviewImageUrl: previewImageUrl
       };
     }
 
     const quote = await this.prisma.quote.findUnique({
       where: {
         publicQuoteId: quotePublicId
+      },
+      include: {
+        approvedQuoteEmailDeliveries: {
+          orderBy: {
+            createdAt: 'desc'
+          },
+          take: 1
+        }
       }
     });
 
@@ -2433,6 +2626,11 @@ export class DataStore {
       parseDecimal(quote.seasonalTotalMax),
       parseDecimal(quote.seasonalDiscountRate)
     );
+    const latestDelivery = quote.approvedQuoteEmailDeliveries[0] ?? null;
+    const previewImageUrl =
+      latestDelivery && links.previewImageBaseUrl
+        ? `${links.previewImageBaseUrl.replace(/\/$/, '')}/${encodeURIComponent(latestDelivery.publicPreviewToken)}`
+        : null;
 
     return {
       id: quote.publicQuoteId,
@@ -2456,8 +2654,12 @@ export class DataStore {
       billingMode: normalizeBillingMode(quote.billingMode),
       quoteTotal: parseDecimal(quote.finalTotal),
       status: quote.status,
+      customerStatus: quote.customerStatus,
       contactPending: quote.contactPending,
-      submittedAt: quote.submittedAt ? quote.submittedAt.toISOString() : null
+      submittedAt: quote.submittedAt ? quote.submittedAt.toISOString() : null,
+      verifiedAt: quote.verifiedAt?.toISOString() ?? null,
+      paymentPageUrl: links.paymentPageUrl ?? null,
+      approvedQuotePreviewImageUrl: previewImageUrl
     };
   }
 
@@ -3958,6 +4160,14 @@ export class DataStore {
       const leadName = input.role === 'MARKETING' ? maskName(lead?.primaryName ?? null) : lead?.primaryName ?? null;
       const leadEmail = input.role === 'MARKETING' ? maskEmail(lead?.primaryEmail ?? null) : lead?.primaryEmail ?? null;
       const leadPhone = input.role === 'MARKETING' ? maskPhone(lead?.primaryPhone ?? null) : lead?.primaryPhone ?? null;
+      const latestDelivery = getLatestMemoryApprovedQuoteEmailDelivery(
+        this.memory.approvedQuoteEmailDeliveries,
+        quote.id
+      );
+      const previewImageUrl =
+        latestDelivery
+          ? `/api/approved-quote-preview/${encodeURIComponent(latestDelivery.publicPreviewToken)}`
+          : null;
 
       return {
         quoteId: quote.publicQuoteId,
@@ -3994,7 +4204,24 @@ export class DataStore {
         },
         polygonSource,
         polygonSourceFallback: fallbackUsed,
-        versions
+        versions,
+        approvedQuoteEmail: buildApprovedQuoteEmailMetadata({
+          delivery:
+            latestDelivery === null
+              ? null
+              : {
+                  deliveryStatus: latestDelivery.deliveryStatus,
+                  triggerSource: latestDelivery.triggerSource,
+                  recipientEmail: latestDelivery.recipientEmail,
+                  provider: latestDelivery.provider,
+                  providerMessageId: latestDelivery.providerMessageId,
+                  errorMessage: latestDelivery.errorMessage,
+                  approvedVersionNumber: latestDelivery.approvedVersionNumber,
+                  createdAt: latestDelivery.createdAt
+                },
+          paymentPageUrl: input.paymentPageUrl ?? null,
+          previewImageUrl
+        })
       };
     }
 
@@ -4004,6 +4231,12 @@ export class DataStore {
       },
       include: {
         lead: true,
+        approvedQuoteEmailDeliveries: {
+          orderBy: {
+            createdAt: 'desc'
+          },
+          take: 1
+        },
         versions: {
           orderBy: {
             versionNumber: 'desc'
@@ -4072,6 +4305,11 @@ export class DataStore {
       input.role === 'MARKETING' ? maskEmail(quote.lead.primaryEmail) : quote.lead.primaryEmail;
     const leadPhone =
       input.role === 'MARKETING' ? maskPhone(quote.lead.primaryPhone) : quote.lead.primaryPhone;
+    const latestDelivery = quote.approvedQuoteEmailDeliveries[0] ?? null;
+    const previewImageUrl =
+      latestDelivery
+        ? `/api/approved-quote-preview/${encodeURIComponent(latestDelivery.publicPreviewToken)}`
+        : null;
 
     return {
       quoteId: quote.publicQuoteId,
@@ -4108,7 +4346,24 @@ export class DataStore {
       },
       polygonSource,
       polygonSourceFallback: fallbackUsed,
-      versions
+      versions,
+      approvedQuoteEmail: buildApprovedQuoteEmailMetadata({
+        delivery:
+          latestDelivery === null
+            ? null
+            : {
+                deliveryStatus: latestDelivery.deliveryStatus,
+                triggerSource: latestDelivery.triggerSource,
+                recipientEmail: latestDelivery.recipientEmail,
+                provider: latestDelivery.provider,
+                providerMessageId: latestDelivery.providerMessageId,
+                errorMessage: latestDelivery.errorMessage,
+                approvedVersionNumber: latestDelivery.approvedVersionNumber,
+                createdAt: latestDelivery.createdAt.toISOString()
+              },
+        paymentPageUrl: input.paymentPageUrl ?? null,
+        previewImageUrl
+      })
     };
   }
 
@@ -4708,6 +4963,380 @@ export class DataStore {
       verifiedBy: input.actor.userId,
       selectedVersion: input.versionNumber
     };
+  }
+
+  async getApprovedQuoteEmailContext(quotePublicId: string): Promise<QuoteApprovedEmailContext> {
+    if (!this.prisma) {
+      const quote = [...this.memory.quotes.values()].find((item) => item.publicQuoteId === quotePublicId);
+      if (!quote) {
+        throw new Error('QUOTE_NOT_FOUND');
+      }
+
+      const lead = this.memory.leads.get(quote.leadId);
+      const billing = deriveBillingAmounts(
+        quote.seasonalTotalMax,
+        quote.seasonalDiscountRate ?? PRICING_CONSTANTS.defaultSeasonalDiscountRate
+      );
+
+      return {
+        internalQuoteId: quote.id,
+        publicQuoteId: quote.publicQuoteId,
+        recipientName: lead?.primaryName ?? null,
+        recipientEmail: lead?.primaryEmail ?? null,
+        addressText: quote.addressText,
+        serviceFrequency: quote.serviceFrequency,
+        sessionsMin: quote.sessionsMin,
+        sessionsMax: quote.sessionsMax,
+        perSessionTotal: quote.perSessionTotal,
+        seasonalTotalMin: quote.seasonalTotalMin,
+        seasonalTotalMax: quote.seasonalTotalMax,
+        fullSeasonTotal: billing.fullSeasonTotal,
+        seasonalDiscountedTotal: billing.seasonalDiscountedTotal,
+        seasonalSavingsTotal: billing.seasonalSavingsTotal,
+        seasonalDiscountRate: billing.seasonalDiscountRate,
+        verifiedAt: quote.verifiedAt
+      };
+    }
+
+    const quote = await this.prisma.quote.findUnique({
+      where: {
+        publicQuoteId: quotePublicId
+      },
+      include: {
+        lead: true
+      }
+    });
+    if (!quote) {
+      throw new Error('QUOTE_NOT_FOUND');
+    }
+
+    const billing = deriveBillingAmounts(
+      parseDecimal(quote.seasonalTotalMax),
+      parseDecimal(quote.seasonalDiscountRate)
+    );
+
+    return {
+      internalQuoteId: quote.id,
+      publicQuoteId: quote.publicQuoteId,
+      recipientName: quote.lead.primaryName,
+      recipientEmail: quote.lead.primaryEmail,
+      addressText: quote.addressText,
+      serviceFrequency: normalizeServiceFrequency(quote.serviceFrequency),
+      sessionsMin: quote.sessionsMin,
+      sessionsMax: quote.sessionsMax,
+      perSessionTotal: parseDecimal(quote.perSessionTotal),
+      seasonalTotalMin: parseDecimal(quote.seasonalTotalMin),
+      seasonalTotalMax: parseDecimal(quote.seasonalTotalMax),
+      fullSeasonTotal: billing.fullSeasonTotal,
+      seasonalDiscountedTotal: billing.seasonalDiscountedTotal,
+      seasonalSavingsTotal: billing.seasonalSavingsTotal,
+      seasonalDiscountRate: billing.seasonalDiscountRate,
+      verifiedAt: quote.verifiedAt?.toISOString() ?? null
+    };
+  }
+
+  async getLatestApprovedQuoteEmailDelivery(quotePublicId: string) {
+    if (!this.prisma) {
+      const quote = [...this.memory.quotes.values()].find((item) => item.publicQuoteId === quotePublicId);
+      if (!quote) {
+        throw new Error('QUOTE_NOT_FOUND');
+      }
+
+      const latest = getLatestMemoryApprovedQuoteEmailDelivery(this.memory.approvedQuoteEmailDeliveries, quote.id);
+      if (!latest) {
+        return null;
+      }
+
+      return {
+        approvedVersionNumber: latest.approvedVersionNumber,
+        recipientEmail: latest.recipientEmail,
+        triggerSource: latest.triggerSource,
+        deliveryStatus: latest.deliveryStatus,
+        provider: latest.provider,
+        providerMessageId: latest.providerMessageId,
+        errorMessage: latest.errorMessage,
+        publicPreviewToken: latest.publicPreviewToken,
+        createdAt: latest.createdAt
+      };
+    }
+
+    const quote = await this.prisma.quote.findUnique({
+      where: {
+        publicQuoteId: quotePublicId
+      }
+    });
+    if (!quote) {
+      throw new Error('QUOTE_NOT_FOUND');
+    }
+
+    const latest = await this.prisma.approvedQuoteEmailDelivery.findFirst({
+      where: {
+        quoteId: quote.id
+      },
+      orderBy: {
+        createdAt: 'desc'
+      }
+    });
+
+    if (!latest) {
+      return null;
+    }
+
+    return {
+      approvedVersionNumber: latest.approvedVersionNumber,
+      recipientEmail: latest.recipientEmail,
+      triggerSource: latest.triggerSource,
+      deliveryStatus: latest.deliveryStatus,
+      provider: latest.provider,
+      providerMessageId: latest.providerMessageId,
+      errorMessage: latest.errorMessage,
+      publicPreviewToken: latest.publicPreviewToken,
+      createdAt: latest.createdAt.toISOString()
+    };
+  }
+
+  async recordApprovedQuoteEmailDelivery(input: RecordApprovedQuoteEmailDeliveryInput) {
+    const action =
+      input.deliveryStatus === 'failed'
+        ? 'approval_email_failed'
+        : input.triggerSource === 'manual_resend'
+          ? 'approval_email_resent'
+          : 'approval_email_sent';
+
+    if (!this.prisma) {
+      const quote = [...this.memory.quotes.values()].find((item) => item.publicQuoteId === input.quotePublicId);
+      if (!quote) {
+        throw new Error('QUOTE_NOT_FOUND');
+      }
+
+      const createdAt = nowIso();
+      this.memory.approvedQuoteEmailDeliveries.push({
+        id: nanoid(14),
+        quoteId: quote.id,
+        approvedVersionNumber: input.approvedVersionNumber,
+        recipientEmail: input.recipientEmail,
+        triggerSource: input.triggerSource,
+        deliveryStatus: input.deliveryStatus,
+        provider: input.provider,
+        providerMessageId: input.providerMessageId ?? null,
+        errorMessage: input.errorMessage ?? null,
+        publicPreviewToken: input.publicPreviewToken,
+        createdAt
+      });
+
+      await this.writeAuditLog({
+        actor: input.actor,
+        action,
+        entityType: 'quote',
+        entityId: quote.id,
+        changedFields: [],
+        afterRedacted: {
+          quoteId: quote.publicQuoteId,
+          approvedVersionNumber: input.approvedVersionNumber,
+          deliveryStatus: input.deliveryStatus,
+          triggerSource: input.triggerSource,
+          recipientEmail: maskEmail(input.recipientEmail),
+          provider: input.provider
+        }
+      });
+
+      return {
+        approvedVersionNumber: input.approvedVersionNumber,
+        recipientEmail: input.recipientEmail,
+        triggerSource: input.triggerSource,
+        deliveryStatus: input.deliveryStatus,
+        provider: input.provider,
+        providerMessageId: input.providerMessageId ?? null,
+        errorMessage: input.errorMessage ?? null,
+        publicPreviewToken: input.publicPreviewToken,
+        createdAt
+      };
+    }
+
+    const quote = await this.prisma.quote.findUnique({
+      where: {
+        publicQuoteId: input.quotePublicId
+      }
+    });
+    if (!quote) {
+      throw new Error('QUOTE_NOT_FOUND');
+    }
+
+    const created = await this.prisma.approvedQuoteEmailDelivery.create({
+      data: {
+        id: nanoid(14),
+        quoteId: quote.id,
+        approvedVersionNumber: input.approvedVersionNumber,
+        recipientEmail: input.recipientEmail,
+        triggerSource: input.triggerSource,
+        deliveryStatus: input.deliveryStatus,
+        provider: input.provider,
+        providerMessageId: input.providerMessageId,
+        errorMessage: input.errorMessage,
+        publicPreviewToken: input.publicPreviewToken
+      }
+    });
+
+    await this.writeAuditLog({
+      actor: input.actor,
+      action,
+      entityType: 'quote',
+      entityId: quote.id,
+      changedFields: [],
+      afterRedacted: {
+        quoteId: quote.publicQuoteId,
+        approvedVersionNumber: input.approvedVersionNumber,
+        deliveryStatus: input.deliveryStatus,
+        triggerSource: input.triggerSource,
+        recipientEmail: maskEmail(input.recipientEmail),
+        provider: input.provider
+      }
+    });
+
+    return {
+      approvedVersionNumber: created.approvedVersionNumber,
+      recipientEmail: created.recipientEmail,
+      triggerSource: created.triggerSource,
+      deliveryStatus: created.deliveryStatus,
+      provider: created.provider,
+      providerMessageId: created.providerMessageId,
+      errorMessage: created.errorMessage,
+      publicPreviewToken: created.publicPreviewToken,
+      createdAt: created.createdAt.toISOString()
+    };
+  }
+
+  async getApprovedQuotePreviewContext(
+    quotePublicId: string,
+    approvedVersionNumber: number
+  ): Promise<ApprovedQuotePreviewRecord | null> {
+    if (!this.prisma) {
+      const quote = [...this.memory.quotes.values()].find((item) => item.publicQuoteId === quotePublicId);
+      if (!quote) {
+        throw new Error('QUOTE_NOT_FOUND');
+      }
+
+      const originalVersion = this.memory.quoteVersions
+        .filter((version) => version.quoteId === quote.id && version.actorType === 'client')
+        .sort((left, right) => left.versionNumber - right.versionNumber)[0];
+      const approvedVersion =
+        this.memory.quoteVersions.find(
+          (version) => version.quoteId === quote.id && version.versionNumber === approvedVersionNumber
+        ) ?? null;
+
+      if (!originalVersion || !approvedVersion) {
+        return null;
+      }
+
+      try {
+        return buildApprovedQuotePreviewRecordFromSources({
+          publicQuoteId: quote.publicQuoteId,
+          addressText: quote.addressText,
+          previewToken: '',
+          originalPolygonSourceJson: originalVersion.polygonSourceJson,
+          approvedPolygonSourceJson: approvedVersion.polygonSourceJson
+        });
+      } catch {
+        return null;
+      }
+    }
+
+    const quote = await this.prisma.quote.findUnique({
+      where: {
+        publicQuoteId: quotePublicId
+      }
+    });
+    if (!quote) {
+      throw new Error('QUOTE_NOT_FOUND');
+    }
+
+    const versionRows = await this.prisma.quoteVersion.findMany({
+      where: {
+        quoteId: quote.id,
+        OR: [
+          {
+            actorType: 'client'
+          },
+          {
+            versionNumber: approvedVersionNumber
+          }
+        ]
+      },
+      orderBy: {
+        versionNumber: 'asc'
+      },
+      select: {
+        versionNumber: true,
+        actorType: true,
+        polygonSourceJson: true
+      }
+    });
+
+    const originalVersion = versionRows.find((row) => row.actorType === 'client') ?? null;
+    const approvedVersion = versionRows.find((row) => row.versionNumber === approvedVersionNumber) ?? null;
+    if (!originalVersion || !approvedVersion) {
+      return null;
+    }
+
+    try {
+      return buildApprovedQuotePreviewRecordFromSources({
+        publicQuoteId: quote.publicQuoteId,
+        addressText: quote.addressText,
+        previewToken: '',
+        originalPolygonSourceJson: originalVersion.polygonSourceJson,
+        approvedPolygonSourceJson: approvedVersion.polygonSourceJson
+      });
+    } catch {
+      return null;
+    }
+  }
+
+  async getApprovedQuotePreviewByToken(publicPreviewToken: string): Promise<ApprovedQuotePreviewRecord | null> {
+    if (!this.prisma) {
+      const delivery = this.memory.approvedQuoteEmailDeliveries.find(
+        (item) => item.publicPreviewToken === publicPreviewToken
+      );
+      if (!delivery) {
+        return null;
+      }
+
+      const quote = this.memory.quotes.get(delivery.quoteId);
+      if (!quote) {
+        return null;
+      }
+
+      const preview = await this.getApprovedQuotePreviewContext(quote.publicQuoteId, delivery.approvedVersionNumber);
+      return preview
+        ? {
+            ...preview,
+            previewToken: publicPreviewToken
+          }
+        : null;
+    }
+
+    const delivery = await this.prisma.approvedQuoteEmailDelivery.findUnique({
+      where: {
+        publicPreviewToken
+      },
+      include: {
+        quote: true
+      }
+    });
+    if (!delivery) {
+      return null;
+    }
+
+    const preview = await this.getApprovedQuotePreviewContext(
+      delivery.quote.publicQuoteId,
+      delivery.approvedVersionNumber
+    );
+
+    return preview
+      ? {
+          ...preview,
+          previewToken: publicPreviewToken
+        }
+      : null;
   }
 
   async reviseQuote(input: ReviseQuoteInput) {

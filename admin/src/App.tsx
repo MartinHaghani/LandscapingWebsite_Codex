@@ -219,7 +219,6 @@ const App = () => {
   const [quoteFilters, setQuoteFilters] = useState<QuoteListParams>({
     q: '',
     status: '',
-    serviceFrequency: undefined,
     contactPending: undefined,
     sortBy: 'createdAt',
     sortDir: 'desc'
@@ -628,7 +627,7 @@ const App = () => {
               sortOptions={[
                 { label: 'Created', value: 'createdAt' },
                 { label: 'Submitted', value: 'submittedAt' },
-                { label: 'Per-session price', value: 'perSessionTotal' },
+                { label: 'Per-visit price', value: 'perSessionTotal' },
                 { label: 'Seasonal max', value: 'seasonalTotalMax' }
               ]}
               onApply={() => {
@@ -638,7 +637,6 @@ const App = () => {
                 setQuoteFilters({
                   q: '',
                   status: '',
-                  serviceFrequency: undefined,
                   contactPending: undefined,
                   sortBy: 'createdAt',
                   sortDir: 'desc'
@@ -658,22 +656,6 @@ const App = () => {
                 <option value="in_review">In review</option>
                 <option value="verified">Verified</option>
                 <option value="rejected">Rejected</option>
-              </select>
-              <select
-                value={quoteFilters.serviceFrequency ?? ''}
-                onChange={(event) =>
-                  setQuoteFilters((current) => ({
-                    ...current,
-                    serviceFrequency:
-                      event.target.value === 'weekly' || event.target.value === 'biweekly'
-                        ? event.target.value
-                        : undefined
-                  }))
-                }
-              >
-                <option value="">All cadence</option>
-                <option value="weekly">Weekly</option>
-                <option value="biweekly">Bi-weekly</option>
               </select>
               <select
                 value={quoteFilters.contactPending === undefined ? '' : String(quoteFilters.contactPending)}
@@ -698,8 +680,7 @@ const App = () => {
                     <th>Status</th>
                     <th>Lead</th>
                     <th>Address</th>
-                    <th>Cadence</th>
-                    <th>Per Session</th>
+                    <th>Per Visit</th>
                     <th>Seasonal Range</th>
                     <th>Created</th>
                     <th>Actions</th>
@@ -720,13 +701,12 @@ const App = () => {
                         <div>{quote.lead.phone ?? 'N/A'}</div>
                       </td>
                       <td>{quote.addressText}</td>
-                      <td>{quote.serviceFrequency === 'weekly' ? 'Weekly' : 'Bi-weekly'}</td>
                       <td>{toCurrency(quote.perSessionTotal)}</td>
                       <td>
                         {toCurrency(quote.seasonalTotalMin)} - {toCurrency(quote.seasonalTotalMax)}
                         <br />
                         <small>
-                          {quote.sessionsMin}-{quote.sessionsMax} sessions
+                          {quote.sessionsMax} visits, May to September
                         </small>
                       </td>
                       <td>{formatDate(quote.createdAt)}</td>
@@ -768,7 +748,7 @@ const App = () => {
                   ))}
                   {quotes.length === 0 && !loadingQuotes ? (
                     <tr>
-                      <td colSpan={9}>No quotes found.</td>
+                      <td colSpan={8}>No quotes found.</td>
                     </tr>
                   ) : null}
                 </tbody>

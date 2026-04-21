@@ -1,4 +1,4 @@
-export type ServiceFrequency = 'weekly' | 'biweekly';
+export type ServiceFrequency = 'weekly';
 export type BillingMode = 'seasonal' | 'per_session';
 
 interface SessionWindow {
@@ -24,13 +24,12 @@ export const PRICING_CONSTANTS = {
   areaRate: 0.05,
   perimeterRate: 0.1,
   distanceRate: 1,
-  minimumPerSessionPrice: 50,
+  minimumPerSessionPrice: 45,
   defaultSeasonalDiscountRate: 0.2
 } as const;
 
 export const SESSION_WINDOWS: Record<ServiceFrequency, SessionWindow> = {
-  weekly: { min: 26, max: 26 },
-  biweekly: { min: 14, max: 14 }
+  weekly: { min: 20, max: 20 }
 };
 
 const toFiniteNumber = (value: number, fallback = 0) =>
@@ -38,8 +37,7 @@ const toFiniteNumber = (value: number, fallback = 0) =>
 const roundMoney = (value: number) => Number(toFiniteNumber(value).toFixed(2));
 const roundRate = (value: number) => Number(toFiniteNumber(value).toFixed(4));
 
-export const normalizeServiceFrequency = (value?: string | null): ServiceFrequency =>
-  value === 'biweekly' ? 'biweekly' : 'weekly';
+export const normalizeServiceFrequency = (_value?: string | null): ServiceFrequency => 'weekly';
 
 export const normalizeBillingMode = (value?: string | null): BillingMode =>
   value === 'per_session' ? 'per_session' : 'seasonal';
@@ -62,7 +60,7 @@ export const computePerSessionTotal = (
 
 export const computeSessionRangePricing = (
   perSessionTotal: number,
-  serviceFrequency: ServiceFrequency,
+  serviceFrequency: ServiceFrequency = 'weekly',
   seasonalDiscountRate = PRICING_CONSTANTS.defaultSeasonalDiscountRate
 ): SessionRangePricing => {
   const normalizedPerSession = Math.max(0, roundMoney(perSessionTotal));

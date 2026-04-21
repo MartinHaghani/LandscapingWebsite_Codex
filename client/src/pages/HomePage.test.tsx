@@ -28,30 +28,101 @@ describe('HomePage hero', () => {
   });
 });
 
-describe('HomePage sustainability proof', () => {
-  it('renders the electric-vs-gas comparison section with qualified claims', () => {
+describe('HomePage pricing comparison', () => {
+  it('renders a tighter pricing comparison directly after the hero and before the services section', () => {
     const markup = renderHomePage();
+    const heroIndex = markup.indexOf('Autonomous Landscaping Service');
+    const comparisonIndex = markup.indexOf('Save with Autoscape');
+    const servicesIndex = markup.indexOf('Maintenance designed for premium residential properties');
+    const contextIndex = markup.indexOf('data-home-pricing-context="true"');
+    const lawnIndex = markup.indexOf('data-home-pricing-lawn="true"');
+    const panelIndex = markup.indexOf('data-home-pricing-panel="true"');
 
-    expect(markup).toContain('Why Electric');
-    expect(markup).toContain('Cleaner, quieter lawn care without the gas tradeoffs.');
-    expect(markup).toContain('Point-of-use exhaust');
-    expect(markup).toContain('0 exhaust while mowing');
-    expect(markup).toContain('Combustion exhaust on site');
-    expect(markup).toContain('Noise at 25 ft');
-    expect(markup).toContain('65.5 dBA');
-    expect(markup).toContain('72.5 dBA');
-    expect(markup).toContain('10-year lifecycle CO2e (push mower study)');
-    expect(markup).toContain('354 kg');
-    expect(markup).toContain('707 kg');
+    expect(comparisonIndex).toBeGreaterThan(heroIndex);
+    expect(comparisonIndex).toBeLessThan(servicesIndex);
+    expect(markup).toContain('data-home-pricing-comparison="true"');
+    expect(markup).toContain('data-home-pricing-band="true"');
+    expect(markup).toContain('data-home-pricing-context="true"');
+    expect(markup).toContain('data-home-pricing-lawn="true"');
+    expect(markup).toContain('data-home-pricing-panel="true"');
+    expect(markup).toContain('data-home-pricing-standard-grid="true"');
+    expect(lawnIndex).toBeGreaterThan(comparisonIndex);
+    expect(contextIndex).toBeGreaterThan(comparisonIndex);
+    expect(panelIndex).toBeGreaterThan(contextIndex);
+    expect(markup).toContain('md:items-stretch');
+    expect(markup).toContain('h-full rounded-2xl');
+    expect(markup).toContain('flex h-full flex-col');
+    expect(markup).toContain('3,000 sq ft');
+    expect(markup).toContain('Autoscape');
+    expect(markup).toContain('Local competitors');
+    expect(markup).toContain('Price Check');
     expect(markup).toContain(
-      'Based on field noise measurements and peer-reviewed lifecycle modeling. &quot;Zero emissions&quot; refers to exhaust at the point of use; lifecycle impact varies by equipment and local electricity mix.'
+      'Get a cheaper visit rate and 20% off when you choose the seasonal plan.'
     );
+    expect(markup).toContain('$45');
+    expect(markup).toContain('$55');
+    expect(markup).toContain('$720');
+    expect(markup).toContain('$1,100');
+    expect(markup).toContain('$10');
+    expect(markup).toContain('$380');
+    expect(markup).toContain('Per season');
+    expect(markup).toContain('Includes 20% seasonal savings');
+    expect(markup).toContain('Save $10 per visit and $380 per season.');
+    expect(markup).toContain(
+      'Benchmark uses the current public posted weekly mowing rate. Taxes, extras, drawn area, perimeter, cadence, and service distance can change a final quote.'
+    );
+    expect(markup).not.toContain('A simple weekly mowing example');
+    expect(markup).not.toContain('Sample Pricing');
+    expect(markup).not.toContain('Autoscape seasonal plan');
+    expect(markup).not.toContain('Example based on a 3,000 sq ft lawn with 20 weekly visits.');
+    expect(markup).not.toContain('$900');
+    expect(markup).not.toContain('data-home-pricing-card=');
+    expect(markup).not.toContain('data-home-pricing-seasonal-plan=');
+    expect(markup).not.toContain('lg:grid-cols-3');
+    expect(markup).not.toContain('rgba(230,239,232,0.68)');
+    expect(markup).not.toContain('home-pricing-lawn-fill');
+    expect(markup).not.toContain('M112 84H210M430 88H522');
+    expect(markup).not.toContain('Ontario medium-lawn range');
+    expect(markup).not.toContain('$45-$65');
+    expect(markup).not.toContain('$1,170-$1,690');
   });
+});
 
-  it('avoids silent claims and keeps zero-emissions language qualified', () => {
+describe('HomePage mower technology section', () => {
+  it('renders the mower technology section between pricing and services with the cleaned asset copy', () => {
+    const markup = renderHomePage();
+    const comparisonIndex = markup.indexOf('Save with Autoscape');
+    const mowersIndex = markup.indexOf('Meet our lawnmowers');
+    const servicesIndex = markup.indexOf('Maintenance designed for premium residential properties');
+
+    expect(mowersIndex).toBeGreaterThan(comparisonIndex);
+    expect(mowersIndex).toBeLessThan(servicesIndex);
+    expect(markup).toContain('data-home-mowers-section="true"');
+    expect(markup).toContain('data-home-mowers-points="true"');
+    expect(markup).toContain('data-home-mowers-artwork="true"');
+    expect(markup).toContain('Centimetre precision');
+    expect(markup).toContain('5 sensor types');
+    expect(markup).toContain('Tested rigorously');
+    expect(markup).toContain('Built-in safety features');
+    expect(markup).toContain(
+      'Autoscape mowers combine repeatable route execution, property-aware sensing, and disciplined coverage to deliver a consistent premium cut week after week.'
+    );
+    expect(markup).toContain('/images/home/mower-technology-transparent.png');
+    expect(markup).toContain('Autoscape autonomous lawnmower');
+    expect(markup).not.toContain('data-home-mowers-image-panel=');
+    expect(markup).not.toContain('Technology');
+    expect(markup).not.toContain('Low-noise electric operation');
+    expect(markup).not.toContain('sm:grid-cols-[3rem_minmax(0,1fr)]');
+  });
+});
+
+describe('HomePage streamlined content', () => {
+  it('removes the retired marketing sections from the homepage', () => {
     const markup = renderHomePage();
 
-    expect(markup.toLowerCase()).not.toContain('silent');
-    expect(markup.match(/Zero emissions/g) ?? []).toHaveLength(1);
+    expect(markup).not.toContain('Why Electric');
+    expect(markup).not.toContain('How It Works');
+    expect(markup).not.toContain('Why Autoscape');
+    expect(markup).not.toContain('Testimonials');
   });
 });

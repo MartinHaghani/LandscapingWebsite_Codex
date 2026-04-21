@@ -27,7 +27,7 @@ describe('quoteStaticPreview', () => {
         ],
         rawStrokePoints: null
       }
-    ]);
+    ], 'polygon-2');
 
     expect(featureCollection.features).toHaveLength(2);
     expect(featureCollection.features[0]?.properties).toMatchObject({
@@ -36,7 +36,11 @@ describe('quoteStaticPreview', () => {
     });
     expect(featureCollection.features[1]?.properties).toMatchObject({
       polygonId: 'polygon-2',
-      polygonKind: 'obstacle'
+      polygonKind: 'obstacle',
+      selected: true
+    });
+    expect(featureCollection.features[0]?.properties).toMatchObject({
+      selected: false
     });
   });
 

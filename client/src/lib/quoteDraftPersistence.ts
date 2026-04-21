@@ -3,8 +3,7 @@ import type {
   BillingMode,
   LngLat,
   PolygonEditorState,
-  PolygonKind,
-  ServiceFrequency
+  PolygonKind
 } from '../types';
 
 export type QuoteDraftUnitMode = 'metric' | 'imperial';
@@ -17,7 +16,6 @@ export interface QuoteDraftPersistedState {
   center: LngLat;
   currentStep: QuoteDraftStep;
   polygonHistory: PolygonHistoryState;
-  serviceFrequency: ServiceFrequency;
   billingMode: BillingMode;
   distanceToNearestStationKm: number;
   unitMode: QuoteDraftUnitMode;
@@ -135,7 +133,11 @@ const isPersistedState = (value: unknown): value is QuoteDraftPersistedState => 
     return false;
   }
 
-  if (!(value.serviceFrequency === 'weekly' || value.serviceFrequency === 'biweekly')) {
+  if (
+    value.serviceFrequency !== undefined &&
+    value.serviceFrequency !== 'weekly' &&
+    value.serviceFrequency !== 'biweekly'
+  ) {
     return false;
   }
 
@@ -179,7 +181,9 @@ export const loadQuoteDraftState = (storage: Storage): QuoteDraftPersistedState 
     const state = parsed.state as QuoteDraftPersistedState & {
       billingMode?: unknown;
       distanceToNearestStationKm?: unknown;
+      serviceFrequency?: unknown;
     };
+    const { serviceFrequency: _legacyServiceFrequency, ...stateWithoutLegacyFrequency } = state;
 
     const billingMode =
       state.billingMode === 'per_session' || state.billingMode === 'seasonal'
@@ -193,7 +197,7 @@ export const loadQuoteDraftState = (storage: Storage): QuoteDraftPersistedState 
         : 0;
 
     return {
-      ...state,
+      ...stateWithoutLegacyFrequency,
       billingMode,
       distanceToNearestStationKm
     };

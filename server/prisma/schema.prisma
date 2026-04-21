@@ -33,9 +33,18 @@ enum CustomerStatus {
   rejected
 }
 
+enum ApprovedQuoteEmailTriggerSource {
+  approval
+  manual_resend
+}
+
+enum ApprovedQuoteEmailDeliveryStatus {
+  sent
+  failed
+}
+
 enum ServiceFrequency {
   weekly
-  biweekly
 }
 
 enum BillingMode {
@@ -144,8 +153,8 @@ model Quote {
   pricingVersion      String                @map("pricing_version") @db.VarChar(40)
   currency            String                @default("CAD") @db.VarChar(8)
   serviceFrequency    ServiceFrequency      @default(weekly) @map("service_frequency")
-  sessionsMin         Int                   @default(26) @map("sessions_min")
-  sessionsMax         Int                   @default(26) @map("sessions_max")
+  sessionsMin         Int                   @default(20) @map("sessions_min")
+  sessionsMax         Int                   @default(20) @map("sessions_max")
   perSessionTotal     Decimal               @map("per_session_total") @db.Decimal(14, 2)
   seasonalTotalMin    Decimal               @map("seasonal_total_min") @db.Decimal(14, 2)
   seasonalTotalMax    Decimal               @map("seasonal_total_max") @db.Decimal(14, 2)
@@ -170,12 +179,32 @@ model Quote {
   versions            QuoteVersion[]
   notes               QuoteNote[]
   touches             AttributionTouch[]
+  approvedQuoteEmailDeliveries ApprovedQuoteEmailDelivery[]
 
   @@index([submittedAt(sort: Desc)])
   @@index([status, submittedAt(sort: Desc)])
   @@index([createdAt(sort: Desc)])
   @@index([authUserId, createdAt(sort: Desc)])
   @@map("quotes")
+}
+
+model ApprovedQuoteEmailDelivery {
+  id                  String                           @id @default(cuid())
+  quoteId             String                           @map("quote_id")
+  approvedVersionNumber Int                            @map("approved_version_number")
+  recipientEmail      String                           @map("recipient_email") @db.VarChar(160)
+  triggerSource       ApprovedQuoteEmailTriggerSource  @map("trigger_source")
+  deliveryStatus      ApprovedQuoteEmailDeliveryStatus @map("delivery_status")
+  provider            String                           @db.VarChar(40)
+  providerMessageId   String?                          @map("provider_message_id") @db.VarChar(191)
+  errorMessage        String?                          @map("error_message")
+  publicPreviewToken  String                           @unique @map("public_preview_token") @db.VarChar(120)
+  createdAt           DateTime                         @default(now()) @map("created_at")
+  quote               Quote                            @relation(fields: [quoteId], references: [id], onDelete: Cascade)
+
+  @@index([quoteId, createdAt(sort: Desc)])
+  @@index([publicPreviewToken])
+  @@map("approved_quote_email_deliveries")
 }
 
 model QuoteVersion {
@@ -191,8 +220,8 @@ model QuoteVersion {
   perimeterM          Decimal                @map("perimeter_m") @db.Decimal(14, 2)
   recommendedPlan     String                 @map("recommended_plan") @db.VarChar(120)
   serviceFrequency    ServiceFrequency       @default(weekly) @map("service_frequency")
-  sessionsMin         Int                    @default(26) @map("sessions_min")
-  sessionsMax         Int                    @default(26) @map("sessions_max")
+  sessionsMin         Int                    @default(20) @map("sessions_min")
+  sessionsMax         Int                    @default(20) @map("sessions_max")
   perSessionTotal     Decimal                @map("per_session_total") @db.Decimal(14, 2)
   seasonalTotalMin    Decimal                @map("seasonal_total_min") @db.Decimal(14, 2)
   seasonalTotalMax    Decimal                @map("seasonal_total_max") @db.Decimal(14, 2)

@@ -1,8 +1,8 @@
 import { useEffect, useMemo, useRef, useState, type FormEvent, type KeyboardEvent } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { QuoteDoneButton } from '../components/quote/QuoteDoneButton';
 import { QuoteGuideModal } from '../components/quote/QuoteGuideModal';
 import { QuoteMap } from '../components/quote/QuoteMap';
+import { QuoteMapActionCluster } from '../components/quote/QuoteMapActionCluster';
 import { QuoteProgressRail } from '../components/quote/QuoteProgressRail';
 import { Badge } from '../components/ui/Badge';
 import { Button } from '../components/ui/Button';
@@ -48,7 +48,6 @@ import type {
   OutOfServiceAreaRouteState,
   PolygonEditorState,
   PolygonKind,
-  ServiceFrequency,
   SelectionTarget
 } from '../types';
 
@@ -85,7 +84,6 @@ export const InstantQuotePage = () => {
   const navigate = useNavigate();
   const polygonCounterRef = useRef(0);
   const mapStepRef = useRef<HTMLDivElement | null>(null);
-  const restoredFromStorageRef = useRef(false);
   const guideRevealTimeoutRef = useRef<number | null>(null);
 
   const [addressInput, setAddressInput] = useState('');
@@ -103,7 +101,6 @@ export const InstantQuotePage = () => {
   const [clearAllConfirmation, setClearAllConfirmation] = useState(false);
   const [selection, setSelection] = useState<SelectionTarget>({ kind: 'none' });
   const [unitMode, setUnitMode] = useState<UnitMode>('metric');
-  const [serviceFrequency, setServiceFrequency] = useState<ServiceFrequency>('weekly');
   const [billingMode, setBillingMode] = useState<BillingMode>('seasonal');
   const [distanceToNearestStationKm, setDistanceToNearestStationKm] = useState(0);
   const [statusMessage, setStatusMessage] = useState<{
@@ -113,6 +110,7 @@ export const InstantQuotePage = () => {
   const [quoteGuideSessionState, setQuoteGuideSessionState] = useState(
     createQuoteGuideSessionState
   );
+  const [draftHydrated, setDraftHydrated] = useState(false);
   const [quoteGuideWaitingForMapReady, setQuoteGuideWaitingForMapReady] = useState(false);
   const [quoteGuideVisible, setQuoteGuideVisible] = useState(false);
   const [quoteGuideActiveStepIndex, setQuoteGuideActiveStepIndex] = useState(0);
@@ -176,6 +174,20 @@ export const InstantQuotePage = () => {
     setQuoteGuideVisible(false);
   };
 
+  const completeQuoteGuide = () => {
+    clearQuoteGuideRevealTimer();
+    setQuoteGuideWaitingForMapReady(false);
+    setQuoteGuideVisible(false);
+    setQuoteGuideActiveStepIndex(0);
+  };
+
+  const openQuoteGuideManually = () => {
+    clearQuoteGuideRevealTimer();
+    setQuoteGuideActiveStepIndex(0);
+    setQuoteGuideWaitingForMapReady(false);
+    setQuoteGuideVisible(true);
+  };
+
   useEffect(() => {
     const trimmed = addressInput.trim();
 
@@ -233,13 +245,13 @@ export const InstantQuotePage = () => {
 
   useEffect(() => {
     if (typeof window === 'undefined') {
-      restoredFromStorageRef.current = true;
+      setDraftHydrated(true);
       return;
     }
 
     const restoredState = loadQuoteDraftState(window.localStorage);
     if (!restoredState) {
-      restoredFromStorageRef.current = true;
+      setDraftHydrated(true);
       return;
     }
 
@@ -249,13 +261,12 @@ export const InstantQuotePage = () => {
     setCenter(restoredState.center);
     setCurrentStep(restoredState.currentStep);
     setPolygonHistory(restoredState.polygonHistory);
-    setServiceFrequency(restoredState.serviceFrequency);
     setBillingMode(restoredState.billingMode);
     setDistanceToNearestStationKm(restoredState.distanceToNearestStationKm);
     setUnitMode(restoredState.unitMode);
     setDrawMode(null);
     setSelection({ kind: 'none' });
-    restoredFromStorageRef.current = true;
+    setDraftHydrated(true);
     setStatusMessage({
       type: 'info',
       text: 'Restored your saved quote draft.'
@@ -287,7 +298,7 @@ export const InstantQuotePage = () => {
   }, [quoteGuideVisible]);
 
   useEffect(() => {
-    if (!restoredFromStorageRef.current || typeof window === 'undefined') {
+    if (!draftHydrated || typeof window === 'undefined') {
       return;
     }
 
@@ -298,7 +309,6 @@ export const InstantQuotePage = () => {
       center,
       currentStep,
       polygonHistory,
-      serviceFrequency,
       billingMode,
       distanceToNearestStationKm,
       unitMode
@@ -310,9 +320,9 @@ export const InstantQuotePage = () => {
     center,
     currentStep,
     polygonHistory,
-    serviceFrequency,
     billingMode,
     distanceToNearestStationKm,
+    draftHydrated,
     unitMode
   ]);
 
@@ -523,7 +533,6 @@ export const InstantQuotePage = () => {
     setClearAllConfirmation(false);
     setSelection({ kind: 'none' });
     setUnitMode('metric');
-    setServiceFrequency('weekly');
     setBillingMode('seasonal');
     setDistanceToNearestStationKm(0);
     polygonCounterRef.current = 0;
@@ -733,7 +742,6 @@ export const InstantQuotePage = () => {
       center,
       currentStep: 'map',
       polygonHistory,
-      serviceFrequency,
       billingMode,
       distanceToNearestStationKm,
       unitMode
@@ -925,6 +933,7 @@ export const InstantQuotePage = () => {
                   <QuoteGuideModal
                     activeStepIndex={quoteGuideActiveStepIndex}
                     onClose={dismissQuoteGuide}
+                    onDone={completeQuoteGuide}
                     onPrevious={handleQuoteGuidePrevious}
                     onNext={handleQuoteGuideNext}
                   />
@@ -954,9 +963,10 @@ export const InstantQuotePage = () => {
                 </div>
 
                 <div className="absolute right-3 top-3 z-20">
-                  <QuoteDoneButton
-                    onClick={handleContinueToReview}
-                    disabled={!canContinueToReview}
+                  <QuoteMapActionCluster
+                    onGuideClick={openQuoteGuideManually}
+                    onDoneClick={handleContinueToReview}
+                    doneDisabled={!canContinueToReview}
                   />
                 </div>
 

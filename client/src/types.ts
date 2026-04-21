@@ -1,5 +1,5 @@
 export type LngLat = [number, number];
-export type ServiceFrequency = 'weekly' | 'biweekly';
+export type ServiceFrequency = 'weekly';
 export type BillingMode = 'seasonal' | 'per_session';
 
 export interface MapboxSuggestion {
@@ -102,8 +102,12 @@ export interface QuoteLookupResponse {
   billingMode?: BillingMode;
   quoteTotal: number;
   status: string;
+  customerStatus?: string;
   contactPending: boolean;
   submittedAt: string | null;
+  verifiedAt?: string | null;
+  paymentPageUrl?: string | null;
+  approvedQuotePreviewImageUrl?: string | null;
 }
 
 export interface ContactPayload {

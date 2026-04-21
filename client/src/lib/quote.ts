@@ -11,14 +11,11 @@ export const quotePricing = {
   areaRate: 0.05,
   perimeterRate: 0.1,
   distanceRate: 1,
-  minimumPerSessionPrice: 50,
+  minimumPerSessionPrice: 45,
   defaultSeasonalDiscountRate: 0.2
 } as const;
 
-const SESSION_WINDOWS: Record<ServiceFrequency, { min: number; max: number }> = {
-  weekly: { min: 26, max: 26 },
-  biweekly: { min: 14, max: 14 }
-};
+const WEEKLY_SESSION_WINDOW = { min: 20, max: 20 } as const;
 
 export const getRecommendedPlan = (areaM2: number) => {
   if (areaM2 < 450) return 'Starter Autonomy Plan';
@@ -26,8 +23,8 @@ export const getRecommendedPlan = (areaM2: number) => {
   return 'Estate Coverage Plan';
 };
 
-export const getSessionWindow = (serviceFrequency: ServiceFrequency) =>
-  SESSION_WINDOWS[serviceFrequency] ?? SESSION_WINDOWS.weekly;
+export const getSessionWindow = (_serviceFrequency: ServiceFrequency = 'weekly') =>
+  WEEKLY_SESSION_WINDOW;
 
 export const getQuoteTotal = (
   metrics: Pick<QuoteMetrics, 'areaM2' | 'perimeterM'>,
@@ -45,7 +42,10 @@ export const getQuoteTotal = (
   return roundMoney(Math.max(subtotal, quotePricing.minimumPerSessionPrice));
 };
 
-export const getSeasonalTotalRange = (perSessionTotal: number, serviceFrequency: ServiceFrequency) => {
+export const getSeasonalTotalRange = (
+  perSessionTotal: number,
+  serviceFrequency: ServiceFrequency = 'weekly'
+) => {
   const sessions = getSessionWindow(serviceFrequency);
   const normalizedPerSessionTotal = Math.max(0, roundMoney(perSessionTotal));
   const fullSeasonTotal = roundMoney(normalizedPerSessionTotal * sessions.max);
@@ -60,7 +60,7 @@ export const getSeasonalTotalRange = (perSessionTotal: number, serviceFrequency:
 
 export const getSeasonalPricing = (
   perSessionTotal: number,
-  serviceFrequency: ServiceFrequency,
+  serviceFrequency: ServiceFrequency = 'weekly',
   seasonalDiscountRate = quotePricing.defaultSeasonalDiscountRate
 ) => {
   const sessionWindow = getSessionWindow(serviceFrequency);

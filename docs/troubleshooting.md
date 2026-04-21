@@ -131,3 +131,24 @@ Current expected behavior:
 - If obstacles fully remove service area, submit is blocked.
 
 If behavior differs from above, verify that the running frontend process is loading the latest source/bundle.
+
+## 8) Quote Submit Shows "Unable to Reach the API"
+
+### Symptom
+- Quote submit on `/instant-quote/summary` does not advance.
+- The page reports it cannot reach the API, or older builds show a generic `Quote request failed.`
+
+### Root Cause
+- The frontend posts draft quotes to `http://localhost:4000` by default.
+- The API server is not running, or the frontend is on a different local origin than the API allows.
+
+### Verify
+```bash
+curl -sS http://localhost:4000/api/health
+lsof -nP -iTCP:4000 -sTCP:LISTEN
+```
+
+### Fix
+1. Start the API with `npm --prefix server run dev`.
+2. Confirm the public app points to the same API URL in `client/.env`.
+3. If Vite moved to a different loopback port, restart the frontend after updating env if needed. The API now reflects loopback origins across arbitrary local ports.

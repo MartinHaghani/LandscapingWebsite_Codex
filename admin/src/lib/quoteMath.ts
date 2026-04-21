@@ -1,4 +1,4 @@
-export type ServiceFrequency = 'weekly' | 'biweekly';
+export type ServiceFrequency = 'weekly';
 
 const toFiniteNumber = (value: number, fallback = 0) =>
   Number.isFinite(value) ? value : fallback;
@@ -9,10 +9,7 @@ const PERIMETER_RATE = 0.1;
 const DISTANCE_RATE = 1;
 const MINIMUM_PER_SESSION = 50;
 
-const SESSION_WINDOWS: Record<ServiceFrequency, { min: number; max: number }> = {
-  weekly: { min: 26, max: 26 },
-  biweekly: { min: 14, max: 14 }
-};
+const WEEKLY_SESSION_WINDOW = { min: 20, max: 20 } as const;
 
 export const getRecommendedPlan = (areaM2: number) => {
   if (areaM2 < 450) return 'Starter Autonomy Plan';
@@ -36,8 +33,8 @@ export const getCalculatedPerSession = (
   return Number(Math.max(subtotal, MINIMUM_PER_SESSION).toFixed(2));
 };
 
-export const getSessionWindow = (serviceFrequency: ServiceFrequency) =>
-  SESSION_WINDOWS[serviceFrequency] ?? SESSION_WINDOWS.weekly;
+export const getSessionWindow = (_serviceFrequency: ServiceFrequency = 'weekly') =>
+  WEEKLY_SESSION_WINDOW;
 
 export const getSeasonalTotalRange = (perSessionTotal: number, serviceFrequency: ServiceFrequency) => {
   const sessions = getSessionWindow(serviceFrequency);

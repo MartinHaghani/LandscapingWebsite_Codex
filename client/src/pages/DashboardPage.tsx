@@ -160,7 +160,7 @@ export const DashboardPage = () => {
 
                     return (
                       <p className="mt-1 text-sm text-copy-muted">
-                        Status: {formatStatus(quote.status)} · Per session ${perSessionTotal.toFixed(2)} · Seasonal $
+                        Status: {formatStatus(quote.status)} · Per visit ${perSessionTotal.toFixed(2)} · Seasonal $
                         {seasonalDiscountedTotal.toFixed(2)}
                       </p>
                     );

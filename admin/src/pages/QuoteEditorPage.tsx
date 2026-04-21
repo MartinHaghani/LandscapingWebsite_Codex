@@ -37,6 +37,7 @@ const EMPTY_EDITOR_STATE: PolygonEditorState = {
   polygons: [],
   activePolygonId: null
 };
+const SERVICE_FREQUENCY = 'weekly' as const;
 
 const createPolygonId = () => {
   if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
@@ -117,6 +118,7 @@ export const QuoteEditorPage = ({ getToken, quoteId, onBack }: QuoteEditorPagePr
   const [loading, setLoading] = useState(true);
   const [savingVersion, setSavingVersion] = useState(false);
   const [submittingVersion, setSubmittingVersion] = useState(false);
+  const [resendingApprovedEmail, setResendingApprovedEmail] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [info, setInfo] = useState<string | null>(null);
   const [editor, setEditor] = useState<AdminQuoteEditorResponse | null>(null);
@@ -126,7 +128,6 @@ export const QuoteEditorPage = ({ getToken, quoteId, onBack }: QuoteEditorPagePr
   const [clearAllConfirmation, setClearAllConfirmation] = useState(false);
   const [unitMode, setUnitMode] = useState<'metric' | 'imperial'>('metric');
   const [center, setCenter] = useState<LngLat>([-79.51962, 43.844147]);
-  const [serviceFrequency, setServiceFrequency] = useState<'weekly' | 'biweekly'>('weekly');
   const [distanceToNearestStationKm, setDistanceToNearestStationKm] = useState(0);
   const [perSessionTotalText, setPerSessionTotalText] = useState('0');
   const [finalTotalText, setFinalTotalText] = useState('0');
@@ -143,16 +144,16 @@ export const QuoteEditorPage = ({ getToken, quoteId, onBack }: QuoteEditorPagePr
     [metrics.areaM2, metrics.perimeterM, distanceToNearestStationKm]
   );
   const calculatedSeasonalRange = useMemo(
-    () => getSeasonalTotalRange(calculatedPerSessionTotal, serviceFrequency),
-    [calculatedPerSessionTotal, serviceFrequency]
+    () => getSeasonalTotalRange(calculatedPerSessionTotal, SERVICE_FREQUENCY),
+    [calculatedPerSessionTotal]
   );
   const actualPerSessionTotal = Number(perSessionTotalText);
   const actualSeasonalRange = useMemo(
     () =>
       Number.isFinite(actualPerSessionTotal)
-        ? getSeasonalTotalRange(actualPerSessionTotal, serviceFrequency)
-        : getSeasonalTotalRange(0, serviceFrequency),
-    [actualPerSessionTotal, serviceFrequency]
+        ? getSeasonalTotalRange(actualPerSessionTotal, SERVICE_FREQUENCY)
+        : getSeasonalTotalRange(0, SERVICE_FREQUENCY),
+    [actualPerSessionTotal]
   );
   const canUndo = polygonHistory.past.length > 0;
   const canRedo = polygonHistory.future.length > 0;
@@ -173,6 +174,11 @@ export const QuoteEditorPage = ({ getToken, quoteId, onBack }: QuoteEditorPagePr
     !submittingVersion &&
     selectedVersionNumber !== null &&
     (editor?.status === 'in_review' || editor?.status === 'submitted');
+  const canResendApprovedEmail =
+    !loading &&
+    !resendingApprovedEmail &&
+    editor?.status === 'verified' &&
+    editor?.customerStatus === 'awaiting_payment';
 
   const loadEditor = async (options?: { message?: string; keepSelectedVersion?: number | null }) => {
     setLoading(true);
@@ -194,7 +200,6 @@ export const QuoteEditorPage = ({ getToken, quoteId, onBack }: QuoteEditorPagePr
       setDrawMode(null);
       setClearAllConfirmation(false);
       setCenter(getCenterFromPolygons(initialState.polygons));
-      setServiceFrequency(response.editable.serviceFrequency);
       setDistanceToNearestStationKm(response.calculated.distanceToNearestStationKm ?? 0);
       setPerSessionTotalText(String(response.editable.perSessionTotal));
       setFinalTotalText(String(response.editable.finalTotal));
@@ -408,7 +413,7 @@ export const QuoteEditorPage = ({ getToken, quoteId, onBack }: QuoteEditorPagePr
     try {
       const response = await adminApi.createQuoteVersion(getToken, quoteId, {
         polygonSource: fromEditorState(editorState),
-        serviceFrequency,
+        serviceFrequency: SERVICE_FREQUENCY,
         perSessionTotal: Number(perSessionTotalText),
         finalTotal: Number(finalTotalText),
         overrideReason: overrideReason.trim() || undefined
@@ -434,15 +439,44 @@ export const QuoteEditorPage = ({ getToken, quoteId, onBack }: QuoteEditorPagePr
     setError(null);
     setInfo(null);
     try {
-      await adminApi.submitQuoteVersion(getToken, quoteId, selectedVersionNumber);
+      const response = await adminApi.submitQuoteVersion(getToken, quoteId, selectedVersionNumber);
+      const emailMessage =
+        response.approvedQuoteEmail?.deliveryStatus === 'failed'
+          ? ` Approved quote email failed: ${response.approvedQuoteEmail.errorMessage ?? 'unknown error'}.`
+          : ' Approved quote email sent.';
       await loadEditor({
-        message: `Submitted version ${selectedVersionNumber}. Quote is now Verified (Awaiting Payment).`,
+        message: `Submitted version ${selectedVersionNumber}. Quote is now Verified (Awaiting Payment).${emailMessage}`,
         keepSelectedVersion: selectedVersionNumber
       });
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Unable to submit selected version.');
     } finally {
       setSubmittingVersion(false);
+    }
+  };
+
+  const resendApprovedQuoteEmail = async () => {
+    if (!canResendApprovedEmail) {
+      return;
+    }
+
+    setResendingApprovedEmail(true);
+    setError(null);
+    setInfo(null);
+    try {
+      const response = await adminApi.resendApprovedQuoteEmail(getToken, quoteId);
+      const emailMessage =
+        response.approvedQuoteEmail?.deliveryStatus === 'failed'
+          ? `Resend recorded as failed: ${response.approvedQuoteEmail.errorMessage ?? 'unknown error'}.`
+          : 'Approved quote email resent.';
+      await loadEditor({
+        message: emailMessage,
+        keepSelectedVersion: selectedVersionNumber
+      });
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Unable to resend approved quote email.');
+    } finally {
+      setResendingApprovedEmail(false);
     }
   };
 
@@ -471,7 +505,6 @@ export const QuoteEditorPage = ({ getToken, quoteId, onBack }: QuoteEditorPagePr
     setDrawMode(null);
     setClearAllConfirmation(false);
     setCenter(getCenterFromPolygons(nextState.polygons));
-    setServiceFrequency(version.serviceFrequency);
     setPerSessionTotalText(String(version.perSessionTotal));
     setFinalTotalText(String(version.finalTotal));
     setOverrideReason(version.overrideReason ?? '');
@@ -702,32 +735,21 @@ export const QuoteEditorPage = ({ getToken, quoteId, onBack }: QuoteEditorPagePr
 
             <article className="metric-card">
               <p className="metric-label">Calculated Quote (Read-only)</p>
-              <p className="hint">Per-session: ${calculatedPerSessionTotal.toFixed(2)}</p>
+              <p className="hint">Per visit: ${calculatedPerSessionTotal.toFixed(2)}</p>
               <p className="hint">
                 Seasonal: ${calculatedSeasonalRange.seasonalTotalMin.toFixed(2)} - $
                 {calculatedSeasonalRange.seasonalTotalMax.toFixed(2)}
               </p>
               <p className="hint">
-                Sessions: {calculatedSeasonalRange.sessionsMin}-{calculatedSeasonalRange.sessionsMax}
+                Visits: {calculatedSeasonalRange.sessionsMax}, May to September
               </p>
             </article>
 
             <article className="metric-card">
               <p className="metric-label">Actual Quote (Editable)</p>
+              <p className="hint">Season schedule: weekly, 20 visits from May to September.</p>
               <label>
-                Service frequency
-                <select
-                  value={serviceFrequency}
-                  onChange={(event) =>
-                    setServiceFrequency(event.target.value === 'biweekly' ? 'biweekly' : 'weekly')
-                  }
-                >
-                  <option value="weekly">Weekly</option>
-                  <option value="biweekly">Bi-weekly</option>
-                </select>
-              </label>
-              <label>
-                Per-session total (CAD)
+                Per-visit total (CAD)
                 <input
                   value={perSessionTotalText}
                   onChange={(event) => setPerSessionTotalText(event.target.value)}
@@ -768,6 +790,53 @@ export const QuoteEditorPage = ({ getToken, quoteId, onBack }: QuoteEditorPagePr
             </article>
 
             <article className="metric-card">
+              <p className="metric-label">Approved Quote Email</p>
+              {editor?.approvedQuoteEmail ? (
+                <>
+                  <p className="hint">
+                    Last attempt: {editor.approvedQuoteEmail.status} via {editor.approvedQuoteEmail.provider} on{' '}
+                    {new Date(editor.approvedQuoteEmail.createdAt).toLocaleString()}
+                  </p>
+                  <p className="hint">Trigger: {editor.approvedQuoteEmail.triggerSource}</p>
+                  <p className="hint">Recipient: {editor.approvedQuoteEmail.recipientEmail ?? 'N/A'}</p>
+                  <p className="hint">
+                    Approved version: v{editor.approvedQuoteEmail.approvedVersionNumber}
+                  </p>
+                  {editor.approvedQuoteEmail.errorMessage ? (
+                    <p className="hint" style={{ color: 'var(--danger)' }}>
+                      Error: {editor.approvedQuoteEmail.errorMessage}
+                    </p>
+                  ) : null}
+                  <div style={{ display: 'flex', gap: '0.45rem', flexWrap: 'wrap', marginTop: '0.5rem' }}>
+                    {editor.approvedQuoteEmail.previewImageUrl ? (
+                      <a className="button" href={editor.approvedQuoteEmail.previewImageUrl} target="_blank" rel="noreferrer">
+                        Open Preview
+                      </a>
+                    ) : null}
+                    {editor.approvedQuoteEmail.paymentPageUrl ? (
+                      <a className="button" href={editor.approvedQuoteEmail.paymentPageUrl} target="_blank" rel="noreferrer">
+                        Open Payment Page
+                      </a>
+                    ) : null}
+                  </div>
+                </>
+              ) : (
+                <p className="hint">No approved quote email attempt has been recorded yet.</p>
+              )}
+
+              <div style={{ display: 'flex', gap: '0.45rem', flexWrap: 'wrap', marginTop: '0.75rem' }}>
+                <button
+                  type="button"
+                  className="button"
+                  onClick={resendApprovedQuoteEmail}
+                  disabled={!canResendApprovedEmail}
+                >
+                  {resendingApprovedEmail ? 'Resending...' : 'Resend Approved Email'}
+                </button>
+              </div>
+            </article>
+
+            <article className="metric-card">
               <p className="metric-label">Version History</p>
               <div style={{ display: 'grid', gap: '0.45rem', maxHeight: '280px', overflow: 'auto', marginTop: '0.55rem' }}>
                 {(editor?.versions ?? []).map((version) => (
@@ -787,7 +856,7 @@ export const QuoteEditorPage = ({ getToken, quoteId, onBack }: QuoteEditorPagePr
                       v{version.versionNumber} | {version.actorType} | {new Date(version.changedAt).toLocaleString()}
                     </p>
                     <p className="hint">
-                      Per-session: ${version.perSessionTotal.toFixed(2)} | Final: ${version.finalTotal.toFixed(2)}
+                      Per visit: ${version.perSessionTotal.toFixed(2)} | Final: ${version.finalTotal.toFixed(2)}
                     </p>
                     <div style={{ display: 'flex', gap: '0.4rem', marginTop: '0.35rem', flexWrap: 'wrap' }}>
                       <button

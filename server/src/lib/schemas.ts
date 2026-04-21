@@ -41,7 +41,7 @@ export const quotePayloadSchema = z.object({
   }),
   plan: z.string().trim().min(3).max(120),
   quoteTotal: z.number().nonnegative(),
-  serviceFrequency: z.enum(['weekly', 'biweekly']).optional(),
+  serviceFrequency: z.enum(['weekly']).optional(),
   billingMode: z.enum(['seasonal', 'per_session']).optional()
 });
 
@@ -81,7 +81,7 @@ export const quoteDraftPayloadSchema = z.object({
   ]),
   plan: z.string().trim().min(3).max(120),
   quoteTotal: z.number().nonnegative(),
-  serviceFrequency: z.enum(['weekly', 'biweekly']).optional(),
+  serviceFrequency: z.enum(['weekly']).optional(),
   billingMode: z.enum(['seasonal', 'per_session']).optional(),
   baseTotal: z.number().nonnegative().optional(),
   pricingVersion: z.string().trim().min(1).max(40).optional(),
@@ -137,7 +137,7 @@ export const adminQuoteRevisionSchema = z.object({
 
 export const adminQuoteVersionCreateSchema = z.object({
   polygonSource: polygonSourceSchema,
-  serviceFrequency: z.enum(['weekly', 'biweekly']),
+  serviceFrequency: z.enum(['weekly']).optional(),
   perSessionTotal: z.number().nonnegative(),
   finalTotal: z.number().nonnegative(),
   overrideReason: z.string().trim().max(2000).optional()

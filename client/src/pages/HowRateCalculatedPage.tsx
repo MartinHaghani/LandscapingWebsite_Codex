@@ -15,12 +15,12 @@ export const HowRateCalculatedPage = () => (
         <h2 className="text-xl font-semibold text-ink">Formula</h2>
         <p className="mt-3 text-sm text-copy-muted">
           <code className="rounded bg-surface-muted px-2 py-1 text-xs text-ink">
-            perSession = max(20 + 0.05*A + 0.10*P + 1.0*D, 50)
+            perVisit = max(20 + 0.05*A + 0.10*P + 1.0*D, 45)
           </code>
         </p>
         <p className="mt-2 text-sm text-copy-muted">
           <code className="rounded bg-surface-muted px-2 py-1 text-xs text-ink">
-            fullSeason = perSession * sessions, seasonalDiscounted = fullSeason * (1 - discountRate)
+            fullSeason = perVisit * visits, seasonalDiscounted = fullSeason * (1 - discountRate)
           </code>
         </p>
       </div>
@@ -50,9 +50,7 @@ export const HowRateCalculatedPage = () => (
           Pricing is computed in metric units internally. The instant quote page can still display area and perimeter
           in metric or imperial.
         </p>
-        <p>
-          Sessions per season by cadence: weekly uses 26 sessions and bi-weekly uses 14 sessions.
-        </p>
+        <p>Seasonal totals use 20 weekly visits from May to September.</p>
         <p>
           Service polygons define where work is performed. Obstacle polygons are subtracted from the service geometry.
           Only the final effective service footprint is billed.

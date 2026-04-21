@@ -2,12 +2,19 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import type { GeoJSONSource, LngLatBoundsLike, Map, Marker } from 'mapbox-gl';
 import { cn } from '../../lib/cn';
 import { buildQuotePreviewFeatureCollection, getQuotePreviewBounds } from '../../lib/quoteStaticPreview';
+import {
+  quotePolygonFillColorExpression,
+  quotePolygonFillOpacityExpression,
+  quotePolygonOutlineColorExpression,
+  quotePolygonOutlineWidthExpression
+} from '../../lib/polygonPresentation';
 import type { EditablePolygon, LngLat } from '../../types';
 
 interface QuoteStaticPreviewProps {
   token?: string;
   center: LngLat;
   polygons: EditablePolygon[];
+  selectedPolygonId?: string | null;
   address: string;
   className?: string;
 }
@@ -36,6 +43,7 @@ export const QuoteStaticPreview = ({
   token,
   center,
   polygons,
+  selectedPolygonId = null,
   address,
   className
 }: QuoteStaticPreviewProps) => {
@@ -46,8 +54,8 @@ export const QuoteStaticPreview = ({
   const [previewUnavailable, setPreviewUnavailable] = useState(false);
 
   const featureCollection = useMemo(
-    () => buildQuotePreviewFeatureCollection(polygons),
-    [polygons]
+    () => buildQuotePreviewFeatureCollection(polygons, selectedPolygonId),
+    [polygons, selectedPolygonId]
   );
   const previewBounds = useMemo(
     () => getQuotePreviewBounds(center, polygons),
@@ -135,14 +143,8 @@ export const QuoteStaticPreview = ({
             type: 'fill',
             source: PREVIEW_SOURCE_ID,
             paint: {
-              'fill-color': [
-                'match',
-                ['get', 'polygonKind'],
-                'obstacle',
-                '#DC2626',
-                '#329F5B'
-              ],
-              'fill-opacity': ['match', ['get', 'polygonKind'], 'obstacle', 0.34, 0.3]
+              'fill-color': quotePolygonFillColorExpression,
+              'fill-opacity': quotePolygonFillOpacityExpression
             }
           });
 
@@ -151,8 +153,8 @@ export const QuoteStaticPreview = ({
             type: 'line',
             source: PREVIEW_SOURCE_ID,
             paint: {
-              'line-color': ['match', ['get', 'polygonKind'], 'obstacle', '#FFE4E6', '#FFFFFF'],
-              'line-width': ['match', ['get', 'polygonKind'], 'obstacle', 2.4, 2.8],
+              'line-color': quotePolygonOutlineColorExpression,
+              'line-width': quotePolygonOutlineWidthExpression,
               'line-opacity': 0.95
             }
           });

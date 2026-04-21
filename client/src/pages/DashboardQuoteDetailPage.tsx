@@ -3,31 +3,17 @@ import { useEffect, useState } from 'react';
 import { Link, Navigate, useLocation, useParams } from 'react-router-dom';
 import { Button } from '../components/ui/Button';
 import { Card } from '../components/ui/Card';
+import { normalizeAccountQuote, type NormalizedAccountQuote } from '../lib/accountQuote';
 import { api, ApiError } from '../lib/api';
 import { hasRequiredPhone } from '../lib/accountProfile';
 import { formatNumber } from '../lib/geometry';
-import type { BillingMode, QuoteLookupResponse } from '../types';
-
-const toMoney = (value: number | undefined, fallback = 0) =>
-  typeof value === 'number' && Number.isFinite(value) ? value : fallback;
-
-const toRate = (value: number | undefined, fallback = 0.2) =>
-  typeof value === 'number' && Number.isFinite(value) ? Math.min(1, Math.max(0, value)) : fallback;
-
-interface DashboardQuoteResult extends QuoteLookupResponse {
-  billingMode: BillingMode;
-  fullSeasonTotal: number;
-  seasonalDiscountedTotal: number;
-  seasonalSavingsTotal: number;
-  seasonalDiscountRate: number;
-}
 
 export const DashboardQuoteDetailPage = () => {
   const { quoteId } = useParams();
   const location = useLocation();
   const { isLoaded, isSignedIn, getToken } = useAuth();
   const { user } = useUser();
-  const [quote, setQuote] = useState<DashboardQuoteResult | null>(null);
+  const [quote, setQuote] = useState<NormalizedAccountQuote | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const profileHasRequiredPhone = hasRequiredPhone(user);
@@ -70,28 +56,7 @@ export const DashboardQuoteDetailPage = () => {
         if (!mounted) {
           return;
         }
-        const perSessionTotal = toMoney(result.perSessionTotal);
-        const fullSeasonTotal = toMoney(result.fullSeasonTotal, toMoney(result.seasonalTotalMax));
-        const seasonalDiscountRate = toRate(result.seasonalDiscountRate);
-        const seasonalDiscountedTotal = toMoney(
-          result.seasonalDiscountedTotal,
-          Number((fullSeasonTotal * (1 - seasonalDiscountRate)).toFixed(2))
-        );
-        const seasonalSavingsTotal = toMoney(
-          result.seasonalSavingsTotal,
-          Number((fullSeasonTotal - seasonalDiscountedTotal).toFixed(2))
-        );
-        setQuote({
-          ...result,
-          billingMode: result.billingMode === 'per_session' ? 'per_session' : 'seasonal',
-          perSessionTotal,
-          seasonalTotalMin: toMoney(result.seasonalTotalMin, fullSeasonTotal),
-          seasonalTotalMax: toMoney(result.seasonalTotalMax, fullSeasonTotal),
-          fullSeasonTotal,
-          seasonalDiscountRate,
-          seasonalDiscountedTotal,
-          seasonalSavingsTotal
-        });
+        setQuote(normalizeAccountQuote(result));
       } catch (err) {
         if (!mounted) {
           return;
@@ -142,21 +107,27 @@ export const DashboardQuoteDetailPage = () => {
             <p>Address: {quote.address}</p>
             <p>Plan: {quote.plan}</p>
             <p>Status: {quote.status}</p>
+            <p>Customer status: {quote.customerStatus}</p>
             <p>Area: {formatNumber(quote.metrics.areaM2)} m²</p>
             <p>Perimeter: {formatNumber(quote.metrics.perimeterM)} m</p>
-            <p>
-              Cadence: {quote.serviceFrequency === 'weekly' ? 'Weekly' : 'Bi-weekly'} ({quote.sessionsMin}-{quote.sessionsMax}{' '}
-              sessions)
-            </p>
-            <p>Per-session estimate: ${quote.perSessionTotal.toFixed(2)}</p>
+            <p>Season schedule: Weekly, {quote.sessionsMax} visits from May to September</p>
+            <p>Per-visit estimate: ${quote.perSessionTotal.toFixed(2)}</p>
             <p>
               Seasonal discounted total: ${quote.seasonalDiscountedTotal.toFixed(2)} (
               {(quote.seasonalDiscountRate * 100).toFixed(0)}% off)
             </p>
             <p>Full season price: ${quote.fullSeasonTotal.toFixed(2)} · Savings: ${quote.seasonalSavingsTotal.toFixed(2)}</p>
-            <p>Billing mode: {quote.billingMode === 'seasonal' ? 'Seasonal (charged once)' : 'Per session'}</p>
+            <p>Billing mode: {quote.billingMode === 'seasonal' ? 'Seasonal (charged once)' : 'Per visit'}</p>
             <p>Created: {new Date(quote.createdAt).toLocaleString()}</p>
             {quote.submittedAt ? <p>Submitted: {new Date(quote.submittedAt).toLocaleString()}</p> : null}
+            {quote.verifiedAt ? <p>Approved: {new Date(quote.verifiedAt).toLocaleString()}</p> : null}
+            {quote.paymentPageUrl ? (
+              <div className="pt-2">
+                <Link to={quote.paymentPageUrl.replace(/^https?:\/\/[^/]+/, '')}>
+                  <Button>Open Payment Page</Button>
+                </Link>
+              </div>
+            ) : null}
           </div>
         ) : null}
       </Card>

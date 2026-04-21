@@ -1,7 +1,17 @@
 import { createHash } from 'node:crypto';
 import http from 'node:http';
+import { nanoid } from 'nanoid';
 import { createServiceAreaPayload, pointInGeometry, type ServiceAreaFeatureCollection } from './lib/serviceArea.js';
 import { loadBaseStationsFromEnv, loadServedRegionsFromEnv, type BaseStationConfig } from './lib/serviceAreaConfig.js';
+import {
+  buildApprovedQuoteEmail,
+  createResendApprovedQuoteEmailSender,
+  type ApprovedQuoteEmailSender
+} from './lib/approvedQuoteEmail.js';
+import {
+  buildApprovedQuotePreviewMapboxUrl,
+  getApprovedQuotePreviewMapboxAccessToken
+} from './lib/approvedQuotePreview.js';
 import {
   adminQuoteNoteSchema,
   adminQuoteRevisionSchema,
@@ -36,6 +46,17 @@ interface CreateServerOptions {
   };
   customerProfile?: {
     recordAddress?: (input: { userId: string; addressText: string }) => Promise<void>;
+  };
+  publicUrls?: {
+    appBaseUrl?: string;
+    apiBaseUrl?: string;
+  };
+  approvedQuoteEmail?: {
+    sender?: ApprovedQuoteEmailSender;
+  };
+  approvedQuotePreview?: {
+    mapboxAccessToken?: string;
+    fetchImpl?: typeof fetch;
   };
 }
 
@@ -370,6 +391,46 @@ const getPathMatch = (pathname: string, pattern: RegExp) => {
   return decodeURIComponent(match[1]);
 };
 
+const normalizeBaseUrl = (value?: string | null) => {
+  const trimmed = value?.trim();
+  if (!trimmed) {
+    return null;
+  }
+
+  return trimmed.replace(/\/+$/, '');
+};
+
+const getRequestOrigin = (req: http.IncomingMessage) => {
+  const forwardedProto = (req.headers['x-forwarded-proto'] as string | undefined)?.split(',')[0]?.trim();
+  const forwardedHost = (req.headers['x-forwarded-host'] as string | undefined)?.split(',')[0]?.trim();
+  const host = forwardedHost || req.headers.host;
+
+  if (!host) {
+    return null;
+  }
+
+  const protocol = forwardedProto || 'http';
+  return normalizeBaseUrl(`${protocol}://${host}`);
+};
+
+const getFirstConfiguredClientOrigin = (rawOrigins: string[]) =>
+  rawOrigins.map((value) => normalizeBaseUrl(value)).find((value): value is string => Boolean(value)) ?? null;
+
+const isLoopbackOrigin = (origin: string) => {
+  try {
+    const url = new URL(origin);
+    const hostname = url.hostname.replace(/^\[|\]$/g, '').toLowerCase();
+
+    if (url.protocol !== 'http:' && url.protocol !== 'https:') {
+      return false;
+    }
+
+    return hostname === 'localhost' || hostname === '127.0.0.1' || hostname === '::1';
+  } catch {
+    return false;
+  }
+};
+
 export const createServer = (options: CreateServerOptions = {}) => {
   const port = options.port ?? Number(process.env.PORT ?? 4000);
   const envOrigins = (process.env.CLIENT_ORIGIN ?? '')
@@ -385,6 +446,19 @@ export const createServer = (options: CreateServerOptions = {}) => {
   const customerIdentityResolver = options.authResolvers?.resolveCustomerIdentity ?? resolveCustomerIdentity;
   const adminIdentityResolver = options.authResolvers?.resolveAdminIdentity ?? resolveAdminIdentity;
   const customerAddressRecorder = options.customerProfile?.recordAddress ?? recordCustomerAddress;
+  const configuredAppBaseUrl =
+    normalizeBaseUrl(options.publicUrls?.appBaseUrl) ??
+    normalizeBaseUrl(process.env.PUBLIC_APP_BASE_URL) ??
+    getFirstConfiguredClientOrigin(envOrigins);
+  const configuredApiBaseUrl =
+    normalizeBaseUrl(options.publicUrls?.apiBaseUrl) ??
+    normalizeBaseUrl(process.env.PUBLIC_API_BASE_URL);
+  const approvedQuotePreviewMapboxAccessToken = getApprovedQuotePreviewMapboxAccessToken(
+    options.approvedQuotePreview?.mapboxAccessToken
+  );
+  const approvedQuotePreviewFetch = options.approvedQuotePreview?.fetchImpl ?? fetch;
+  const approvedQuoteEmailSender =
+    options.approvedQuoteEmail?.sender ?? createResendApprovedQuoteEmailSender();
   void dataStore.initialize().catch((error) => {
     console.error('Failed to initialize datastore base stations:', error);
   });
@@ -394,6 +468,36 @@ export const createServer = (options: CreateServerOptions = {}) => {
   const serviceAreaRequests = new Map<string, number[]>();
 
   let serviceAreaCache: ServiceAreaCacheEntry | null = null;
+
+  const resolveAppBaseUrl = (req: http.IncomingMessage) =>
+    configuredAppBaseUrl ??
+    normalizeBaseUrl(req.headers.origin as string | undefined) ??
+    getRequestOrigin(req);
+
+  const resolveApiBaseUrl = (req: http.IncomingMessage) =>
+    configuredApiBaseUrl ??
+    getRequestOrigin(req);
+
+  const buildPaymentPageUrl = (req: http.IncomingMessage, quoteId: string) => {
+    const appBaseUrl = resolveAppBaseUrl(req);
+    if (!appBaseUrl) {
+      return null;
+    }
+
+    return `${appBaseUrl}/dashboard/quotes/${encodeURIComponent(quoteId)}/payment`;
+  };
+
+  const buildPreviewImageBaseUrl = (req: http.IncomingMessage) => {
+    const apiBaseUrl = resolveApiBaseUrl(req);
+    if (!apiBaseUrl) {
+      return null;
+    }
+
+    return `${apiBaseUrl}/api/approved-quote-preview`;
+  };
+
+  const buildConfiguredPreviewImageBaseUrl = () =>
+    configuredApiBaseUrl ? `${configuredApiBaseUrl}/api/approved-quote-preview` : null;
 
   const getCachedServiceArea = () => {
     const now = nowMs();
@@ -405,12 +509,210 @@ export const createServer = (options: CreateServerOptions = {}) => {
     return serviceAreaCache;
   };
 
+  const deliverApprovedQuoteEmail = async (input: {
+    req: http.IncomingMessage;
+    quotePublicId: string;
+    approvedVersionNumber: number;
+    triggerSource: 'approval' | 'manual_resend';
+    actor: {
+      userId: string;
+      role: AdminIdentity['role'];
+      requestId?: string;
+      correlationId?: string;
+      ipHash?: string;
+      userAgent?: string;
+    };
+  }) => {
+    try {
+      const context = await dataStore.getApprovedQuoteEmailContext(input.quotePublicId);
+      const previewToken = nanoid(24);
+      const paymentPageUrl = buildPaymentPageUrl(input.req, input.quotePublicId);
+      const previewImageBaseUrl = buildConfiguredPreviewImageBaseUrl();
+      const previewImageUrl = previewImageBaseUrl
+        ? `${previewImageBaseUrl}/${encodeURIComponent(previewToken)}`
+        : null;
+      const recipientEmail = context.recipientEmail?.trim() || '';
+
+      if (!recipientEmail) {
+        const recorded = await dataStore.recordApprovedQuoteEmailDelivery({
+          quotePublicId: input.quotePublicId,
+          approvedVersionNumber: input.approvedVersionNumber,
+          recipientEmail,
+          triggerSource: input.triggerSource,
+          deliveryStatus: 'failed',
+          provider: 'resend',
+          errorMessage: 'Quote has no customer email on file.',
+          publicPreviewToken: previewToken,
+          actor: input.actor
+        });
+
+        return {
+          ...recorded,
+          previewImageUrl,
+          paymentPageUrl,
+          sent: false
+        };
+      }
+
+      if (!paymentPageUrl || !previewImageUrl) {
+        const recorded = await dataStore.recordApprovedQuoteEmailDelivery({
+          quotePublicId: input.quotePublicId,
+          approvedVersionNumber: input.approvedVersionNumber,
+          recipientEmail,
+          triggerSource: input.triggerSource,
+          deliveryStatus: 'failed',
+          provider: 'resend',
+          errorMessage: !previewImageUrl
+            ? 'PUBLIC_API_BASE_URL is required for approved quote email map images.'
+            : 'Public application URL is not configured for approved quote emails.',
+          publicPreviewToken: previewToken,
+          actor: input.actor
+        });
+
+        return {
+          ...recorded,
+          previewImageUrl,
+          paymentPageUrl,
+          sent: false
+        };
+      }
+
+      if (!approvedQuotePreviewMapboxAccessToken) {
+        const recorded = await dataStore.recordApprovedQuoteEmailDelivery({
+          quotePublicId: input.quotePublicId,
+          approvedVersionNumber: input.approvedVersionNumber,
+          recipientEmail,
+          triggerSource: input.triggerSource,
+          deliveryStatus: 'failed',
+          provider: 'resend',
+          errorMessage: 'MAPBOX_STATIC_ACCESS_TOKEN is required for approved quote email map images.',
+          publicPreviewToken: previewToken,
+          actor: input.actor
+        });
+
+        return {
+          ...recorded,
+          previewImageUrl,
+          paymentPageUrl,
+          sent: false
+        };
+      }
+
+      const previewContext = await dataStore.getApprovedQuotePreviewContext(
+        input.quotePublicId,
+        input.approvedVersionNumber
+      );
+      const previewMapboxUrl = previewContext
+        ? buildApprovedQuotePreviewMapboxUrl({
+            approvedGeometry: previewContext.approvedGeometry,
+            addedGeometry: previewContext.addedGeometry,
+            removedGeometry: previewContext.removedGeometry,
+            mapboxAccessToken: approvedQuotePreviewMapboxAccessToken
+          })
+        : null;
+
+      if (!previewContext || !previewMapboxUrl) {
+        const recorded = await dataStore.recordApprovedQuoteEmailDelivery({
+          quotePublicId: input.quotePublicId,
+          approvedVersionNumber: input.approvedVersionNumber,
+          recipientEmail,
+          triggerSource: input.triggerSource,
+          deliveryStatus: 'failed',
+          provider: 'resend',
+          errorMessage: !previewContext
+            ? 'Approved quote email map requires saved client and approved polygon sources.'
+            : 'Approved quote email map is too complex for Mapbox Static Images.',
+          publicPreviewToken: previewToken,
+          actor: input.actor
+        });
+
+        return {
+          ...recorded,
+          previewImageUrl,
+          paymentPageUrl,
+          sent: false
+        };
+      }
+
+      const template = buildApprovedQuoteEmail({
+        quoteId: context.publicQuoteId,
+        recipientName: context.recipientName,
+        addressText: context.addressText,
+        serviceFrequency: context.serviceFrequency,
+        sessionsMin: context.sessionsMin,
+        sessionsMax: context.sessionsMax,
+        perSessionTotal: context.perSessionTotal,
+        seasonalDiscountedTotal: context.seasonalDiscountedTotal,
+        fullSeasonTotal: context.fullSeasonTotal,
+        seasonalSavingsTotal: context.seasonalSavingsTotal,
+        seasonalDiscountRate: context.seasonalDiscountRate,
+        paymentPageUrl,
+        previewImageUrl
+      });
+
+      try {
+        const sent = await approvedQuoteEmailSender.send({
+          ...template,
+          to: recipientEmail
+        });
+
+        const recorded = await dataStore.recordApprovedQuoteEmailDelivery({
+          quotePublicId: input.quotePublicId,
+          approvedVersionNumber: input.approvedVersionNumber,
+          recipientEmail,
+          triggerSource: input.triggerSource,
+          deliveryStatus: 'sent',
+          provider: sent.provider,
+          providerMessageId: sent.messageId ?? undefined,
+          publicPreviewToken: previewToken,
+          actor: input.actor
+        });
+
+        return {
+          ...recorded,
+          previewImageUrl,
+          paymentPageUrl,
+          sent: true
+        };
+      } catch (error) {
+        const message = error instanceof Error ? error.message : 'Unable to send approved quote email.';
+        const recorded = await dataStore.recordApprovedQuoteEmailDelivery({
+          quotePublicId: input.quotePublicId,
+          approvedVersionNumber: input.approvedVersionNumber,
+          recipientEmail,
+          triggerSource: input.triggerSource,
+          deliveryStatus: 'failed',
+          provider: 'resend',
+          errorMessage: message,
+          publicPreviewToken: previewToken,
+          actor: input.actor
+        });
+
+        return {
+          ...recorded,
+          previewImageUrl,
+          paymentPageUrl,
+          sent: false
+        };
+      }
+    } catch (error) {
+      console.error('Approved quote email workflow failed after quote approval:', error);
+      return {
+        deliveryStatus: 'failed' as const,
+        errorMessage: error instanceof Error ? error.message : 'Unable to prepare approved quote email.',
+        sent: false,
+        previewImageUrl: null,
+        paymentPageUrl: null
+      };
+    }
+  };
+
   const applyCors = (req: http.IncomingMessage, res: http.ServerResponse) => {
     const origin = req.headers.origin;
 
-    if (origin && allowedOrigins.has(origin)) {
+    if (origin && (allowedOrigins.has(origin) || isLoopbackOrigin(origin))) {
       res.setHeader('Access-Control-Allow-Origin', origin);
-    } else if (allowedOrigins.size > 0) {
+    } else if (!origin && allowedOrigins.size > 0) {
       res.setHeader('Access-Control-Allow-Origin', [...allowedOrigins][0]);
     }
 
@@ -848,6 +1150,9 @@ export const createServer = (options: CreateServerOptions = {}) => {
         const quote = await dataStore.getQuoteByPublicId(accountQuoteId, {
           authUserId: customerIdentity.userId,
           isAdmin: false
+        }, {
+          paymentPageUrl: buildPaymentPageUrl(req, accountQuoteId),
+          previewImageBaseUrl: buildPreviewImageBaseUrl(req)
         });
         if (!quote) {
           json(res, 404, { error: 'Quote not found.' });
@@ -892,6 +1197,9 @@ export const createServer = (options: CreateServerOptions = {}) => {
         const quote = await dataStore.getQuoteByPublicId(quoteId, {
           authUserId: customerIdentity?.userId,
           isAdmin: Boolean(adminIdentity)
+        }, {
+          paymentPageUrl: buildPaymentPageUrl(req, quoteId),
+          previewImageBaseUrl: buildPreviewImageBaseUrl(req)
         });
         if (!quote) {
           json(res, 404, { error: 'Quote not found.' });
@@ -899,6 +1207,47 @@ export const createServer = (options: CreateServerOptions = {}) => {
         }
 
         json(res, 200, quote);
+        return;
+      } catch (error) {
+        const mapped = mapStoreError(error);
+        json(res, mapped.statusCode, { error: mapped.message });
+        return;
+      }
+    }
+
+    const approvedQuotePreviewToken = getPathMatch(pathname, /^\/api\/approved-quote-preview\/([^/]+)$/);
+    if (method === 'GET' && approvedQuotePreviewToken) {
+      try {
+        const preview = await dataStore.getApprovedQuotePreviewByToken(approvedQuotePreviewToken);
+        if (!preview) {
+          json(res, 404, { error: 'Approved quote preview not found.' });
+          return;
+        }
+
+        const mapboxUrl = buildApprovedQuotePreviewMapboxUrl({
+          approvedGeometry: preview.approvedGeometry,
+          addedGeometry: preview.addedGeometry,
+          removedGeometry: preview.removedGeometry,
+          mapboxAccessToken: approvedQuotePreviewMapboxAccessToken
+        });
+
+        if (!mapboxUrl) {
+          json(res, 502, { error: 'Approved quote preview map is not configured or is too complex to render.' });
+          return;
+        }
+
+        const upstream = await approvedQuotePreviewFetch(mapboxUrl);
+        if (!upstream.ok) {
+          json(res, 502, { error: 'Approved quote preview map could not be rendered.' });
+          return;
+        }
+
+        const body = Buffer.from(await upstream.arrayBuffer());
+        res.statusCode = 200;
+        res.setHeader('Content-Type', upstream.headers.get('content-type') ?? 'image/jpeg');
+        res.setHeader('Cache-Control', 'public, max-age=3600');
+        res.setHeader('Content-Length', body.byteLength);
+        res.end(body);
         return;
       } catch (error) {
         const mapped = mapStoreError(error);
@@ -974,7 +1323,7 @@ export const createServer = (options: CreateServerOptions = {}) => {
             cursor,
             q,
             status,
-            serviceFrequency: serviceFrequency === 'biweekly' ? 'biweekly' : serviceFrequency === 'weekly' ? 'weekly' : undefined,
+            serviceFrequency: serviceFrequency === 'weekly' ? 'weekly' : undefined,
             contactPending,
             createdFrom,
             createdTo,
@@ -998,7 +1347,8 @@ export const createServer = (options: CreateServerOptions = {}) => {
 
           const result = await dataStore.getQuoteEditor({
             quotePublicId: adminQuoteEditorId,
-            role: identity.role
+            role: identity.role,
+            paymentPageUrl: buildPaymentPageUrl(req, adminQuoteEditorId) ?? undefined
           });
 
           json(res, 200, result);
@@ -1305,7 +1655,7 @@ export const createServer = (options: CreateServerOptions = {}) => {
                 rawStrokePoints: polygon.rawStrokePoints ?? null
               }))
             },
-            serviceFrequency: parsed.data.serviceFrequency,
+            serviceFrequency: parsed.data.serviceFrequency ?? 'weekly',
             perSessionTotal: parsed.data.perSessionTotal,
             finalTotal: parsed.data.finalTotal,
             overrideReason: parsed.data.overrideReason,
@@ -1338,7 +1688,57 @@ export const createServer = (options: CreateServerOptions = {}) => {
             actor
           });
 
-          json(res, 200, result);
+          const approvedQuoteEmail = await deliverApprovedQuoteEmail({
+            req,
+            quotePublicId,
+            approvedVersionNumber: versionNumber,
+            triggerSource: 'approval',
+            actor
+          });
+
+          json(res, 200, {
+            ...result,
+            approvedQuoteEmail
+          });
+          return;
+        }
+
+        const adminQuoteApprovalEmailResendId = getPathMatch(
+          pathname,
+          /^\/api\/admin\/quotes\/([^/]+)\/approval-email\/resend$/
+        );
+        if (method === 'POST' && adminQuoteApprovalEmailResendId) {
+          if (!canMutateQuotes) {
+            json(res, 403, { error: 'Forbidden.' });
+            return;
+          }
+
+          const editor = await dataStore.getQuoteEditor({
+            quotePublicId: adminQuoteApprovalEmailResendId,
+            role: identity.role,
+            paymentPageUrl: buildPaymentPageUrl(req, adminQuoteApprovalEmailResendId) ?? undefined
+          });
+
+          if (editor.status !== 'verified' || editor.customerStatus !== 'awaiting_payment') {
+            json(res, 409, { error: 'Approved quote email can only be resent for verified quotes awaiting payment.' });
+            return;
+          }
+
+          const latestDelivery = await dataStore.getLatestApprovedQuoteEmailDelivery(adminQuoteApprovalEmailResendId);
+          const approvedVersionNumber = latestDelivery?.approvedVersionNumber ?? editor.versions[0]?.versionNumber ?? 1;
+          const approvedQuoteEmail = await deliverApprovedQuoteEmail({
+            req,
+            quotePublicId: adminQuoteApprovalEmailResendId,
+            approvedVersionNumber,
+            triggerSource: 'manual_resend',
+            actor
+          });
+
+          json(res, 200, {
+            ok: true,
+            quoteId: adminQuoteApprovalEmailResendId,
+            approvedQuoteEmail
+          });
           return;
         }
 

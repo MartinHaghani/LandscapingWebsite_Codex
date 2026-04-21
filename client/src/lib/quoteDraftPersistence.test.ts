@@ -77,7 +77,6 @@ describe('quoteDraftPersistence', () => {
         },
         future: []
       },
-      serviceFrequency: 'weekly' as const,
       billingMode: 'seasonal' as const,
       distanceToNearestStationKm: 2.345,
       unitMode: 'metric' as const
@@ -101,7 +100,6 @@ describe('quoteDraftPersistence', () => {
           center: [999, 1000],
           currentStep: 'map',
           polygonHistory: { past: [], present: {}, future: [] },
-          serviceFrequency: 'weekly',
           billingMode: 'seasonal',
           distanceToNearestStationKm: -2,
           unitMode: 'metric'
@@ -125,7 +123,7 @@ describe('quoteDraftPersistence', () => {
     expect(loadQuoteDraftState(storage)).toBeNull();
   });
 
-  it('loads v2 snapshots and applies billing defaults', () => {
+  it('loads v2 snapshots and applies billing defaults while dropping removed service-frequency state', () => {
     const storage = createStorageMock();
     storage.setItem(
       quoteDraftStorageKey,
@@ -143,7 +141,7 @@ describe('quoteDraftPersistence', () => {
             present: { polygons: [], activePolygonId: null },
             future: []
           },
-          serviceFrequency: 'weekly',
+          serviceFrequency: 'biweekly',
           unitMode: 'metric'
         }
       })
@@ -152,6 +150,7 @@ describe('quoteDraftPersistence', () => {
     const restored = loadQuoteDraftState(storage);
     expect(restored?.billingMode).toBe('seasonal');
     expect(restored?.distanceToNearestStationKm).toBe(0);
+    expect('serviceFrequency' in (restored ?? {})).toBe(false);
   });
 
   it('clears the stored snapshot', () => {
