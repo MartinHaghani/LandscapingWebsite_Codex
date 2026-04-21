@@ -112,7 +112,7 @@ Production-like hosting uses DigitalOcean App Platform with two isolated apps:
 
 Each environment has `public-web` (`client/` static site), `admin-web` (`admin/` static site), `api` (`server/` Node service), a pre-deploy Prisma migration job, and its own DigitalOcean Managed PostgreSQL database with PostGIS enabled. App spec templates live in `.do/app.staging.yaml` and `.do/app.production.yaml`; fill secrets only in DigitalOcean or in ignored private spec copies. See [`docs/deployment.md`](./docs/deployment.md) for setup, env vars, DNS, smoke tests, and rollback.
 
-Current live status: `autoscape-staging` is active in Toronto with `autoscape-staging-db` on PostgreSQL 16 and migrations applied. Staging uses self-managed GoDaddy CNAME records pointing at the DigitalOcean default ingress, and the custom domains are active. Authenticated customer/admin smoke tests passed on staging, including quote finalization, admin verification, and persistence after redeploy. Production has not been created because the documented approval-email resend and approved-quote preview endpoints are not present in the deployed API and production launch still needs confirmation.
+Current live status: `autoscape-staging` is active in Toronto with `autoscape-staging-db` on PostgreSQL 16 and migrations applied. Staging uses self-managed GoDaddy CNAME records pointing at the DigitalOcean default ingress, and the custom domains are active. Authenticated customer/admin smoke tests passed on staging, including quote finalization, admin verification, and persistence after redeploy. The deployed API now exposes the approved-quote preview route and admin approval-email resend route; production has not been created because the end-to-end approval email/resend smoke and launch confirmation still need to happen.
 
 ## Public Flow Highlights
 
@@ -209,8 +209,9 @@ Admin endpoints under `/api/admin/*` include:
   - `POST /api/admin/quotes/:id/versions`
   - `POST /api/admin/quotes/:id/versions/:versionNumber/submit`
 - approved quote delivery:
-  - current deployed behavior sets `status=verified` / `customer_status=awaiting_payment` and records `quote.verification_email_deferred`
-  - approval email resend and public approved-quote preview image endpoints are not currently exposed by the API and must be implemented or removed from launch scope before production
+  - selected version submit sets `status=verified` / `customer_status=awaiting_payment`, attempts a Resend transactional email, and records `approval_email_sent` or `approval_email_failed` without rolling back approval
+  - manual resend is available at `POST /api/admin/quotes/:id/approval-email/resend`
+  - public preview images are served from `GET /api/approved-quote-preview/:token`, which proxies a Mapbox satellite static image with approved, added, and removed service-area overlays
 - quote notes and legacy revision endpoint (`/api/admin/quotes/:id/revise`)
 - service-area requests, leads, contacts, audit logs
 - attribution summary (`/attribution/summary`)

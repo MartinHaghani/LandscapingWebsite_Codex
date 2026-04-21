@@ -13,8 +13,8 @@ Staging is created and active in DigitalOcean:
 - Database cluster: `autoscape-staging-db`, PostgreSQL 16, size `db-s-1vcpu-1gb`
 - Database/user names: `autoscape_staging`
 - Migration status: the `migrate` pre-deploy job applied all committed Prisma migrations successfully; redeploy `9d5878fa-20e7-4f60-a33d-d876f456cdd4` completed `ACTIVE` with no pending migrations.
-- Smoke-test status: authenticated staging smoke mostly passes. Custom domains, API health, public/admin SPA routes, CORS, service-area check, draft quote creation, customer Clerk claim/finalize/dashboard, admin Clerk health/list/editor/version submit, verified quote page, CSV export, audit logging, and persistence after redeploy passed for quote `Q-D6S4ZMR2`. Production remains blocked because the documented approval email resend endpoint and public approved-quote preview image endpoint are not present in the deployed API.
-- Production status: not created. Do not create or route production until the approval-email/preview API gap is resolved or explicitly removed from launch scope, production Clerk/Mapbox/Resend values are confirmed, and Martin confirms launch.
+- Smoke-test status: authenticated staging smoke mostly passes. Custom domains, API health, public/admin SPA routes, CORS, service-area check, draft quote creation, customer Clerk claim/finalize/dashboard, admin Clerk health/list/editor/version submit, verified quote page, CSV export, audit logging, and persistence after redeploy passed for quote `Q-D6S4ZMR2`. The deployed API now exposes the public approved-quote preview route and admin approval-email resend route; the remaining email gate is an authenticated end-to-end approval/resend smoke against a real verified quote.
+- Production status: not created. Do not create or route production until the approval email delivery/resend smoke passes on staging, production Clerk/Mapbox/Resend values are confirmed, and Martin confirms launch.
 
 Staging custom domains use self-managed DNS at GoDaddy:
 
@@ -42,10 +42,11 @@ Passed staging checks:
 - quote persistence after App Platform redeploy `9d5878fa-20e7-4f60-a33d-d876f456cdd4`
 - bundle scan for accidental `localhost`/loopback API origins
 
-Remaining staging blockers before production:
+Remaining staging validation before production:
 
-- `GET /api/approved-quote-preview/:token` returned `404` for a smoke token, and no matching route exists in the deployed API.
-- Authenticated `POST /api/admin/quotes/:id/approval-email/resend` returned `404`; the deployed API currently records `quote.verification_email_deferred` instead of sending/resending email.
+- `GET /api/approved-quote-preview/:token` is deployed. A fake token should return `{"error":"Approved quote preview not found."}` from the real route, while a valid delivery token should proxy a Mapbox static satellite image.
+- `POST /api/admin/quotes/:id/approval-email/resend` is deployed. Unauthenticated calls should return `401`; authenticated admin resend still needs to be smoke-tested against a verified quote.
+- `POST /api/admin/quotes/:id/versions/:versionNumber/submit` should record an approved-quote email delivery attempt and keep the quote verified if Resend, Mapbox, or public URL configuration fails.
 
 Staging environment variable audit, names only:
 
@@ -212,7 +213,7 @@ Mapbox:
 Resend:
 
 - Use a staging-safe API key/sender until production launch.
-- Before production launch, implement and smoke-test approved quote email delivery/resend plus `https://api-staging.autoscape.ca/api/approved-quote-preview/:token`, or explicitly remove that requirement from the launch checklist. The current deployed API records `quote.verification_email_deferred`.
+- Before production launch, smoke-test approved quote email delivery/resend plus `https://api-staging.autoscape.ca/api/approved-quote-preview/:token` with a real verified quote. Approval should remain successful even if email delivery fails, and the admin editor should show the latest delivery error plus manual resend.
 
 DNS:
 
@@ -242,8 +243,8 @@ Manual checks:
 - Clerk sign-in and required-phone gate work.
 - Dashboard quote list/detail loads for the owner.
 - Admin quote inbox/editor loads with Clerk bearer auth.
-- Admin version submit verifies the quote and records `quote.verification_email_deferred`.
-- Approval email resend and preview image URL are implemented and publicly reachable, or explicitly out of launch scope.
+- Admin version submit verifies the quote, sets the customer status to awaiting payment, and records an approved-quote email delivery attempt.
+- Approval email resend works for a verified quote and the preview image URL is publicly reachable without exposing the Mapbox token.
 - CSV/admin list endpoints work for allowed roles.
 - CORS allows only the configured public/admin origins.
 

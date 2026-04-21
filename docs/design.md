@@ -94,7 +94,7 @@ Implementation:
 - Each environment has isolated public/admin/API components and a separate managed Postgres/PostGIS database.
 - Prisma migrations run as a pre-deploy job so schema changes block rollout if they fail.
 - Secrets live in DigitalOcean environment variables, not committed app specs or `.env` files.
-- Live status on 2026-04-21 keeps this separation intact: staging is active with PostgreSQL 16/PostGIS and self-managed GoDaddy CNAMEs, and authenticated quote/admin smoke tests pass through admin verification plus redeploy persistence. Production is intentionally uncreated until approval-email resend/preview API coverage is resolved or removed from launch scope and launch is confirmed.
+- Live status on 2026-04-21 keeps this separation intact: staging is active with PostgreSQL 16/PostGIS and self-managed GoDaddy CNAMEs, authenticated quote/admin smoke tests pass through admin verification plus redeploy persistence, and the approved-quote preview/resend routes are deployed. Production is intentionally uncreated until real approval email/resend smoke testing passes and launch is confirmed.
 
 ## 8) Immutable Revision History
 
@@ -122,7 +122,8 @@ Transitions:
 - revision updates `customer_status` while remaining `in_review`
 - runtime finalize path moves `draft -> in_review` directly (while preserving enum compatibility for `submitted`)
 - selected version submit sets `status=verified`, `customer_status=awaiting_payment`
-- verified submit currently records `quote.verification_email_deferred`; approval email resend and public preview-image delivery are launch blockers until implemented and smoke-tested or explicitly removed from scope
+- verified submit attempts a payment-focused Resend email, records sent/failed delivery state for auditability, keeps approval successful on delivery failure, and exposes manual resend for verified quotes awaiting payment
+- approved quote map previews are tokenized public image URLs backed by server-proxied Mapbox satellite static imagery; they show approved service area, added-by-admin area, and removed-by-admin area using the quote-tool color family
 
 ## 10) Event-Oriented Audit Logging
 

@@ -121,7 +121,8 @@ Admin app (separate Vite frontend) supports:
   - client draft creates version number `1` (`actorType=client`) using `polygonSource.schemaVersion=2`
   - admin edits create new versions (`actorType=admin`)
   - selected version submit sets `status=verified`, `customer_status=awaiting_payment`
-  - deployed staging currently records `quote.verification_email_deferred`; approval email resend and public approved-quote preview endpoints are not exposed by the API yet
+  - verified approval attempts the payment-focused approved-quote email through Resend and records delivery state without rolling back approval on failure
+  - manual approval email resend is available for verified quotes, and the public preview endpoint serves the tokenized Mapbox satellite delta image used by the email/payment page
 - quote mutation endpoints are restricted to `OWNER`, `ADMIN`, and `REVIEWER` roles
 - quote notes
 - service-area request queue with heatmap + cluster map module and hotspot list
@@ -140,15 +141,17 @@ Admin app (separate Vite frontend) supports:
   - Staging uses the `staging` branch, auto-deploys to `staging.autoscape.ca`, `api-staging.autoscape.ca`, and `admin-staging.autoscape.ca`.
   - Production uses the `main` branch, deploys manually to `autoscape.ca`, `www.autoscape.ca`, `api.autoscape.ca`, and `admin.autoscape.ca`.
   - Each environment has `public-web` (`client/`), `admin-web` (`admin/`), `api` (`server/`), a Prisma pre-deploy migration job, and its own managed Postgres/PostGIS database.
-  - Live status on 2026-04-21: staging app `autoscape-staging` is active in `tor`, `autoscape-staging-db` is PostgreSQL 16 in `tor1`, and migrations have run. Staging custom domains use self-managed GoDaddy CNAME records and are active. Authenticated staging smoke tests passed for customer quote finalization, admin review/verification, and persistence after redeploy; production has not been created because approval-email resend/preview API coverage is still missing and launch has not been confirmed.
+  - Live status on 2026-04-21: staging app `autoscape-staging` is active in `tor`, `autoscape-staging-db` is PostgreSQL 16 in `tor1`, and migrations have run. Staging custom domains use self-managed GoDaddy CNAME records and are active. Authenticated staging smoke tests passed for customer quote finalization, admin review/verification, and persistence after redeploy; approved-quote preview/resend routes are deployed, but the real end-to-end approval email/resend smoke still needs to pass before production is created.
 - Persistence: Prisma + Postgres + PostGIS (`server/prisma/schema.prisma`)
-- Approved quote verification currently records a deferred email audit event. Resend delivery/resend and tokenized preview images remain a production blocker until implemented and smoke-tested or explicitly removed from launch scope.
+- Approved quote verification attempts Resend delivery, records sent/failed delivery rows and audit events, and keeps approval successful if email or preview preflight fails. Tokenized preview images use server-proxied Mapbox satellite static imagery with approved, added, and removed area overlays.
 - Migrations:
   - `server/prisma/migrations/20260304120000_admin_platform_v1/migration.sql`
   - `server/prisma/migrations/20260305103000_quote_session_ranges/migration.sql`
   - `server/prisma/migrations/20260314122000_admin_quote_editor_workflow/migration.sql`
   - `server/prisma/migrations/20260314180000_quote_auth_ownership/migration.sql`
   - `server/prisma/migrations/20260315160000_quote_pricing_v2/migration.sql`
+  - `server/prisma/migrations/20260415163000_weekly_only_service_frequency/migration.sql`
+  - `server/prisma/migrations/20260416130000_approved_quote_email_delivery/migration.sql`
 - Idempotency table stores request hash + exact response replay payload.
 - In-memory fallback store remains for local runs without `DATABASE_URL`.
 - Dev cutover script: `npm --prefix server run cutover:freehand-reset-dev-data`

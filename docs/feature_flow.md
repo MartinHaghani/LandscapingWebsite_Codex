@@ -60,7 +60,7 @@
 1. Codex/local work happens on feature branches and is verified locally before merge.
 2. Staging deploys automatically from the `staging` branch to the DigitalOcean `autoscape-staging` app.
 3. Current staging status on 2026-04-21: the app deployment and migration job are active, custom domains use self-managed GoDaddy CNAME records, and authenticated customer/admin quote smoke tests pass through admin verification plus persistence after redeploy.
-4. Staging smoke tests cover API health, public/admin SPA refreshes, quote creation, Clerk auth, admin review, CORS, and persistence after API redeploy. Production remains blocked until the approval-email resend and public approved-quote preview API gap is resolved or removed from launch scope.
+4. Staging smoke tests cover API health, public/admin SPA refreshes, quote creation, Clerk auth, admin review, CORS, and persistence after API redeploy. The approved-quote preview and resend routes are deployed; production remains blocked until a real authenticated approval email/resend smoke passes and launch is confirmed.
 5. Production deploys manually from `main` to the DigitalOcean `autoscape-production` app only after staging blockers are cleared and launch is confirmed.
 6. Schema migrations run through the App Platform `migrate` pre-deploy job before the API rollout in each environment.
 
@@ -220,7 +220,10 @@
 - save new version (`POST /api/admin/quotes/:id/versions`)
 - submit selected version (`POST /api/admin/quotes/:id/versions/:versionNumber/submit`)
   - sets `status=verified`, `customer_status=awaiting_payment`
-  - currently records `quote.verification_email_deferred`; Resend delivery/resend and public preview-image APIs are not exposed in the deployed API yet
+  - attempts the payment-focused approved-quote email through Resend and records `approval_email_sent` or `approval_email_failed` without rolling back approval
+  - creates a tokenized approved-quote preview URL backed by the saved client/admin polygon sources and Mapbox satellite static imagery
+- resend approved quote email (`POST /api/admin/quotes/:id/approval-email/resend`) for verified quotes awaiting payment
+- public approved-quote preview image (`GET /api/approved-quote-preview/:token`) proxies the Mapbox image without exposing the Mapbox token
 - legacy revise endpoint remains for backward compatibility
 - add internal note
 
