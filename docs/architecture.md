@@ -20,6 +20,7 @@ Primary domains:
 - Hosted runtime: DigitalOcean App Platform runs two isolated apps from the GitHub repo: staging from `staging` with auto-deploy and production from `main` with manual deploys.
 - Hosted components per environment: `public-web` static site from `client/`, `admin-web` static site from `admin/`, `api` Node service from `server/`, and a `migrate` pre-deploy job that runs `npm run prisma:migrate:deploy`.
 - Hosted domains: staging uses `staging.autoscape.ca`, `api-staging.autoscape.ca`, and `admin-staging.autoscape.ca`; production uses `autoscape.ca`, `www.autoscape.ca`, `api.autoscape.ca`, and `admin.autoscape.ca`.
+- Live hosted status on 2026-04-21: `autoscape-staging` is active in `tor` with `public-web`, `admin-web`, `api`, and `migrate`; its custom domains use self-managed GoDaddy CNAME records and are active. Authenticated staging smoke tests pass through customer quote finalization, admin verification, and persistence after redeploy. Production has not been created because approval-email resend/preview API coverage is still missing and launch has not been confirmed.
 - Local dev connectivity: public/admin frontends default to `VITE_API_BASE_URL=http://localhost:4000`; the API reflects loopback origins (`localhost`, `127.0.0.1`, `[::1]`) across arbitrary local ports to avoid Vite port drift breaking quote writes.
 - Public app routes: `client/src/App.tsx`
 - Services gallery: `client/src/pages/ServicesPage.tsx` + `client/src/components/service/ServiceIllustrations.tsx` (coverage-first entry page with five shared-style inline SVG service scenes)
@@ -37,11 +38,13 @@ Primary domains:
 - ORM: Prisma (`server/prisma/schema.prisma`)
 - DB: PostgreSQL + PostGIS
 - Hosted persistence: staging and production each use their own DigitalOcean Managed PostgreSQL database; production traffic must never rely on the local/dev in-memory fallback.
+- Live staging persistence on 2026-04-21: `autoscape-staging-db` runs PostgreSQL 16 in `tor1` with database/user `autoscape_staging`; PostGIS is enabled and the staged Prisma migrations have applied.
 - Migrations:
   - `server/prisma/migrations/20260304120000_admin_platform_v1/migration.sql`
   - `server/prisma/migrations/20260305103000_quote_session_ranges/migration.sql`
   - `server/prisma/migrations/20260314122000_admin_quote_editor_workflow/migration.sql`
   - `server/prisma/migrations/20260314180000_quote_auth_ownership/migration.sql`
+  - `server/prisma/migrations/20260315160000_quote_pricing_v2/migration.sql`
 
 Canonical tables:
 
@@ -70,7 +73,6 @@ Spatial storage:
 - `POST /api/quote/:quoteId/claim` (auth required)
 - `POST /api/quote/:quoteId/contact` (idempotent, auth required, optional notes payload only)
 - `GET /api/quote/:quoteId` (auth required, owner/admin only)
-- `GET /api/approved-quote-preview/:token` (tokenized public Mapbox Static Images proxy for approved-quote emails/pages)
 - client request wrapper converts network-level failures into a direct API reachability message so quote/contact flows do not fall back to a generic submit error
 
 ### Account
@@ -162,7 +164,6 @@ All admin endpoints are under `/api/admin/*` and return cursor pagination payloa
 - `GET /api/admin/quotes/:id/editor`
 - `POST /api/admin/quotes/:id/versions`
 - `POST /api/admin/quotes/:id/versions/:versionNumber/submit`
-- `POST /api/admin/quotes/:id/approval-email/resend`
 - `POST /api/admin/quotes/:id/notes`
 - `GET /api/admin/service-area-requests`
 - `GET /api/admin/service-area-requests/map`
@@ -232,10 +233,8 @@ Revisions:
 - Revise endpoint treats per-visit total as canonical and recomputes seasonal range fields.
 - Quote editor versions include `actor_type` (`client` or `admin`) + `version_number` + `changed_at`.
 - Version submit endpoint applies selected version and sets `status=verified` + `customer_status=awaiting_payment`.
-- Successful verification attempts a payment-focused Resend-backed approved-quote email and records the result in `approved_quote_email_deliveries`.
-- Email preview image URLs must be built from a public API origin (`PUBLIC_API_BASE_URL`) so inbox image proxies can fetch them.
-- Email preview maps require `MAPBOX_STATIC_ACCESS_TOKEN` and are rendered from saved client/admin `polygonSource` versions as approved, added, and removed service-area overlays.
-- Quote lookup responses now include `customerStatus`, `verifiedAt`, `paymentPageUrl`, and `approvedQuotePreviewImageUrl`.
+- Successful verification currently records `quote.verification_email_deferred`; approval email resend and public approved-quote preview image endpoints are not present in the deployed API.
+- Quote lookup responses include the verified status fields used by the customer dashboard; payment/preview URL fields are not exposed by the deployed API yet.
 
 Development cutover:
 

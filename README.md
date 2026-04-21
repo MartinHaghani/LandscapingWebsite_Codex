@@ -112,6 +112,8 @@ Production-like hosting uses DigitalOcean App Platform with two isolated apps:
 
 Each environment has `public-web` (`client/` static site), `admin-web` (`admin/` static site), `api` (`server/` Node service), a pre-deploy Prisma migration job, and its own DigitalOcean Managed PostgreSQL database with PostGIS enabled. App spec templates live in `.do/app.staging.yaml` and `.do/app.production.yaml`; fill secrets only in DigitalOcean or in ignored private spec copies. See [`docs/deployment.md`](./docs/deployment.md) for setup, env vars, DNS, smoke tests, and rollback.
 
+Current live status: `autoscape-staging` is active in Toronto with `autoscape-staging-db` on PostgreSQL 16 and migrations applied. Staging uses self-managed GoDaddy CNAME records pointing at the DigitalOcean default ingress, and the custom domains are active. Authenticated customer/admin smoke tests passed on staging, including quote finalization, admin verification, and persistence after redeploy. Production has not been created because the documented approval-email resend and approved-quote preview endpoints are not present in the deployed API and production launch still needs confirmation.
+
 ## Public Flow Highlights
 
 - `/services` starts with the Service Area map card.
@@ -206,14 +208,9 @@ Admin endpoints under `/api/admin/*` include:
   - `GET /api/admin/quotes/:id/editor`
   - `POST /api/admin/quotes/:id/versions`
   - `POST /api/admin/quotes/:id/versions/:versionNumber/submit`
-  - `POST /api/admin/quotes/:id/approval-email/resend`
 - approved quote delivery:
-  - approval now attempts a Resend-powered transactional email after `status=verified` / `customer_status=awaiting_payment`
-  - email subject is `Quote Approved, Payment Required`, with the payment CTA centered as the dominant action
-  - email attempts are persisted in `approved_quote_email_deliveries` with provider status, message ID/error, and a tokenized preview-image URL
-  - public preview images are served from `GET /api/approved-quote-preview/:token`; production email images require `PUBLIC_API_BASE_URL` to point at a publicly reachable API host, not localhost
-  - approved quote previews require `MAPBOX_STATIC_ACCESS_TOKEN` and proxy Mapbox Static Images with the quote-tool satellite style
-  - preview overlays are computed from exact saved client/admin `polygonSource` versions: approved area, added-by-admin area, and removed-by-admin area
+  - current deployed behavior sets `status=verified` / `customer_status=awaiting_payment` and records `quote.verification_email_deferred`
+  - approval email resend and public approved-quote preview image endpoints are not currently exposed by the API and must be implemented or removed from launch scope before production
 - quote notes and legacy revision endpoint (`/api/admin/quotes/:id/revise`)
 - service-area requests, leads, contacts, audit logs
 - attribution summary (`/attribution/summary`)

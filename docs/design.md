@@ -94,6 +94,7 @@ Implementation:
 - Each environment has isolated public/admin/API components and a separate managed Postgres/PostGIS database.
 - Prisma migrations run as a pre-deploy job so schema changes block rollout if they fail.
 - Secrets live in DigitalOcean environment variables, not committed app specs or `.env` files.
+- Live status on 2026-04-21 keeps this separation intact: staging is active with PostgreSQL 16/PostGIS and self-managed GoDaddy CNAMEs, and authenticated quote/admin smoke tests pass through admin verification plus redeploy persistence. Production is intentionally uncreated until approval-email resend/preview API coverage is resolved or removed from launch scope and launch is confirmed.
 
 ## 8) Immutable Revision History
 
@@ -121,8 +122,7 @@ Transitions:
 - revision updates `customer_status` while remaining `in_review`
 - runtime finalize path moves `draft -> in_review` directly (while preserving enum compatibility for `submitted`)
 - selected version submit sets `status=verified`, `customer_status=awaiting_payment`
-- verified submit now attempts a payment-focused Resend-backed approved-quote email with subject `Quote Approved, Payment Required`, a tokenized preview image, and no approval rollback when delivery fails
-- email preview images require a public `PUBLIC_API_BASE_URL` plus `MAPBOX_STATIC_ACCESS_TOKEN`; the image endpoint proxies a Mapbox satellite delta map using exact saved client/admin `polygonSource` versions
+- verified submit currently records `quote.verification_email_deferred`; approval email resend and public preview-image delivery are launch blockers until implemented and smoke-tested or explicitly removed from scope
 
 ## 10) Event-Oriented Audit Logging
 

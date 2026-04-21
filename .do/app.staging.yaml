@@ -177,15 +177,12 @@ jobs:
 domains:
   - domain: staging.autoscape.ca
     type: PRIMARY
-    zone: autoscape.ca
     minimum_tls_version: "1.2"
   - domain: api-staging.autoscape.ca
     type: ALIAS
-    zone: autoscape.ca
     minimum_tls_version: "1.2"
   - domain: admin-staging.autoscape.ca
     type: ALIAS
-    zone: autoscape.ca
     minimum_tls_version: "1.2"
 
 ingress:
