@@ -59,9 +59,10 @@
 
 1. Codex/local work happens on feature branches and is verified locally before merge.
 2. Staging deploys automatically from the `staging` branch to the DigitalOcean `autoscape-staging` app.
-3. Staging smoke tests cover API health, public/admin SPA refreshes, quote creation, Clerk auth, admin review, approved-quote preview images, CORS, and persistence after API redeploy.
-4. Production deploys manually from `main` to the DigitalOcean `autoscape-production` app only after staging passes.
-5. Schema migrations run through the App Platform `migrate` pre-deploy job before the API rollout in each environment.
+3. Current staging status on 2026-04-21: the app deployment and migration job are active, but custom domains are blocked on `autoscape.ca` DNS delegation, so browser/API smoke tests against `staging.autoscape.ca`, `api-staging.autoscape.ca`, and `admin-staging.autoscape.ca` are not complete.
+4. Staging smoke tests cover API health, public/admin SPA refreshes, quote creation, Clerk auth, admin review, approved-quote preview images, CORS, and persistence after API redeploy.
+5. Production deploys manually from `main` to the DigitalOcean `autoscape-production` app only after staging passes.
+6. Schema migrations run through the App Platform `migrate` pre-deploy job before the API rollout in each environment.
 
 ## Instant Quote: Draft + Finalize
 

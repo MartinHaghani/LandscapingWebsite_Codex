@@ -94,6 +94,7 @@ Implementation:
 - Each environment has isolated public/admin/API components and a separate managed Postgres/PostGIS database.
 - Prisma migrations run as a pre-deploy job so schema changes block rollout if they fail.
 - Secrets live in DigitalOcean environment variables, not committed app specs or `.env` files.
+- Live status on 2026-04-21 keeps this separation intact: staging is active with PostgreSQL 16/PostGIS and production is intentionally uncreated until DNS validation and smoke tests pass.
 
 ## 8) Immutable Revision History
 

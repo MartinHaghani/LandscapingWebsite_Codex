@@ -20,6 +20,7 @@ Primary domains:
 - Hosted runtime: DigitalOcean App Platform runs two isolated apps from the GitHub repo: staging from `staging` with auto-deploy and production from `main` with manual deploys.
 - Hosted components per environment: `public-web` static site from `client/`, `admin-web` static site from `admin/`, `api` Node service from `server/`, and a `migrate` pre-deploy job that runs `npm run prisma:migrate:deploy`.
 - Hosted domains: staging uses `staging.autoscape.ca`, `api-staging.autoscape.ca`, and `admin-staging.autoscape.ca`; production uses `autoscape.ca`, `www.autoscape.ca`, `api.autoscape.ca`, and `admin.autoscape.ca`.
+- Live hosted status on 2026-04-21: `autoscape-staging` is active in `tor` with `public-web`, `admin-web`, `api`, and `migrate`; its custom domains are still configuring because `autoscape.ca` DNS is not delegated to DigitalOcean. Production has not been created.
 - Local dev connectivity: public/admin frontends default to `VITE_API_BASE_URL=http://localhost:4000`; the API reflects loopback origins (`localhost`, `127.0.0.1`, `[::1]`) across arbitrary local ports to avoid Vite port drift breaking quote writes.
 - Public app routes: `client/src/App.tsx`
 - Services gallery: `client/src/pages/ServicesPage.tsx` + `client/src/components/service/ServiceIllustrations.tsx` (coverage-first entry page with five shared-style inline SVG service scenes)
@@ -37,6 +38,7 @@ Primary domains:
 - ORM: Prisma (`server/prisma/schema.prisma`)
 - DB: PostgreSQL + PostGIS
 - Hosted persistence: staging and production each use their own DigitalOcean Managed PostgreSQL database; production traffic must never rely on the local/dev in-memory fallback.
+- Live staging persistence on 2026-04-21: `autoscape-staging-db` runs PostgreSQL 16 in `tor1` with database/user `autoscape_staging`; PostGIS is enabled and the staged Prisma migrations have applied.
 - Migrations:
   - `server/prisma/migrations/20260304120000_admin_platform_v1/migration.sql`
   - `server/prisma/migrations/20260305103000_quote_session_ranges/migration.sql`

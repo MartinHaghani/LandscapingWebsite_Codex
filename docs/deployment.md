@@ -2,6 +2,35 @@
 
 Autoscape deploys to DigitalOcean App Platform as two isolated apps: staging first, production after staging passes smoke tests. Each app has three components and its own managed PostgreSQL database.
 
+## Current Live Status (2026-04-21)
+
+Staging is created and active in DigitalOcean:
+
+- App: `autoscape-staging`
+- Region: App Platform `tor`; database `tor1`
+- Components: `public-web`, `admin-web`, `api`, `migrate`
+- Default ingress: `https://autoscape-staging-w9537.ondigitalocean.app`
+- Database cluster: `autoscape-staging-db`, PostgreSQL 16, size `db-s-1vcpu-1gb`
+- Database/user names: `autoscape_staging`
+- Migration status: the `migrate` pre-deploy job applied all committed Prisma migrations successfully.
+- Production status: not created. Do not create or route production until staging custom domains resolve and smoke tests pass.
+
+Staging custom domains are still blocked on DNS. DigitalOcean reports `DomainUnexpectedNameserver` for:
+
+- `staging.autoscape.ca`
+- `api-staging.autoscape.ca`
+- `admin-staging.autoscape.ca`
+
+Current public DNS for `autoscape.ca` is delegated to `ns63.domaincontrol.com` and `ns64.domaincontrol.com`. DigitalOcean is waiting for the domain to be delegated to:
+
+```text
+ns1.digitalocean.com
+ns2.digitalocean.com
+ns3.digitalocean.com
+```
+
+Add those nameservers at the domain registrar, or keep DNS at the current provider and manually mirror the App Platform records DigitalOcean provides there. Do not switch production traffic until the staging domains validate and the smoke test checklist passes.
+
 ## 1) Deployment Topology
 
 | Environment | Branch | App Platform app | Deploy mode | Public domains |
