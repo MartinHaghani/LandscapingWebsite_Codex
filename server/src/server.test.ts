@@ -186,11 +186,6 @@ const createMapboxImageFetch = (urls: string[]) =>
     });
   }) as typeof fetch;
 
-const extractAttribute = (markup: string, attribute: 'src' | 'href', pattern: RegExp) => {
-  const match = markup.match(new RegExp(`${attribute}="([^"]*${pattern.source}[^"]*)"`, pattern.flags));
-  return match?.[1] ?? null;
-};
-
 const createReviewQuoteVersion = async (
   baseUrl: string,
   idPrefix: string,
