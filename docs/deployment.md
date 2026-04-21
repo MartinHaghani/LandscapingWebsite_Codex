@@ -13,34 +13,36 @@ Staging is created and active in DigitalOcean:
 - Database cluster: `autoscape-staging-db`, PostgreSQL 16, size `db-s-1vcpu-1gb`
 - Database/user names: `autoscape_staging`
 - Migration status: the `migrate` pre-deploy job applied all committed Prisma migrations successfully.
-- Smoke-test status: partial. The default ingress loads the public static app, the API process is running, and Prisma migrations have applied.
-- Production status: not created. Do not create or route production until staging custom domains resolve and smoke tests pass.
+- Smoke-test status: partial pass. Staging custom domains are active, API health passes, public/admin SPA routes load, CORS allows only the configured staging origins, service-area check passes, and a draft quote was created successfully. Authenticated Clerk/admin/editor/approval-preview checks still require an interactive staging admin/customer session.
+- Production status: not created. Do not create or route production until the remaining authenticated staging smoke tests pass.
 
-Staging custom domains are still blocked on DNS:
+Staging custom domains use self-managed DNS at GoDaddy:
 
-| Domain | DigitalOcean state | Blocker |
+| Domain | DigitalOcean state | DNS record |
 | --- | --- | --- |
-| `staging.autoscape.ca` | `CONFIGURING` | `DomainUnexpectedNameserver` |
-| `api-staging.autoscape.ca` | `CONFIGURING` | `DomainUnexpectedNameserver` |
-| `admin-staging.autoscape.ca` | `CONFIGURING` | `DomainUnexpectedNameserver` |
+| `staging.autoscape.ca` | `ACTIVE` | CNAME to `autoscape-staging-w9537.ondigitalocean.app` |
+| `api-staging.autoscape.ca` | `ACTIVE` | CNAME to `autoscape-staging-w9537.ondigitalocean.app` |
+| `admin-staging.autoscape.ca` | `ACTIVE` | CNAME to `autoscape-staging-w9537.ondigitalocean.app` |
 
-Current public DNS for `autoscape.ca` is delegated to `ns63.domaincontrol.com` and `ns64.domaincontrol.com`. DigitalOcean is waiting for the domain to be delegated to:
+Current public DNS for `autoscape.ca` remains delegated to `ns63.domaincontrol.com` and `ns64.domaincontrol.com`. Keep the existing Google Workspace, SPF, DKIM, DMARC, Resend, `www`, and `_domainconnect` records in place. Do not switch production traffic until the staging domains validate and the smoke test checklist passes.
 
-```text
-ns1.digitalocean.com
-ns2.digitalocean.com
-ns3.digitalocean.com
-```
-
-Add those nameservers at the domain registrar, or keep DNS at the current provider and manually mirror the App Platform records DigitalOcean provides there. Do not switch production traffic until the staging domains validate and the smoke test checklist passes.
-
-Blocked smoke tests until DNS validates:
+Passed staging checks:
 
 - custom-domain API health at `https://api-staging.autoscape.ca/api/health`
-- quote creation and quote ID confirmation
-- Clerk sign-in and admin editor
-- approved quote preview URL
-- quote persistence after API redeploy
+- public SPA load and deep-link fallback on `https://staging.autoscape.ca`
+- admin SPA load and deep-link fallback on `https://admin-staging.autoscape.ca`
+- public/admin CORS preflight from configured staging origins
+- service-area check for the Vaughan staging coordinate
+- draft quote creation with confirmation route load
+- bundle scan for accidental `localhost`/loopback API origins
+
+Remaining staging checks before production:
+
+- Clerk customer sign-in with a real staging account
+- admin sign-in with a real staging admin organization member
+- admin quote detail/editor workflow
+- approval email resend and approved quote preview URL
+- quote persistence after an API redeploy using an authenticated quote read or admin check
 
 Staging environment variable audit, names only:
 
@@ -211,8 +213,9 @@ Resend:
 
 DNS:
 
-- Prefer DigitalOcean-managed DNS for `autoscape.ca` if possible.
-- Otherwise copy the exact CNAME/A records DigitalOcean gives for each App Platform domain.
+- Current setup keeps DNS at GoDaddy and uses App Platform self-managed domain records.
+- For staging, add CNAME records for `staging`, `api-staging`, and `admin-staging` pointing to the staging default ingress.
+- Do not change registrar nameservers or remove email/authentication records unless the full zone has first been copied into DigitalOcean DNS.
 - Do not switch production DNS until staging has passed smoke tests.
 
 ## 7) Staging Smoke Test

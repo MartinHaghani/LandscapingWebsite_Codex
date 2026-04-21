@@ -112,7 +112,7 @@ Production-like hosting uses DigitalOcean App Platform with two isolated apps:
 
 Each environment has `public-web` (`client/` static site), `admin-web` (`admin/` static site), `api` (`server/` Node service), a pre-deploy Prisma migration job, and its own DigitalOcean Managed PostgreSQL database with PostGIS enabled. App spec templates live in `.do/app.staging.yaml` and `.do/app.production.yaml`; fill secrets only in DigitalOcean or in ignored private spec copies. See [`docs/deployment.md`](./docs/deployment.md) for setup, env vars, DNS, smoke tests, and rollback.
 
-Current live status: `autoscape-staging` is active in Toronto with `autoscape-staging-db` on PostgreSQL 16 and migrations applied. Custom staging domains are `CONFIGURING` with `DomainUnexpectedNameserver`, so custom-domain smoke tests and production setup are waiting on `autoscape.ca` DNS delegation.
+Current live status: `autoscape-staging` is active in Toronto with `autoscape-staging-db` on PostgreSQL 16 and migrations applied. Staging uses self-managed GoDaddy CNAME records pointing at the DigitalOcean default ingress, and the custom domains are active. Production has not been created because authenticated staging smoke tests still need to pass.
 
 ## Public Flow Highlights
 
