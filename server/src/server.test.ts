@@ -6,6 +6,11 @@ import { createServer } from './server.js';
 import type { AdminIdentity, CustomerIdentity } from './lib/adminAuth.js';
 import type { ApprovedQuoteEmailSender } from './lib/approvedQuoteEmail.js';
 import type { BaseStationConfig } from './lib/serviceAreaConfig.js';
+import type {
+  CreateStripeCheckoutSessionInput,
+  StripePaymentProvider,
+  StripeWebhookEvent
+} from './lib/stripePayments.js';
 
 const stations: BaseStationConfig[] = [
   {
@@ -81,6 +86,8 @@ const startServer = async (options?: {
     mapboxAccessToken?: string;
     fetchImpl?: typeof fetch;
   };
+  stripeProvider?: StripePaymentProvider;
+  nowMs?: () => number;
 }) => {
   const customerIdentityResolver = options?.customerIdentityFromToken ?? customerIdentityFromToken;
   const recordAddress = options?.recordAddress ?? (async () => {});
@@ -88,7 +95,7 @@ const startServer = async (options?: {
     port: 0,
     baseStations: stations,
     servedRegions: ['Dallas Test Region'],
-    nowMs: () => Date.UTC(2026, 2, 3, 12, 0, 0),
+    nowMs: options?.nowMs ?? (() => Date.UTC(2026, 2, 3, 12, 0, 0)),
     authResolvers: {
       resolveCustomerIdentity: async (req) => {
         const token = parseToken(req);
@@ -122,7 +129,10 @@ const startServer = async (options?: {
     approvedQuoteEmail: {
       sender: options?.approvedQuoteEmailSender
     },
-    approvedQuotePreview: options?.approvedQuotePreview
+    approvedQuotePreview: options?.approvedQuotePreview,
+    payments: {
+      stripeProvider: options?.stripeProvider
+    }
   });
 
   await new Promise<void>((resolve) => {
@@ -186,6 +196,50 @@ const createMapboxImageFetch = (urls: string[]) =>
     });
   }) as typeof fetch;
 
+const createFakeStripeProvider = (state: {
+  sessions?: CreateStripeCheckoutSessionInput[];
+  updatedCancelAt?: Array<{ subscriptionId: string; cancelAtUnix: number }>;
+  canceledSubscriptions?: string[];
+}) => {
+  const sessions = state.sessions ?? [];
+  const updatedCancelAt = state.updatedCancelAt ?? [];
+  const canceledSubscriptions = state.canceledSubscriptions ?? [];
+
+  return {
+    async createCheckoutSession(input) {
+      sessions.push(input);
+      const index = sessions.length;
+      return {
+        id: `cs_test_${index}`,
+        url: `https://checkout.stripe.test/session/${index}`,
+        expiresAt: Math.floor(Date.UTC(2026, 2, 3, 13, 0, 0) / 1000),
+        customerId: `cus_test_${index}`,
+        paymentIntentId: input.mode === 'seasonal_payment' ? `pi_test_${index}` : null,
+        subscriptionId: input.mode === 'per_session_subscription' ? `sub_test_${index}` : null
+      };
+    },
+    constructWebhookEvent(payload, signature) {
+      if (signature !== 'valid-signature') {
+        throw new Error('Invalid signature');
+      }
+
+      return JSON.parse(payload.toString('utf8')) as StripeWebhookEvent;
+    },
+    async updateSubscriptionCancelAt(subscriptionId, cancelAtUnix) {
+      updatedCancelAt.push({ subscriptionId, cancelAtUnix });
+    },
+    async cancelSubscription(subscriptionId) {
+      canceledSubscriptions.push(subscriptionId);
+    }
+  } satisfies StripePaymentProvider;
+};
+
+const extractPaymentToken = (html: string) => {
+  const match = html.match(/https:\/\/client\.autoscape\.test\/pay\/([A-Za-z0-9_-]+)/);
+  assert.ok(match?.[1], 'Expected approved quote email to include a secure payment token.');
+  return match[1];
+};
+
 const createReviewQuoteVersion = async (
   baseUrl: string,
   idPrefix: string,
@@ -194,7 +248,8 @@ const createReviewQuoteVersion = async (
     [-79.519, 43.8437],
     [-79.519, 43.8445],
     [-79.5204, 43.8445]
-  ]
+  ],
+  draftOverrides: Record<string, unknown> = {}
 ) => {
   const reviewRing: Array<[number, number]> = [
     [-79.5203, 43.8437],
@@ -222,7 +277,8 @@ const createReviewQuoteVersion = async (
       serviceFrequency: 'weekly',
       baseTotal: 49,
       pricingVersion: 'v1',
-      currency: 'CAD'
+      currency: 'CAD',
+      ...draftOverrides
     })
   });
   assert.equal(draftResponse.status, 201);
@@ -1144,6 +1200,8 @@ describe('admin quote editor workflow', () => {
     assert.match(sentEmails[0]?.text ?? '', /Payment is required to continue/);
     assert.match(sentEmails[0]?.html ?? '', /payment page/i);
     assert.doesNotMatch(sentEmails[0]?.html ?? '', /test-mapbox-token/);
+    assert.match(sentEmails[0]?.html ?? '', /https:\/\/client\.autoscape\.test\/pay\/[A-Za-z0-9_-]+/);
+    assert.doesNotMatch(sentEmails[0]?.html ?? '', /dashboard\/quotes\/[^/]+\/payment/);
 
     const previewUrl = sentEmails[0]?.html.match(/src="([^"]*\/api\/approved-quote-preview\/[^"]+)"/)?.[1] ?? null;
     assert.ok(previewUrl);
@@ -1276,6 +1334,445 @@ describe('admin quote editor workflow', () => {
     assert.equal(submitBody.approvedQuoteEmail?.sent, false);
     assert.match(submitBody.approvedQuoteEmail?.errorMessage ?? '', /PUBLIC_API_BASE_URL/);
     assert.equal(sentEmails.length, 0);
+  });
+
+  it('creates a secure public seasonal checkout link and revokes older resend tokens', async () => {
+    const sentEmails: Array<{ to: string; subject: string; html: string; text: string }> = [];
+    const sessions: CreateStripeCheckoutSessionInput[] = [];
+    const { baseUrl } = await startServer({
+      approvedQuoteEmailSender: {
+        async send(message) {
+          sentEmails.push(message);
+          return {
+            provider: 'resend',
+            messageId: `msg-seasonal-${sentEmails.length}`
+          };
+        }
+      },
+      publicUrls: {
+        appBaseUrl: 'https://client.autoscape.test',
+        apiBaseUrl: 'https://api.autoscape.test'
+      },
+      approvedQuotePreview: {
+        mapboxAccessToken: 'test-mapbox-token',
+        fetchImpl: createMapboxImageFetch([])
+      },
+      stripeProvider: createFakeStripeProvider({ sessions })
+    });
+    const scenario = await createReviewQuoteVersion(baseUrl, 'seasonal-payment');
+
+    const submitResponse = await fetch(
+      `${baseUrl}/api/admin/quotes/${scenario.quoteId}/versions/${scenario.version}/submit`,
+      {
+        method: 'POST',
+        headers: {
+          Authorization: 'Bearer admin-reviewer'
+        }
+      }
+    );
+    assert.equal(submitResponse.status, 200);
+    assert.equal(sentEmails.length, 1);
+    const firstToken = extractPaymentToken(sentEmails[0]?.html ?? '');
+
+    const firstLinkResponse = await fetch(`${baseUrl}/api/payment-links/${firstToken}`);
+    assert.equal(firstLinkResponse.status, 200);
+    const firstLinkBody = (await firstLinkResponse.json()) as {
+      quote: { id: string };
+      payment: { mode: string; amountCents: number; status: string };
+    };
+    assert.equal(firstLinkBody.quote.id, scenario.quoteId);
+    assert.equal(firstLinkBody.payment.mode, 'seasonal_payment');
+    assert.equal(firstLinkBody.payment.amountCents, 319984);
+    assert.equal(firstLinkBody.payment.status, 'awaiting_payment');
+
+    const resendResponse = await fetch(`${baseUrl}/api/admin/quotes/${scenario.quoteId}/approval-email/resend`, {
+      method: 'POST',
+      headers: {
+        Authorization: 'Bearer admin-admin'
+      }
+    });
+    assert.equal(resendResponse.status, 200);
+    assert.equal(sentEmails.length, 2);
+    const secondToken = extractPaymentToken(sentEmails[1]?.html ?? '');
+    assert.notEqual(secondToken, firstToken);
+
+    const revokedResponse = await fetch(`${baseUrl}/api/payment-links/${firstToken}`);
+    assert.equal(revokedResponse.status, 410);
+
+    const checkoutResponse = await fetch(`${baseUrl}/api/payment-links/${secondToken}/checkout`, {
+      method: 'POST'
+    });
+    assert.equal(checkoutResponse.status, 200);
+    const checkoutBody = (await checkoutResponse.json()) as {
+      checkoutUrl: string;
+      checkoutSessionId: string;
+      reused: boolean;
+    };
+    assert.equal(checkoutBody.checkoutUrl, 'https://checkout.stripe.test/session/1');
+    assert.equal(checkoutBody.checkoutSessionId, 'cs_test_1');
+    assert.equal(checkoutBody.reused, false);
+    assert.equal(sessions.length, 1);
+    assert.equal(sessions[0]?.mode, 'seasonal_payment');
+    assert.equal(sessions[0]?.amountCents, 319984);
+
+    const replayCheckoutResponse = await fetch(`${baseUrl}/api/payment-links/${secondToken}/checkout`, {
+      method: 'POST'
+    });
+    assert.equal(replayCheckoutResponse.status, 200);
+    const replayCheckoutBody = (await replayCheckoutResponse.json()) as { reused: boolean };
+    assert.equal(replayCheckoutBody.reused, true);
+    assert.equal(sessions.length, 1);
+
+    const missingResponse = await fetch(`${baseUrl}/api/payment-links/not-a-real-token`);
+    assert.equal(missingResponse.status, 404);
+  });
+
+  it('lets an authenticated customer start approved quote checkout from the dashboard route', async () => {
+    const sentEmails: Array<{ to: string; subject: string; html: string; text: string }> = [];
+    const sessions: CreateStripeCheckoutSessionInput[] = [];
+    const { baseUrl } = await startServer({
+      approvedQuoteEmailSender: {
+        async send(message) {
+          sentEmails.push(message);
+          return {
+            provider: 'resend',
+            messageId: `msg-dashboard-${sentEmails.length}`
+          };
+        }
+      },
+      publicUrls: {
+        appBaseUrl: 'https://client.autoscape.test',
+        apiBaseUrl: 'https://api.autoscape.test'
+      },
+      approvedQuotePreview: {
+        mapboxAccessToken: 'test-mapbox-token',
+        fetchImpl: createMapboxImageFetch([])
+      },
+      stripeProvider: createFakeStripeProvider({ sessions })
+    });
+    const scenario = await createReviewQuoteVersion(baseUrl, 'dashboard-payment');
+
+    const submitResponse = await fetch(
+      `${baseUrl}/api/admin/quotes/${scenario.quoteId}/versions/${scenario.version}/submit`,
+      {
+        method: 'POST',
+        headers: {
+          Authorization: 'Bearer admin-reviewer'
+        }
+      }
+    );
+    assert.equal(submitResponse.status, 200);
+    assert.equal(sentEmails.length, 1);
+
+    const checkoutResponse = await fetch(
+      `${baseUrl}/api/account/quotes/${scenario.quoteId}/payment/checkout`,
+      {
+        method: 'POST',
+        headers: {
+          Authorization: 'Bearer customer-reviewer'
+        }
+      }
+    );
+    assert.equal(checkoutResponse.status, 200);
+    const checkoutBody = (await checkoutResponse.json()) as {
+      checkoutUrl: string;
+      checkoutSessionId: string;
+      reused: boolean;
+    };
+    assert.equal(checkoutBody.checkoutUrl, 'https://checkout.stripe.test/session/1');
+    assert.equal(checkoutBody.checkoutSessionId, 'cs_test_1');
+    assert.equal(checkoutBody.reused, false);
+    assert.equal(sessions.length, 1);
+    assert.match(sessions[0]?.successUrl ?? '', /\/dashboard\/quotes\/Q-/);
+
+    const accountQuoteResponse = await fetch(`${baseUrl}/api/account/quotes/${scenario.quoteId}`, {
+      headers: {
+        Authorization: 'Bearer customer-reviewer'
+      }
+    });
+    assert.equal(accountQuoteResponse.status, 200);
+    const accountQuote = (await accountQuoteResponse.json()) as {
+      payment?: { status: string; amountCents: number } | null;
+    };
+    assert.equal(accountQuote.payment?.status, 'checkout_created');
+    assert.equal(accountQuote.payment?.amountCents, 319984);
+  });
+
+  it('starts per-visit subscription billing at checkout on or after May 1', async () => {
+    const sentEmails: Array<{ to: string; subject: string; html: string; text: string }> = [];
+    const sessions: CreateStripeCheckoutSessionInput[] = [];
+    const { baseUrl } = await startServer({
+      nowMs: () => Date.UTC(2026, 4, 15, 12, 0, 0),
+      approvedQuoteEmailSender: {
+        async send(message) {
+          sentEmails.push(message);
+          return {
+            provider: 'resend',
+            messageId: `msg-in-season-${sentEmails.length}`
+          };
+        }
+      },
+      publicUrls: {
+        appBaseUrl: 'https://client.autoscape.test',
+        apiBaseUrl: 'https://api.autoscape.test'
+      },
+      approvedQuotePreview: {
+        mapboxAccessToken: 'test-mapbox-token',
+        fetchImpl: createMapboxImageFetch([])
+      },
+      stripeProvider: createFakeStripeProvider({ sessions })
+    });
+    const scenario = await createReviewQuoteVersion(baseUrl, 'per-visit-in-season', undefined, {
+      billingMode: 'per_session'
+    });
+
+    const submitResponse = await fetch(
+      `${baseUrl}/api/admin/quotes/${scenario.quoteId}/versions/${scenario.version}/submit`,
+      {
+        method: 'POST',
+        headers: {
+          Authorization: 'Bearer admin-reviewer'
+        }
+      }
+    );
+    assert.equal(submitResponse.status, 200);
+    const token = extractPaymentToken(sentEmails[0]?.html ?? '');
+
+    const checkoutResponse = await fetch(`${baseUrl}/api/payment-links/${token}/checkout`, {
+      method: 'POST'
+    });
+    assert.equal(checkoutResponse.status, 200);
+    assert.equal(sessions.length, 1);
+    assert.equal(sessions[0]?.mode, 'per_session_subscription');
+    assert.equal(sessions[0]?.deferredStartUnix, null);
+    assert.equal(
+      new Date((sessions[0]?.seasonEndUnix ?? 0) * 1000).toISOString(),
+      '2026-10-01T03:59:59.000Z'
+    );
+  });
+
+  it('creates per-visit subscription checkout, schedules May billing, and caps paid invoices', async () => {
+    const sentEmails: Array<{ to: string; subject: string; html: string; text: string }> = [];
+    const sessions: CreateStripeCheckoutSessionInput[] = [];
+    const updatedCancelAt: Array<{ subscriptionId: string; cancelAtUnix: number }> = [];
+    const canceledSubscriptions: string[] = [];
+    const { baseUrl } = await startServer({
+      approvedQuoteEmailSender: {
+        async send(message) {
+          sentEmails.push(message);
+          return {
+            provider: 'resend',
+            messageId: `msg-per-visit-${sentEmails.length}`
+          };
+        }
+      },
+      publicUrls: {
+        appBaseUrl: 'https://client.autoscape.test',
+        apiBaseUrl: 'https://api.autoscape.test'
+      },
+      approvedQuotePreview: {
+        mapboxAccessToken: 'test-mapbox-token',
+        fetchImpl: createMapboxImageFetch([])
+      },
+      stripeProvider: createFakeStripeProvider({ sessions, updatedCancelAt, canceledSubscriptions })
+    });
+
+    const reviewRing: Array<[number, number]> = [
+      [-79.5203, 43.8437],
+      [-79.5192, 43.8437],
+      [-79.5192, 43.8446],
+      [-79.5203, 43.8446]
+    ];
+    const draftResponse = await fetch(`${baseUrl}/api/quote/draft`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Idempotency-Key': 'per-visit-payment-draft'
+      },
+      body: JSON.stringify({
+        address: '77 Weekly Pay Road, Vaughan, ON',
+        location: {
+          lat: 43.844147,
+          lng: -79.51962
+        },
+        polygon: createPolygonGeometry(reviewRing),
+        polygonSource: createPolygonSource('service-1', reviewRing),
+        plan: 'Precision Weekly Plan',
+        quoteTotal: 210.25,
+        serviceFrequency: 'weekly',
+        billingMode: 'per_session',
+        baseTotal: 49,
+        pricingVersion: 'v1',
+        currency: 'CAD'
+      })
+    });
+    assert.equal(draftResponse.status, 201);
+    const draftBody = (await draftResponse.json()) as { quoteId: string };
+
+    const finalizeResponse = await fetch(`${baseUrl}/api/quote/${draftBody.quoteId}/contact`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Idempotency-Key': 'per-visit-payment-contact',
+        Authorization: 'Bearer customer-reviewer'
+      },
+      body: JSON.stringify({})
+    });
+    assert.equal(finalizeResponse.status, 200);
+
+    const versionResponse = await fetch(`${baseUrl}/api/admin/quotes/${draftBody.quoteId}/versions`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: 'Bearer admin-admin'
+      },
+      body: JSON.stringify({
+        polygonSource: createPolygonSource('service-1', [
+          [-79.5204, 43.8437],
+          [-79.519, 43.8437],
+          [-79.519, 43.8445],
+          [-79.5204, 43.8445]
+        ]),
+        serviceFrequency: 'weekly',
+        perSessionTotal: 199.99,
+        finalTotal: 225
+      })
+    });
+    assert.equal(versionResponse.status, 200);
+    const versionBody = (await versionResponse.json()) as { version: number };
+
+    const submitResponse = await fetch(
+      `${baseUrl}/api/admin/quotes/${draftBody.quoteId}/versions/${versionBody.version}/submit`,
+      {
+        method: 'POST',
+        headers: {
+          Authorization: 'Bearer admin-reviewer'
+        }
+      }
+    );
+    assert.equal(submitResponse.status, 200);
+    const token = extractPaymentToken(sentEmails[0]?.html ?? '');
+
+    const checkoutResponse = await fetch(`${baseUrl}/api/payment-links/${token}/checkout`, {
+      method: 'POST'
+    });
+    assert.equal(checkoutResponse.status, 200);
+    assert.equal(sessions.length, 1);
+    assert.equal(sessions[0]?.mode, 'per_session_subscription');
+    assert.equal(sessions[0]?.amountCents, 19999);
+    assert.equal(sessions[0]?.maxBillableVisits, 20);
+    assert.equal(
+      new Date((sessions[0]?.deferredStartUnix ?? 0) * 1000).toISOString(),
+      '2026-05-01T04:00:00.000Z'
+    );
+    assert.equal(
+      new Date((sessions[0]?.seasonEndUnix ?? 0) * 1000).toISOString(),
+      '2026-10-01T03:59:59.000Z'
+    );
+
+    const invalidWebhook = await fetch(`${baseUrl}/api/stripe/webhook`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Stripe-Signature': 'invalid-signature'
+      },
+      body: JSON.stringify({ id: 'evt_invalid', type: 'checkout.session.completed', data: { object: {} } })
+    });
+    assert.equal(invalidWebhook.status, 400);
+
+    const completedEvent = {
+      id: 'evt_checkout_completed',
+      type: 'checkout.session.completed',
+      data: {
+        object: {
+          id: 'cs_test_1',
+          customer: 'cus_test_1',
+          subscription: 'sub_test_1',
+          metadata: {
+            paymentMode: 'per_session_subscription',
+            deferredStartUnix: String(sessions[0]?.deferredStartUnix ?? '')
+          }
+        }
+      }
+    };
+    const webhookResponse = await fetch(`${baseUrl}/api/stripe/webhook`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Stripe-Signature': 'valid-signature'
+      },
+      body: JSON.stringify(completedEvent)
+    });
+    assert.equal(webhookResponse.status, 200);
+    assert.deepEqual(updatedCancelAt, [
+      {
+        subscriptionId: 'sub_test_1',
+        cancelAtUnix: sessions[0]?.seasonEndUnix ?? 0
+      }
+    ]);
+
+    const webhookReplay = await fetch(`${baseUrl}/api/stripe/webhook`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Stripe-Signature': 'valid-signature'
+      },
+      body: JSON.stringify(completedEvent)
+    });
+    assert.equal(webhookReplay.status, 200);
+    const webhookReplayBody = (await webhookReplay.json()) as { replayed: boolean };
+    assert.equal(webhookReplayBody.replayed, true);
+
+    for (let index = 1; index <= 20; index += 1) {
+      const invoiceWebhook = await fetch(`${baseUrl}/api/stripe/webhook`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Stripe-Signature': 'valid-signature'
+        },
+        body: JSON.stringify({
+          id: `evt_invoice_paid_${index}`,
+          type: 'invoice.paid',
+          data: {
+            object: {
+              id: `in_test_${index}`,
+              subscription: 'sub_test_1'
+            }
+          }
+        })
+      });
+      assert.equal(invoiceWebhook.status, 200);
+    }
+
+    assert.deepEqual(canceledSubscriptions, ['sub_test_1']);
+
+    const duplicateInvoiceWebhook = await fetch(`${baseUrl}/api/stripe/webhook`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Stripe-Signature': 'valid-signature'
+      },
+      body: JSON.stringify({
+        id: 'evt_invoice_paid_duplicate',
+        type: 'invoice.paid',
+        data: {
+          object: {
+            id: 'in_test_20',
+            subscription: 'sub_test_1'
+          }
+        }
+      })
+    });
+    assert.equal(duplicateInvoiceWebhook.status, 200);
+    assert.deepEqual(canceledSubscriptions, ['sub_test_1']);
+
+    const finalLinkResponse = await fetch(`${baseUrl}/api/payment-links/${token}`);
+    assert.equal(finalLinkResponse.status, 200);
+    const finalLinkBody = (await finalLinkResponse.json()) as {
+      payment: { status: string; paidInvoiceCount: number };
+    };
+    assert.equal(finalLinkBody.payment.status, 'paid');
+    assert.equal(finalLinkBody.payment.paidInvoiceCount, 20);
   });
 
   it('keeps quote approval successful when approved quote email delivery fails', async () => {

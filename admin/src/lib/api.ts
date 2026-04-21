@@ -163,6 +163,33 @@ export interface AdminQuoteEditorResponse {
     paymentPageUrl: string | null;
     previewImageUrl: string | null;
   } | null;
+  payment: {
+    mode: 'seasonal_payment' | 'per_session_subscription';
+    status:
+      | 'awaiting_payment'
+      | 'checkout_created'
+      | 'paid'
+      | 'subscription_scheduled'
+      | 'subscription_active'
+      | 'past_due'
+      | 'failed'
+      | 'canceled';
+    amountCents: number;
+    currency: string;
+    recurringInterval: string | null;
+    maxBillableVisits: number | null;
+    paidInvoiceCount: number;
+    seasonStartAt: string | null;
+    seasonEndAt: string | null;
+    checkoutExpiresAt: string | null;
+    stripeCheckoutSessionId: string | null;
+    stripePaymentIntentId: string | null;
+    stripeSubscriptionId: string | null;
+    tokenRevokedAt: string | null;
+    paidAt: string | null;
+    createdAt: string;
+    updatedAt: string;
+  } | null;
 }
 
 export interface AdminRequestItem {

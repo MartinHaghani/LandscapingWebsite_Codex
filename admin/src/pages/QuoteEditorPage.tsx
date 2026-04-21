@@ -92,6 +92,13 @@ const getCenterFromPolygons = (polygons: EditablePolygon[]): LngLat => {
 };
 
 const formatDate = (value: string | null) => (value ? new Date(value).toLocaleString() : 'N/A');
+const formatCurrency = (amountCents: number, currency = 'CAD') =>
+  new Intl.NumberFormat('en-CA', {
+    style: 'currency',
+    currency,
+    currencyDisplay: 'narrowSymbol',
+    maximumFractionDigits: 2
+  }).format(amountCents / 100);
 
 const activeDrawButtonStyle = (kind: PolygonKind) =>
   kind === 'service'
@@ -834,6 +841,38 @@ export const QuoteEditorPage = ({ getToken, quoteId, onBack }: QuoteEditorPagePr
                   {resendingApprovedEmail ? 'Resending...' : 'Resend Approved Email'}
                 </button>
               </div>
+            </article>
+
+            <article className="metric-card">
+              <p className="metric-label">Stripe Payment</p>
+              {editor?.payment ? (
+                <>
+                  <p className="hint">
+                    Status: {editor.payment.status} | Mode: {editor.payment.mode}
+                  </p>
+                  <p className="hint">
+                    Amount: {formatCurrency(editor.payment.amountCents, editor.payment.currency)}
+                    {editor.payment.recurringInterval ? ` / ${editor.payment.recurringInterval}` : ''}
+                  </p>
+                  <p className="hint">
+                    Paid invoices: {editor.payment.paidInvoiceCount}
+                    {editor.payment.maxBillableVisits !== null ? ` / ${editor.payment.maxBillableVisits}` : ''}
+                  </p>
+                  <p className="hint">
+                    Season: {formatDate(editor.payment.seasonStartAt)} to {formatDate(editor.payment.seasonEndAt)}
+                  </p>
+                  <p className="hint">Checkout expires: {formatDate(editor.payment.checkoutExpiresAt)}</p>
+                  <p className="hint">Paid at: {formatDate(editor.payment.paidAt)}</p>
+                  <p className="hint">Token revoked: {formatDate(editor.payment.tokenRevokedAt)}</p>
+                  <p className="hint">
+                    Stripe IDs: session {editor.payment.stripeCheckoutSessionId ?? 'N/A'} | payment intent{' '}
+                    {editor.payment.stripePaymentIntentId ?? 'N/A'} | subscription{' '}
+                    {editor.payment.stripeSubscriptionId ?? 'N/A'}
+                  </p>
+                </>
+              ) : (
+                <p className="hint">No Stripe payment link has been generated yet.</p>
+              )}
             </article>
 
             <article className="metric-card">

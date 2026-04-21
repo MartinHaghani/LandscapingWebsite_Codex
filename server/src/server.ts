@@ -1,4 +1,4 @@
-import { createHash } from 'node:crypto';
+import { createHash, randomBytes } from 'node:crypto';
 import http from 'node:http';
 import { nanoid } from 'nanoid';
 import { createServiceAreaPayload, pointInGeometry, type ServiceAreaFeatureCollection } from './lib/serviceArea.js';
@@ -24,6 +24,13 @@ import {
   serviceAreaRequestPayloadSchema
 } from './lib/schemas.js';
 import { createDataStore } from './lib/dataStore.js';
+import type { QuotePaymentStatus } from './lib/dataStore.js';
+import {
+  createStripePaymentProvider,
+  StripePaymentConfigurationError,
+  type StripePaymentProvider,
+  type StripeWebhookEvent
+} from './lib/stripePayments.js';
 import {
   hasCapability,
   recordCustomerAddress,
@@ -57,6 +64,9 @@ interface CreateServerOptions {
   approvedQuotePreview?: {
     mapboxAccessToken?: string;
     fetchImpl?: typeof fetch;
+  };
+  payments?: {
+    stripeProvider?: StripePaymentProvider;
   };
 }
 
@@ -169,6 +179,24 @@ const readJson = async (req: http.IncomingMessage, limitBytes = 1_000_000) => {
 
   const raw = Buffer.concat(chunks).toString('utf8');
   return JSON.parse(raw) as unknown;
+};
+
+const readRawBody = async (req: http.IncomingMessage, limitBytes = 2_000_000) => {
+  const chunks: Buffer[] = [];
+  let size = 0;
+
+  for await (const chunk of req) {
+    const buffer = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk);
+    size += buffer.length;
+
+    if (size > limitBytes) {
+      throw new Error('Payload too large.');
+    }
+
+    chunks.push(buffer);
+  }
+
+  return Buffer.concat(chunks);
 };
 
 const json = (res: http.ServerResponse, statusCode: number, payload: unknown) => {
@@ -319,6 +347,11 @@ const mapStoreError = (error: unknown): { statusCode: number; message: string } 
         statusCode: 404,
         message: 'Quote version not found.'
       };
+    case 'QUOTE_PAYMENT_NOT_ALLOWED':
+      return {
+        statusCode: 409,
+        message: 'Payment is only available for approved quotes awaiting payment.'
+      };
     case 'QUOTE_EDITOR_SOURCE_INVALID':
       return {
         statusCode: 400,
@@ -400,6 +433,47 @@ const normalizeBaseUrl = (value?: string | null) => {
   return trimmed.replace(/\/+$/, '');
 };
 
+const createPaymentToken = () => randomBytes(32).toString('base64url');
+
+const hashPaymentToken = (token: string) => createHash('sha256').update(token).digest('hex');
+
+const centsToMoney = (cents: number) => Number((Math.max(0, cents) / 100).toFixed(2));
+
+const getObjectId = (value: unknown) => {
+  if (typeof value === 'string') {
+    return value;
+  }
+
+  if (value && typeof value === 'object' && 'id' in value && typeof value.id === 'string') {
+    return value.id;
+  }
+
+  return null;
+};
+
+const getObjectMetadata = (value: Record<string, unknown>) => {
+  const metadata = value.metadata;
+  return metadata && typeof metadata === 'object' && !Array.isArray(metadata)
+    ? (metadata as Record<string, string | undefined>)
+    : {};
+};
+
+const getTorontoSeasonWindow = (nowMs: number) => {
+  const now = new Date(nowMs);
+  let year = now.getUTCFullYear();
+  const currentYearSeasonEnd = Date.UTC(year, 9, 1, 3, 59, 59);
+  if (nowMs > currentYearSeasonEnd) {
+    year += 1;
+  }
+
+  return {
+    seasonStartAt: new Date(Date.UTC(year, 4, 1, 4, 0, 0)),
+    seasonEndAt: new Date(Date.UTC(year, 9, 1, 3, 59, 59))
+  };
+};
+
+const unixSeconds = (date: Date) => Math.floor(date.getTime() / 1000);
+
 const getRequestOrigin = (req: http.IncomingMessage) => {
   const forwardedProto = (req.headers['x-forwarded-proto'] as string | undefined)?.split(',')[0]?.trim();
   const forwardedHost = (req.headers['x-forwarded-host'] as string | undefined)?.split(',')[0]?.trim();
@@ -459,6 +533,7 @@ export const createServer = (options: CreateServerOptions = {}) => {
   const approvedQuotePreviewFetch = options.approvedQuotePreview?.fetchImpl ?? fetch;
   const approvedQuoteEmailSender =
     options.approvedQuoteEmail?.sender ?? createResendApprovedQuoteEmailSender();
+  const stripeProvider = options.payments?.stripeProvider ?? createStripePaymentProvider();
   void dataStore.initialize().catch((error) => {
     console.error('Failed to initialize datastore base stations:', error);
   });
@@ -485,6 +560,15 @@ export const createServer = (options: CreateServerOptions = {}) => {
     }
 
     return `${appBaseUrl}/dashboard/quotes/${encodeURIComponent(quoteId)}/payment`;
+  };
+
+  const buildPublicPaymentPageUrl = (req: http.IncomingMessage, paymentToken: string) => {
+    const appBaseUrl = resolveAppBaseUrl(req);
+    if (!appBaseUrl) {
+      return null;
+    }
+
+    return `${appBaseUrl}/pay/${encodeURIComponent(paymentToken)}`;
   };
 
   const buildPreviewImageBaseUrl = (req: http.IncomingMessage) => {
@@ -526,7 +610,14 @@ export const createServer = (options: CreateServerOptions = {}) => {
     try {
       const context = await dataStore.getApprovedQuoteEmailContext(input.quotePublicId);
       const previewToken = nanoid(24);
-      const paymentPageUrl = buildPaymentPageUrl(input.req, input.quotePublicId);
+      const paymentToken = createPaymentToken();
+      const paymentPageUrl = buildPublicPaymentPageUrl(input.req, paymentToken);
+      const paymentLink = await dataStore.createQuotePaymentLink({
+        quotePublicId: input.quotePublicId,
+        approvedVersionNumber: input.approvedVersionNumber,
+        tokenHash: hashPaymentToken(paymentToken),
+        actor: input.actor
+      });
       const previewImageBaseUrl = buildConfiguredPreviewImageBaseUrl();
       const previewImageUrl = previewImageBaseUrl
         ? `${previewImageBaseUrl}/${encodeURIComponent(previewToken)}`
@@ -550,6 +641,7 @@ export const createServer = (options: CreateServerOptions = {}) => {
           ...recorded,
           previewImageUrl,
           paymentPageUrl,
+          paymentLink,
           sent: false
         };
       }
@@ -573,6 +665,7 @@ export const createServer = (options: CreateServerOptions = {}) => {
           ...recorded,
           previewImageUrl,
           paymentPageUrl,
+          paymentLink,
           sent: false
         };
       }
@@ -594,6 +687,7 @@ export const createServer = (options: CreateServerOptions = {}) => {
           ...recorded,
           previewImageUrl,
           paymentPageUrl,
+          paymentLink,
           sent: false
         };
       }
@@ -630,6 +724,7 @@ export const createServer = (options: CreateServerOptions = {}) => {
           ...recorded,
           previewImageUrl,
           paymentPageUrl,
+          paymentLink,
           sent: false
         };
       }
@@ -672,6 +767,7 @@ export const createServer = (options: CreateServerOptions = {}) => {
           ...recorded,
           previewImageUrl,
           paymentPageUrl,
+          paymentLink,
           sent: true
         };
       } catch (error) {
@@ -692,6 +788,7 @@ export const createServer = (options: CreateServerOptions = {}) => {
           ...recorded,
           previewImageUrl,
           paymentPageUrl,
+          paymentLink,
           sent: false
         };
       }
@@ -704,6 +801,243 @@ export const createServer = (options: CreateServerOptions = {}) => {
         previewImageUrl: null,
         paymentPageUrl: null
       };
+    }
+  };
+
+  const buildPaymentLinkPayload = (paymentLink: Awaited<ReturnType<typeof dataStore.getPaymentLinkByTokenHash>>) => {
+    if (!paymentLink) {
+      return null;
+    }
+
+    return {
+      quote: {
+        id: paymentLink.publicQuoteId,
+        address: paymentLink.addressText,
+        metrics: paymentLink.metrics,
+        serviceFrequency: paymentLink.serviceFrequency,
+        billingMode: paymentLink.billingMode,
+        sessionsMin: paymentLink.sessionsMin,
+        sessionsMax: paymentLink.sessionsMax,
+        perSessionTotal: paymentLink.perSessionTotal,
+        seasonalTotalMin: paymentLink.seasonalTotalMin,
+        seasonalTotalMax: paymentLink.seasonalTotalMax,
+        fullSeasonTotal: paymentLink.fullSeasonTotal,
+        seasonalDiscountedTotal: paymentLink.seasonalDiscountedTotal,
+        seasonalSavingsTotal: paymentLink.seasonalSavingsTotal,
+        seasonalDiscountRate: paymentLink.seasonalDiscountRate,
+        verifiedAt: paymentLink.verifiedAt,
+        approvedQuotePreviewImageUrl: paymentLink.approvedQuotePreviewImageUrl
+      },
+      payment: {
+        mode: paymentLink.mode,
+        status: paymentLink.status,
+        amountCents: paymentLink.amountCents,
+        amount: centsToMoney(paymentLink.amountCents),
+        currency: paymentLink.currency,
+        recurringInterval: paymentLink.recurringInterval,
+        maxBillableVisits: paymentLink.maxBillableVisits,
+        paidInvoiceCount: paymentLink.paidInvoiceCount,
+        seasonStartAt: paymentLink.seasonStartAt,
+        seasonEndAt: paymentLink.seasonEndAt,
+        checkoutExpiresAt: paymentLink.stripeCheckoutExpiresAt
+      }
+    };
+  };
+
+  const resolvePaymentLink = async (req: http.IncomingMessage, token: string) =>
+    dataStore.getPaymentLinkByTokenHash({
+      tokenHash: hashPaymentToken(token),
+      previewImageBaseUrl: buildPreviewImageBaseUrl(req)
+    });
+
+  const isReusableCheckout = (paymentLink: NonNullable<Awaited<ReturnType<typeof dataStore.getPaymentLinkByTokenHash>>>) => {
+    if (!paymentLink.stripeCheckoutUrl || !paymentLink.stripeCheckoutExpiresAt) {
+      return false;
+    }
+
+    return new Date(paymentLink.stripeCheckoutExpiresAt).getTime() > nowMs() + 60_000;
+  };
+
+  const getCheckoutTiming = (paymentLink: NonNullable<Awaited<ReturnType<typeof dataStore.getPaymentLinkByTokenHash>>>) => {
+    if (paymentLink.mode !== 'per_session_subscription') {
+      return {
+        seasonStartAt: null,
+        seasonEndAt: null,
+        deferredStartUnix: null,
+        seasonEndUnix: null
+      };
+    }
+
+    const { seasonStartAt, seasonEndAt } = getTorontoSeasonWindow(nowMs());
+    return {
+      seasonStartAt,
+      seasonEndAt,
+      deferredStartUnix: nowMs() < seasonStartAt.getTime() ? unixSeconds(seasonStartAt) : null,
+      seasonEndUnix: unixSeconds(seasonEndAt)
+    };
+  };
+
+  const createCheckoutForPaymentLink = async (
+    paymentLink: NonNullable<Awaited<ReturnType<typeof dataStore.getPaymentLinkByTokenHash>>>,
+    paymentPageUrl: string
+  ) => {
+    if (isReusableCheckout(paymentLink)) {
+      return {
+        checkoutUrl: paymentLink.stripeCheckoutUrl,
+        checkoutSessionId: paymentLink.stripeCheckoutSessionId,
+        reused: true
+      };
+    }
+
+    const timing = getCheckoutTiming(paymentLink);
+    const successUrl = `${paymentPageUrl}?status=success&session_id={CHECKOUT_SESSION_ID}`;
+    const cancelUrl = `${paymentPageUrl}?status=canceled`;
+    const session = await stripeProvider.createCheckoutSession({
+      paymentLinkId: paymentLink.id,
+      quoteId: paymentLink.publicQuoteId,
+      approvedVersionNumber: paymentLink.approvedVersionNumber,
+      mode: paymentLink.mode,
+      customerEmail: paymentLink.customerEmail,
+      amountCents: paymentLink.amountCents,
+      currency: paymentLink.currency,
+      productName:
+        paymentLink.mode === 'seasonal_payment'
+          ? `Autoscape seasonal service - ${paymentLink.publicQuoteId}`
+          : `Autoscape weekly service - ${paymentLink.publicQuoteId}`,
+      productDescription:
+        paymentLink.mode === 'seasonal_payment'
+          ? `${paymentLink.sessionsMax} approved weekly visits paid upfront.`
+          : `Weekly approved per-visit billing capped at ${paymentLink.sessionsMax} visits.`,
+      successUrl,
+      cancelUrl,
+      deferredStartUnix: timing.deferredStartUnix,
+      maxBillableVisits: paymentLink.maxBillableVisits,
+      seasonEndUnix: timing.seasonEndUnix
+    });
+
+    await dataStore.recordPaymentCheckoutSession({
+      paymentLinkId: paymentLink.id,
+      checkoutSessionId: session.id,
+      checkoutUrl: session.url,
+      checkoutExpiresAt: session.expiresAt ? new Date(session.expiresAt * 1000).toISOString() : null,
+      seasonStartAt: timing.seasonStartAt?.toISOString() ?? null,
+      seasonEndAt: timing.seasonEndAt?.toISOString() ?? null,
+      stripeCustomerId: session.customerId,
+      stripePaymentIntentId: session.paymentIntentId,
+      stripeSubscriptionId: session.subscriptionId,
+      status: 'checkout_created'
+    });
+
+    return {
+      checkoutUrl: session.url,
+      checkoutSessionId: session.id,
+      reused: false
+    };
+  };
+
+  const handleStripeWebhookEvent = async (event: StripeWebhookEvent) => {
+    const object = event.data.object && typeof event.data.object === 'object'
+      ? (event.data.object as Record<string, unknown>)
+      : {};
+    const sessionId = getObjectId(object);
+
+    if (event.type === 'checkout.session.completed' && sessionId) {
+      const metadata = getObjectMetadata(object);
+      const mode = metadata.paymentMode;
+      const paymentStatus = typeof object.payment_status === 'string' ? object.payment_status : null;
+      const deferredStartUnix = Number(metadata.deferredStartUnix ?? metadata.trialEndUnix ?? 0);
+      const status: QuotePaymentStatus =
+        mode === 'per_session_subscription'
+          ? deferredStartUnix > Math.floor(nowMs() / 1000)
+            ? 'subscription_scheduled'
+            : 'subscription_active'
+          : paymentStatus === 'paid'
+            ? 'paid'
+            : 'checkout_created';
+
+      const updated = await dataStore.recordPaymentCheckoutCompleted({
+        checkoutSessionId: sessionId,
+        stripeCustomerId: getObjectId(object.customer),
+        stripePaymentIntentId: getObjectId(object.payment_intent),
+        stripeSubscriptionId: getObjectId(object.subscription),
+        status
+      });
+
+      if (updated?.stripeSubscriptionId && updated.seasonEndAt) {
+        await stripeProvider.updateSubscriptionCancelAt(
+          updated.stripeSubscriptionId,
+          unixSeconds(new Date(updated.seasonEndAt))
+        );
+      }
+      return;
+    }
+
+    if (event.type === 'checkout.session.async_payment_succeeded' && sessionId) {
+      await dataStore.recordPaymentCheckoutCompleted({
+        checkoutSessionId: sessionId,
+        stripeCustomerId: getObjectId(object.customer),
+        stripePaymentIntentId: getObjectId(object.payment_intent),
+        stripeSubscriptionId: getObjectId(object.subscription),
+        status: 'paid'
+      });
+      return;
+    }
+
+    if (event.type === 'checkout.session.async_payment_failed' && sessionId) {
+      await dataStore.recordPaymentCheckoutCompleted({
+        checkoutSessionId: sessionId,
+        stripeCustomerId: getObjectId(object.customer),
+        stripePaymentIntentId: getObjectId(object.payment_intent),
+        stripeSubscriptionId: getObjectId(object.subscription),
+        status: 'failed'
+      });
+      return;
+    }
+
+    if (event.type === 'invoice.paid') {
+      const updated = await dataStore.recordPaymentInvoiceStatus({
+        stripeSubscriptionId: getObjectId(object.subscription) ?? '',
+        invoiceId: sessionId,
+        status: 'subscription_active'
+      });
+
+      if (updated?.status === 'paid' && updated.stripeSubscriptionId && updated.paidInvoiceRecorded !== false) {
+        await stripeProvider.cancelSubscription(updated.stripeSubscriptionId);
+      }
+      return;
+    }
+
+    if (event.type === 'invoice.payment_failed') {
+      await dataStore.recordPaymentInvoiceStatus({
+        stripeSubscriptionId: getObjectId(object.subscription) ?? '',
+        invoiceId: sessionId,
+        status: 'past_due'
+      });
+      return;
+    }
+
+    if (event.type === 'customer.subscription.deleted') {
+      await dataStore.recordPaymentSubscriptionStatus({
+        stripeSubscriptionId: sessionId ?? '',
+        status: 'canceled'
+      });
+      return;
+    }
+
+    if (event.type === 'customer.subscription.updated') {
+      const stripeStatus = typeof object.status === 'string' ? object.status : null;
+      if (stripeStatus === 'past_due' || stripeStatus === 'unpaid') {
+        await dataStore.recordPaymentSubscriptionStatus({
+          stripeSubscriptionId: sessionId ?? '',
+          status: 'past_due'
+        });
+      }
+      if (stripeStatus === 'canceled') {
+        await dataStore.recordPaymentSubscriptionStatus({
+          stripeSubscriptionId: sessionId ?? '',
+          status: 'canceled'
+        });
+      }
     }
   };
 
@@ -760,6 +1094,8 @@ export const createServer = (options: CreateServerOptions = {}) => {
         pathname === '/api/quote/draft' ||
         pathname.match(/^\/api\/quote\/[^/]+\/contact$/) ||
         pathname.match(/^\/api\/quote\/[^/]+\/claim$/) ||
+        pathname.match(/^\/api\/payment-links\/[^/]+\/checkout$/) ||
+        pathname.match(/^\/api\/account\/quotes\/[^/]+\/payment\/checkout$/) ||
         pathname === '/api/contact' ||
         pathname === '/api/service-area/request')
     ) {
@@ -783,6 +1119,119 @@ export const createServer = (options: CreateServerOptions = {}) => {
     if (method === 'GET' && pathname === '/api/health') {
       json(res, 200, { ok: true, service: 'autoscape-server', mode: 'admin-platform-v1' });
       return;
+    }
+
+    if (method === 'POST' && pathname === '/api/stripe/webhook') {
+      try {
+        const rawBody = await readRawBody(req);
+        const signatureHeader = req.headers['stripe-signature'];
+        const signature = Array.isArray(signatureHeader) ? signatureHeader[0] : signatureHeader;
+        const event = stripeProvider.constructWebhookEvent(rawBody, signature);
+        const recorded = await dataStore.recordStripeWebhookEvent({
+          stripeEventId: event.id,
+          eventType: event.type,
+          payload: event.data.object
+        });
+
+        if (!recorded.replayed) {
+          await handleStripeWebhookEvent(event);
+        }
+
+        json(res, 200, {
+          received: true,
+          replayed: recorded.replayed
+        });
+        return;
+      } catch (error) {
+        if (error instanceof Error && error.message === 'Payload too large.') {
+          json(res, 413, { error: 'Payload too large.' });
+          return;
+        }
+
+        const message =
+          error instanceof StripePaymentConfigurationError
+            ? error.message
+            : error instanceof Error
+              ? error.message
+              : 'Invalid Stripe webhook.';
+        json(res, 400, { error: message });
+        return;
+      }
+    }
+
+    const paymentLinkToken = getPathMatch(pathname, /^\/api\/payment-links\/([^/]+)$/);
+    if (method === 'GET' && paymentLinkToken) {
+      try {
+        const paymentLink = await resolvePaymentLink(req, paymentLinkToken);
+        if (!paymentLink) {
+          json(res, 404, { error: 'Payment link not found.' });
+          return;
+        }
+
+        if (paymentLink.tokenRevokedAt) {
+          json(res, 410, { error: 'This payment link is no longer active.' });
+          return;
+        }
+
+        json(res, 200, buildPaymentLinkPayload(paymentLink));
+        return;
+      } catch (error) {
+        const mapped = mapStoreError(error);
+        json(res, mapped.statusCode, { error: mapped.message });
+        return;
+      }
+    }
+
+    const paymentLinkCheckoutToken = getPathMatch(pathname, /^\/api\/payment-links\/([^/]+)\/checkout$/);
+    if (method === 'POST' && paymentLinkCheckoutToken) {
+      try {
+        const paymentLink = await resolvePaymentLink(req, paymentLinkCheckoutToken);
+        if (!paymentLink) {
+          json(res, 404, { error: 'Payment link not found.' });
+          return;
+        }
+
+        if (paymentLink.tokenRevokedAt) {
+          json(res, 410, { error: 'This payment link is no longer active.' });
+          return;
+        }
+
+        if (
+          paymentLink.status === 'paid' ||
+          paymentLink.status === 'subscription_scheduled' ||
+          paymentLink.status === 'subscription_active'
+        ) {
+          json(res, 409, { error: 'This quote has already started payment.' });
+          return;
+        }
+
+        if (isReusableCheckout(paymentLink)) {
+          json(res, 200, {
+            checkoutUrl: paymentLink.stripeCheckoutUrl,
+            checkoutSessionId: paymentLink.stripeCheckoutSessionId,
+            reused: true
+          });
+          return;
+        }
+
+        const publicPaymentPageUrl = buildPublicPaymentPageUrl(req, paymentLinkCheckoutToken);
+        if (!publicPaymentPageUrl) {
+          json(res, 500, { error: 'Public application URL is not configured for payments.' });
+          return;
+        }
+
+        json(res, 200, await createCheckoutForPaymentLink(paymentLink, publicPaymentPageUrl));
+        return;
+      } catch (error) {
+        if (error instanceof StripePaymentConfigurationError) {
+          json(res, 503, { error: error.message });
+          return;
+        }
+
+        const mapped = mapStoreError(error);
+        json(res, mapped.statusCode, { error: mapped.message });
+        return;
+      }
     }
 
     if (method === 'GET' && pathname === '/api/service-area') {
@@ -1132,6 +1581,62 @@ export const createServer = (options: CreateServerOptions = {}) => {
         json(res, 200, result);
         return;
       } catch (error) {
+        const mapped = mapStoreError(error);
+        json(res, mapped.statusCode, { error: mapped.message });
+        return;
+      }
+    }
+
+    const accountQuotePaymentCheckoutId = getPathMatch(pathname, /^\/api\/account\/quotes\/([^/]+)\/payment\/checkout$/);
+    if (method === 'POST' && accountQuotePaymentCheckoutId) {
+      try {
+        const customerIdentity = await customerIdentityResolver(req);
+        if (!customerIdentity) {
+          throw new Error('AUTH_REQUIRED');
+        }
+        assertCustomerPhoneProfile(customerIdentity);
+
+        const paymentLink = await dataStore.getPaymentLinkByQuotePublicId({
+          quotePublicId: accountQuotePaymentCheckoutId,
+          access: {
+            authUserId: customerIdentity.userId,
+            isAdmin: false
+          },
+          previewImageBaseUrl: buildPreviewImageBaseUrl(req)
+        });
+        if (!paymentLink) {
+          json(res, 404, { error: 'Payment link not found for this quote.' });
+          return;
+        }
+
+        if (paymentLink.tokenRevokedAt) {
+          json(res, 410, { error: 'This payment link is no longer active.' });
+          return;
+        }
+
+        if (
+          paymentLink.status === 'paid' ||
+          paymentLink.status === 'subscription_scheduled' ||
+          paymentLink.status === 'subscription_active'
+        ) {
+          json(res, 409, { error: 'This quote has already started payment.' });
+          return;
+        }
+
+        const dashboardPaymentPageUrl = buildPaymentPageUrl(req, accountQuotePaymentCheckoutId);
+        if (!dashboardPaymentPageUrl) {
+          json(res, 500, { error: 'Public application URL is not configured for payments.' });
+          return;
+        }
+
+        json(res, 200, await createCheckoutForPaymentLink(paymentLink, dashboardPaymentPageUrl));
+        return;
+      } catch (error) {
+        if (error instanceof StripePaymentConfigurationError) {
+          json(res, 503, { error: error.message });
+          return;
+        }
+
         const mapped = mapStoreError(error);
         json(res, mapped.statusCode, { error: mapped.message });
         return;

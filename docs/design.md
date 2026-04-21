@@ -92,9 +92,10 @@ Implementation:
 - DigitalOcean App Platform runs separate staging and production apps.
 - Staging auto-deploys from `staging`; production deploys manually from `main`.
 - Each environment has isolated public/admin/API components and a separate managed Postgres/PostGIS database.
+- Node is pinned to `20.x` through the committed package `engines` fields so DigitalOcean builds do not drift to the platform default.
 - Prisma migrations run as a pre-deploy job so schema changes block rollout if they fail.
 - Secrets live in DigitalOcean environment variables, not committed app specs or `.env` files.
-- Live status on 2026-04-21 keeps this separation intact: staging is active with PostgreSQL 16/PostGIS and self-managed GoDaddy CNAMEs, authenticated quote/admin smoke tests pass through admin verification plus redeploy persistence, and the approved-quote preview/resend routes are deployed. Production is intentionally uncreated until real approval email/resend smoke testing passes and launch is confirmed.
+- Live status on 2026-04-21 keeps this separation intact: staging is active with PostgreSQL 16/PostGIS and self-managed GoDaddy CNAMEs, authenticated quote/admin smoke tests pass through admin verification plus redeploy persistence, and the approved-quote preview/resend routes are deployed. The API has both Stripe secrets configured and still needs checkout smoke testing. Production is intentionally uncreated until real approval email/resend smoke testing, Stripe checkout smoke testing, and launch confirmation pass.
 
 ## 8) Immutable Revision History
 
@@ -122,8 +123,9 @@ Transitions:
 - revision updates `customer_status` while remaining `in_review`
 - runtime finalize path moves `draft -> in_review` directly (while preserving enum compatibility for `submitted`)
 - selected version submit sets `status=verified`, `customer_status=awaiting_payment`
-- verified submit attempts a payment-focused Resend email, records sent/failed delivery state for auditability, keeps approval successful on delivery failure, and exposes manual resend for verified quotes awaiting payment
+- verified submit creates a fresh secure payment token, attempts a payment-focused Resend email, records sent/failed delivery state for auditability, keeps approval successful on delivery failure, and exposes manual resend for verified quotes awaiting payment
 - approved quote map previews are tokenized public image URLs backed by server-proxied Mapbox satellite static imagery; they show approved service area, added-by-admin area, and removed-by-admin area using the quote-tool color family
+- approved quote payment links are tokenized public URLs (`/pay/:token`) stored as hashes server-side; resend rotates the payment token and revokes older active links
 
 ## 10) Event-Oriented Audit Logging
 
@@ -367,7 +369,9 @@ Implementation:
   - `/dashboard`
   - `/dashboard/quotes/:quoteId`
   - `/dashboard/quotes/:quoteId/payment`
-- approved-quote placeholder payment page uses the same tokenized preview image as the email, shows approved service area plus added-by-admin and removed-by-admin colors, and keeps payment copy explicitly "coming soon"; the email itself centers the payment button as the primary action
+- public `/pay/:token` page uses the approved quote/payment visual language, shows the tokenized preview image when available, summarizes the exact approved payment terms, and sends the client to Stripe Checkout without a sign-in gate
+- seasonal payments present one final upfront amount; per-session payments present weekly billing terms, May 1/start-at-checkout timing, the approved visit cap, and the September 30 outer stop
+- `/dashboard/quotes/:quoteId/payment` uses the same approved payment visual language as an authenticated checkout surface for signed-in customers
 
 ## 22) Warm-Light Premium Public Refresh
 

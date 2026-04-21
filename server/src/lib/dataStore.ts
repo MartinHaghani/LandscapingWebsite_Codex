@@ -113,6 +113,19 @@ interface ServiceAreaRequestInput {
   isInServiceAreaAtCapture: boolean;
 }
 
+interface QuotePaymentSummary {
+  mode: QuotePaymentMode;
+  status: QuotePaymentStatus;
+  amountCents: number;
+  currency: string;
+  recurringInterval: string | null;
+  maxBillableVisits: number | null;
+  paidInvoiceCount: number;
+  seasonStartAt: string | null;
+  seasonEndAt: string | null;
+  checkoutExpiresAt: string | null;
+}
+
 interface QuotePublicRecord {
   id: string;
   createdAt: string;
@@ -141,6 +154,7 @@ interface QuotePublicRecord {
   verifiedAt: string | null;
   paymentPageUrl: string | null;
   approvedQuotePreviewImageUrl: string | null;
+  payment: QuotePaymentSummary | null;
 }
 
 interface QuoteAccessContext {
@@ -309,6 +323,130 @@ interface QuoteApprovedEmailContext {
   seasonalSavingsTotal: number;
   seasonalDiscountRate: number;
   verifiedAt: string | null;
+}
+
+export type QuotePaymentMode = 'seasonal_payment' | 'per_session_subscription';
+export type QuotePaymentStatus =
+  | 'awaiting_payment'
+  | 'checkout_created'
+  | 'paid'
+  | 'subscription_scheduled'
+  | 'subscription_active'
+  | 'past_due'
+  | 'failed'
+  | 'canceled';
+
+interface CreateQuotePaymentLinkInput {
+  quotePublicId: string;
+  approvedVersionNumber: number;
+  tokenHash: string;
+  actor: ActorContext;
+}
+
+interface QuotePaymentLinkContext {
+  id: string;
+  quoteId: string;
+  publicQuoteId: string;
+  approvedVersionNumber: number;
+  tokenRevokedAt: string | null;
+  status: QuotePaymentStatus;
+  mode: QuotePaymentMode;
+  amountCents: number;
+  currency: string;
+  recurringInterval: string | null;
+  maxBillableVisits: number | null;
+  paidInvoiceCount: number;
+  seasonStartAt: string | null;
+  seasonEndAt: string | null;
+  stripeCustomerId: string | null;
+  stripeCheckoutSessionId: string | null;
+  stripeCheckoutUrl: string | null;
+  stripeCheckoutExpiresAt: string | null;
+  stripePaymentIntentId: string | null;
+  stripeSubscriptionId: string | null;
+  customerEmail: string | null;
+  customerName: string | null;
+  addressText: string;
+  metrics: {
+    areaM2: number;
+    perimeterM: number;
+  };
+  serviceFrequency: ServiceFrequency;
+  billingMode: BillingMode;
+  sessionsMin: number;
+  sessionsMax: number;
+  perSessionTotal: number;
+  seasonalTotalMin: number;
+  seasonalTotalMax: number;
+  fullSeasonTotal: number;
+  seasonalDiscountedTotal: number;
+  seasonalSavingsTotal: number;
+  seasonalDiscountRate: number;
+  verifiedAt: string | null;
+  approvedQuotePreviewImageUrl: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+interface PaymentLinkLookupInput {
+  tokenHash: string;
+  previewImageBaseUrl?: string | null;
+}
+
+interface PaymentLinkQuoteLookupInput {
+  quotePublicId: string;
+  access: QuoteAccessContext;
+  previewImageBaseUrl?: string | null;
+}
+
+interface PaymentCheckoutSessionInput {
+  paymentLinkId: string;
+  checkoutSessionId: string;
+  checkoutUrl: string;
+  checkoutExpiresAt?: string | null;
+  seasonStartAt?: string | null;
+  seasonEndAt?: string | null;
+  stripeCustomerId?: string | null;
+  stripePaymentIntentId?: string | null;
+  stripeSubscriptionId?: string | null;
+  status?: QuotePaymentStatus;
+}
+
+interface PaymentCheckoutCompletedInput {
+  checkoutSessionId: string;
+  stripeCustomerId?: string | null;
+  stripePaymentIntentId?: string | null;
+  stripeSubscriptionId?: string | null;
+  status: QuotePaymentStatus;
+}
+
+interface PaymentInvoiceStatusInput {
+  stripeSubscriptionId: string;
+  invoiceId?: string | null;
+  status: QuotePaymentStatus;
+}
+
+interface PaymentSubscriptionStatusInput {
+  stripeSubscriptionId: string;
+  status: QuotePaymentStatus;
+}
+
+interface QuotePaymentLinkUpdateResult {
+  id: string;
+  publicQuoteId: string;
+  mode: QuotePaymentMode;
+  status: QuotePaymentStatus;
+  stripeSubscriptionId: string | null;
+  maxBillableVisits: number | null;
+  paidInvoiceCount: number;
+  seasonEndAt: string | null;
+  paidInvoiceRecorded?: boolean;
+}
+
+interface RecordStripeWebhookEventInput {
+  stripeEventId: string;
+  eventType: string;
+  payload?: unknown;
 }
 
 interface ApprovedQuotePreviewRecord {
@@ -517,6 +655,42 @@ interface MemoryApprovedQuoteEmailDelivery {
   createdAt: string;
 }
 
+interface MemoryQuotePaymentLink {
+  id: string;
+  quoteId: string;
+  approvedVersionNumber: number;
+  tokenHash: string;
+  mode: QuotePaymentMode;
+  status: QuotePaymentStatus;
+  currency: string;
+  amountCents: number;
+  recurringInterval: string | null;
+  maxBillableVisits: number | null;
+  paidInvoiceCount: number;
+  paidInvoiceIds: string[];
+  seasonStartAt: string | null;
+  seasonEndAt: string | null;
+  stripeCustomerId: string | null;
+  stripeCheckoutSessionId: string | null;
+  stripeCheckoutUrl: string | null;
+  stripeCheckoutExpiresAt: string | null;
+  stripePaymentIntentId: string | null;
+  stripeSubscriptionId: string | null;
+  tokenRevokedAt: string | null;
+  paidAt: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+interface MemoryStripeWebhookEvent {
+  id: string;
+  stripeEventId: string;
+  eventType: string;
+  payload: unknown | null;
+  processedAt: string;
+  createdAt: string;
+}
+
 const METRIC_DRIFT_TOLERANCE = 0.03;
 const EARTH_RADIUS_M = 6_371_008.8;
 
@@ -684,6 +858,58 @@ const deriveBillingAmounts = (
     seasonalSavingsTotal
   };
 };
+
+const toMoneyCents = (value: number) => Math.max(0, Math.round(roundMoney(value) * 100));
+
+const getPaymentModeFromBillingMode = (billingMode: BillingMode): QuotePaymentMode =>
+  billingMode === 'per_session' ? 'per_session_subscription' : 'seasonal_payment';
+
+const getPaymentAmountCents = (input: {
+  billingMode: BillingMode;
+  perSessionTotal: number;
+  seasonalTotalMax: number;
+  seasonalDiscountRate: number;
+}) => {
+  if (input.billingMode === 'per_session') {
+    return toMoneyCents(input.perSessionTotal);
+  }
+
+  return toMoneyCents(
+    deriveBillingAmounts(input.seasonalTotalMax, input.seasonalDiscountRate).seasonalDiscountedTotal
+  );
+};
+
+const buildPreviewUrlFromLatestDelivery = (
+  delivery: { publicPreviewToken: string } | null | undefined,
+  previewImageBaseUrl?: string | null
+) =>
+  delivery && previewImageBaseUrl
+    ? `${previewImageBaseUrl.replace(/\/$/, '')}/${encodeURIComponent(delivery.publicPreviewToken)}`
+    : null;
+
+const buildPaymentSummary = (paymentLink: {
+  mode: QuotePaymentMode;
+  status: QuotePaymentStatus;
+  amountCents: number;
+  currency: string;
+  recurringInterval: string | null;
+  maxBillableVisits: number | null;
+  paidInvoiceCount: number;
+  seasonStartAt: string | null;
+  seasonEndAt: string | null;
+  stripeCheckoutExpiresAt: string | null;
+}): QuotePaymentSummary => ({
+  mode: paymentLink.mode,
+  status: paymentLink.status,
+  amountCents: paymentLink.amountCents,
+  currency: paymentLink.currency,
+  recurringInterval: paymentLink.recurringInterval,
+  maxBillableVisits: paymentLink.maxBillableVisits,
+  paidInvoiceCount: paymentLink.paidInvoiceCount,
+  seasonStartAt: paymentLink.seasonStartAt,
+  seasonEndAt: paymentLink.seasonEndAt,
+  checkoutExpiresAt: paymentLink.stripeCheckoutExpiresAt
+});
 
 const getRecommendedPlanFromArea = (areaM2: number) => {
   if (areaM2 < 450) {
@@ -1091,6 +1317,22 @@ const parseDecimal = (value: unknown) => {
   return 0;
 };
 
+const toIsoString = (value: unknown): string | null => {
+  if (!value) {
+    return null;
+  }
+
+  if (value instanceof Date) {
+    return value.toISOString();
+  }
+
+  if (typeof value === 'string') {
+    return value;
+  }
+
+  return null;
+};
+
 const parseQuoteGeometryJson = (value: string | null): QuoteGeometry | null => {
   if (!value) {
     return null;
@@ -1215,6 +1457,8 @@ export class DataStore {
     quotes: new Map<string, MemoryQuote>(),
     quoteVersions: [] as MemoryQuoteVersion[],
     approvedQuoteEmailDeliveries: [] as MemoryApprovedQuoteEmailDelivery[],
+    paymentLinks: [] as MemoryQuotePaymentLink[],
+    stripeWebhookEvents: [] as MemoryStripeWebhookEvent[],
     contacts: [] as MemoryLeadContact[],
     requests: [] as MemoryServiceAreaRequest[],
     attributionTouches: [] as MemoryAttributionTouch[],
@@ -2568,6 +2812,9 @@ export class DataStore {
         latestDelivery && links.previewImageBaseUrl
           ? `${links.previewImageBaseUrl.replace(/\/$/, '')}/${encodeURIComponent(latestDelivery.publicPreviewToken)}`
           : null;
+      const latestPaymentLink = this.memory.paymentLinks
+        .filter((link) => link.quoteId === quote.id)
+        .sort((left, right) => compareText(right.createdAt, left.createdAt))[0] ?? null;
 
       return {
         id: quote.publicQuoteId,
@@ -2596,7 +2843,8 @@ export class DataStore {
         submittedAt: quote.submittedAt,
         verifiedAt: quote.verifiedAt,
         paymentPageUrl: links.paymentPageUrl ?? null,
-        approvedQuotePreviewImageUrl: previewImageUrl
+        approvedQuotePreviewImageUrl: previewImageUrl,
+        payment: latestPaymentLink ? buildPaymentSummary(latestPaymentLink) : null
       };
     }
 
@@ -2606,6 +2854,12 @@ export class DataStore {
       },
       include: {
         approvedQuoteEmailDeliveries: {
+          orderBy: {
+            createdAt: 'desc'
+          },
+          take: 1
+        },
+        paymentLinks: {
           orderBy: {
             createdAt: 'desc'
           },
@@ -2627,6 +2881,7 @@ export class DataStore {
       parseDecimal(quote.seasonalDiscountRate)
     );
     const latestDelivery = quote.approvedQuoteEmailDeliveries[0] ?? null;
+    const latestPaymentLink = quote.paymentLinks[0] ?? null;
     const previewImageUrl =
       latestDelivery && links.previewImageBaseUrl
         ? `${links.previewImageBaseUrl.replace(/\/$/, '')}/${encodeURIComponent(latestDelivery.publicPreviewToken)}`
@@ -2659,7 +2914,21 @@ export class DataStore {
       submittedAt: quote.submittedAt ? quote.submittedAt.toISOString() : null,
       verifiedAt: quote.verifiedAt?.toISOString() ?? null,
       paymentPageUrl: links.paymentPageUrl ?? null,
-      approvedQuotePreviewImageUrl: previewImageUrl
+      approvedQuotePreviewImageUrl: previewImageUrl,
+      payment: latestPaymentLink
+        ? buildPaymentSummary({
+            mode: latestPaymentLink.mode,
+            status: latestPaymentLink.status,
+            amountCents: latestPaymentLink.amountCents,
+            currency: latestPaymentLink.currency,
+            recurringInterval: latestPaymentLink.recurringInterval,
+            maxBillableVisits: latestPaymentLink.maxBillableVisits,
+            paidInvoiceCount: latestPaymentLink.paidInvoiceCount,
+            seasonStartAt: latestPaymentLink.seasonStartAt?.toISOString() ?? null,
+            seasonEndAt: latestPaymentLink.seasonEndAt?.toISOString() ?? null,
+            stripeCheckoutExpiresAt: latestPaymentLink.stripeCheckoutExpiresAt?.toISOString() ?? null
+          })
+        : null
     };
   }
 
@@ -4168,6 +4437,9 @@ export class DataStore {
         latestDelivery
           ? `/api/approved-quote-preview/${encodeURIComponent(latestDelivery.publicPreviewToken)}`
           : null;
+      const latestPaymentLink = this.memory.paymentLinks
+        .filter((link) => link.quoteId === quote.id)
+        .sort((left, right) => compareText(right.createdAt, left.createdAt))[0] ?? null;
 
       return {
         quoteId: quote.publicQuoteId,
@@ -4221,7 +4493,19 @@ export class DataStore {
                 },
           paymentPageUrl: input.paymentPageUrl ?? null,
           previewImageUrl
-        })
+        }),
+        payment: latestPaymentLink
+          ? {
+              ...buildPaymentSummary(latestPaymentLink),
+              stripeCheckoutSessionId: latestPaymentLink.stripeCheckoutSessionId,
+              stripePaymentIntentId: latestPaymentLink.stripePaymentIntentId,
+              stripeSubscriptionId: latestPaymentLink.stripeSubscriptionId,
+              tokenRevokedAt: latestPaymentLink.tokenRevokedAt,
+              paidAt: latestPaymentLink.paidAt,
+              createdAt: latestPaymentLink.createdAt,
+              updatedAt: latestPaymentLink.updatedAt
+            }
+          : null
       };
     }
 
@@ -4232,6 +4516,12 @@ export class DataStore {
       include: {
         lead: true,
         approvedQuoteEmailDeliveries: {
+          orderBy: {
+            createdAt: 'desc'
+          },
+          take: 1
+        },
+        paymentLinks: {
           orderBy: {
             createdAt: 'desc'
           },
@@ -4306,6 +4596,7 @@ export class DataStore {
     const leadPhone =
       input.role === 'MARKETING' ? maskPhone(quote.lead.primaryPhone) : quote.lead.primaryPhone;
     const latestDelivery = quote.approvedQuoteEmailDeliveries[0] ?? null;
+    const latestPaymentLink = quote.paymentLinks[0] ?? null;
     const previewImageUrl =
       latestDelivery
         ? `/api/approved-quote-preview/${encodeURIComponent(latestDelivery.publicPreviewToken)}`
@@ -4363,7 +4654,30 @@ export class DataStore {
               },
         paymentPageUrl: input.paymentPageUrl ?? null,
         previewImageUrl
-      })
+      }),
+      payment: latestPaymentLink
+        ? {
+            ...buildPaymentSummary({
+              mode: latestPaymentLink.mode,
+              status: latestPaymentLink.status,
+              amountCents: latestPaymentLink.amountCents,
+              currency: latestPaymentLink.currency,
+              recurringInterval: latestPaymentLink.recurringInterval,
+              maxBillableVisits: latestPaymentLink.maxBillableVisits,
+              paidInvoiceCount: latestPaymentLink.paidInvoiceCount,
+              seasonStartAt: latestPaymentLink.seasonStartAt?.toISOString() ?? null,
+              seasonEndAt: latestPaymentLink.seasonEndAt?.toISOString() ?? null,
+              stripeCheckoutExpiresAt: latestPaymentLink.stripeCheckoutExpiresAt?.toISOString() ?? null
+            }),
+            stripeCheckoutSessionId: latestPaymentLink.stripeCheckoutSessionId,
+            stripePaymentIntentId: latestPaymentLink.stripePaymentIntentId,
+            stripeSubscriptionId: latestPaymentLink.stripeSubscriptionId,
+            tokenRevokedAt: latestPaymentLink.tokenRevokedAt?.toISOString() ?? null,
+            paidAt: latestPaymentLink.paidAt?.toISOString() ?? null,
+            createdAt: latestPaymentLink.createdAt.toISOString(),
+            updatedAt: latestPaymentLink.updatedAt.toISOString()
+          }
+        : null
     };
   }
 
@@ -4963,6 +5277,943 @@ export class DataStore {
       verifiedBy: input.actor.userId,
       selectedVersion: input.versionNumber
     };
+  }
+
+  async createQuotePaymentLink(input: CreateQuotePaymentLinkInput) {
+    if (!this.prisma) {
+      const quote = [...this.memory.quotes.values()].find((item) => item.publicQuoteId === input.quotePublicId);
+      if (!quote) {
+        throw new Error('QUOTE_NOT_FOUND');
+      }
+
+      if (quote.status !== 'verified' || quote.customerStatus !== 'awaiting_payment') {
+        throw new Error('QUOTE_PAYMENT_NOT_ALLOWED');
+      }
+
+      const mode = getPaymentModeFromBillingMode(normalizeBillingMode(quote.billingMode));
+      const amountCents = getPaymentAmountCents({
+        billingMode: normalizeBillingMode(quote.billingMode),
+        perSessionTotal: quote.perSessionTotal,
+        seasonalTotalMax: quote.seasonalTotalMax,
+        seasonalDiscountRate: quote.seasonalDiscountRate
+      });
+      const createdAt = nowIso();
+
+      this.memory.paymentLinks
+        .filter((link) => link.quoteId === quote.id && !link.tokenRevokedAt && link.status !== 'paid')
+        .forEach((link) => {
+          link.tokenRevokedAt = createdAt;
+          link.updatedAt = createdAt;
+        });
+
+      const link: MemoryQuotePaymentLink = {
+        id: nanoid(14),
+        quoteId: quote.id,
+        approvedVersionNumber: input.approvedVersionNumber,
+        tokenHash: input.tokenHash,
+        mode,
+        status: 'awaiting_payment',
+        currency: quote.currency,
+        amountCents,
+        recurringInterval: mode === 'per_session_subscription' ? 'week' : null,
+        maxBillableVisits: mode === 'per_session_subscription' ? quote.sessionsMax : null,
+        paidInvoiceCount: 0,
+        paidInvoiceIds: [],
+        seasonStartAt: null,
+        seasonEndAt: null,
+        stripeCustomerId: null,
+        stripeCheckoutSessionId: null,
+        stripeCheckoutUrl: null,
+        stripeCheckoutExpiresAt: null,
+        stripePaymentIntentId: null,
+        stripeSubscriptionId: null,
+        tokenRevokedAt: null,
+        paidAt: null,
+        createdAt,
+        updatedAt: createdAt
+      };
+      this.memory.paymentLinks.push(link);
+
+      await this.writeAuditLog({
+        actor: input.actor,
+        action: 'quote.payment_link_created',
+        entityType: 'quote',
+        entityId: quote.id,
+        changedFields: ['payment_link'],
+        afterRedacted: {
+          quoteId: quote.publicQuoteId,
+          approvedVersionNumber: input.approvedVersionNumber,
+          mode,
+          amountCents,
+          currency: quote.currency
+        }
+      });
+
+      return {
+        id: link.id,
+        quoteId: quote.publicQuoteId,
+        mode: link.mode,
+        status: link.status,
+        amountCents: link.amountCents,
+        currency: link.currency
+      };
+    }
+
+    const quote = await this.prisma.quote.findUnique({
+      where: {
+        publicQuoteId: input.quotePublicId
+      }
+    });
+    if (!quote) {
+      throw new Error('QUOTE_NOT_FOUND');
+    }
+
+    if (quote.status !== 'verified' || quote.customerStatus !== 'awaiting_payment') {
+      throw new Error('QUOTE_PAYMENT_NOT_ALLOWED');
+    }
+
+    const billingMode = normalizeBillingMode(quote.billingMode);
+    const mode = getPaymentModeFromBillingMode(billingMode);
+    const amountCents = getPaymentAmountCents({
+      billingMode,
+      perSessionTotal: parseDecimal(quote.perSessionTotal),
+      seasonalTotalMax: parseDecimal(quote.seasonalTotalMax),
+      seasonalDiscountRate: parseDecimal(quote.seasonalDiscountRate)
+    });
+    const linkId = nanoid(14);
+
+    await this.prisma.$transaction(async (tx) => {
+      await tx.$executeRaw(
+        Prisma.sql`
+          UPDATE "quote_payment_links"
+          SET
+            "token_revoked_at" = now(),
+            "updated_at" = now()
+          WHERE
+            "quote_id" = ${quote.id}
+            AND "token_revoked_at" IS NULL
+            AND "status" <> 'paid'::"QuotePaymentStatus"
+        `
+      );
+
+      await tx.$executeRaw(
+        Prisma.sql`
+          INSERT INTO "quote_payment_links" (
+            "id",
+            "quote_id",
+            "approved_version_number",
+            "token_hash",
+            "mode",
+            "status",
+            "currency",
+            "amount_cents",
+            "recurring_interval",
+            "max_billable_visits"
+          )
+          VALUES (
+            ${linkId},
+            ${quote.id},
+            ${input.approvedVersionNumber},
+            ${input.tokenHash},
+            ${mode}::"QuotePaymentMode",
+            'awaiting_payment'::"QuotePaymentStatus",
+            ${quote.currency},
+            ${amountCents},
+            ${mode === 'per_session_subscription' ? 'week' : null},
+            ${mode === 'per_session_subscription' ? quote.sessionsMax : null}
+          )
+        `
+      );
+    });
+
+    await this.writeAuditLog({
+      actor: input.actor,
+      action: 'quote.payment_link_created',
+      entityType: 'quote',
+      entityId: quote.id,
+      changedFields: ['payment_link'],
+      afterRedacted: {
+        quoteId: quote.publicQuoteId,
+        approvedVersionNumber: input.approvedVersionNumber,
+        mode,
+        amountCents,
+        currency: quote.currency
+      }
+    });
+
+    return {
+      id: linkId,
+      quoteId: quote.publicQuoteId,
+      mode,
+      status: 'awaiting_payment' as QuotePaymentStatus,
+      amountCents,
+      currency: quote.currency
+    };
+  }
+
+  async getPaymentLinkByTokenHash(input: PaymentLinkLookupInput): Promise<QuotePaymentLinkContext | null> {
+    if (!this.prisma) {
+      const link = this.memory.paymentLinks.find((item) => item.tokenHash === input.tokenHash);
+      if (!link) {
+        return null;
+      }
+
+      const quote = this.memory.quotes.get(link.quoteId);
+      if (!quote) {
+        return null;
+      }
+
+      const lead = this.memory.leads.get(quote.leadId);
+      const latestDelivery = getLatestMemoryApprovedQuoteEmailDelivery(
+        this.memory.approvedQuoteEmailDeliveries,
+        quote.id
+      );
+      const billing = deriveBillingAmounts(
+        quote.seasonalTotalMax,
+        quote.seasonalDiscountRate ?? PRICING_CONSTANTS.defaultSeasonalDiscountRate
+      );
+
+      return {
+        id: link.id,
+        quoteId: quote.id,
+        publicQuoteId: quote.publicQuoteId,
+        approvedVersionNumber: link.approvedVersionNumber,
+        tokenRevokedAt: link.tokenRevokedAt,
+        status: link.status,
+        mode: link.mode,
+        amountCents: link.amountCents,
+        currency: link.currency,
+        recurringInterval: link.recurringInterval,
+        maxBillableVisits: link.maxBillableVisits,
+        paidInvoiceCount: link.paidInvoiceCount,
+        seasonStartAt: link.seasonStartAt,
+        seasonEndAt: link.seasonEndAt,
+        stripeCustomerId: link.stripeCustomerId,
+        stripeCheckoutSessionId: link.stripeCheckoutSessionId,
+        stripeCheckoutUrl: link.stripeCheckoutUrl,
+        stripeCheckoutExpiresAt: link.stripeCheckoutExpiresAt,
+        stripePaymentIntentId: link.stripePaymentIntentId,
+        stripeSubscriptionId: link.stripeSubscriptionId,
+        customerEmail: lead?.primaryEmail ?? null,
+        customerName: lead?.primaryName ?? null,
+        addressText: quote.addressText,
+        metrics: {
+          areaM2: quote.areaM2,
+          perimeterM: quote.perimeterM
+        },
+        serviceFrequency: quote.serviceFrequency,
+        billingMode: normalizeBillingMode(quote.billingMode),
+        sessionsMin: quote.sessionsMin,
+        sessionsMax: quote.sessionsMax,
+        perSessionTotal: quote.perSessionTotal,
+        seasonalTotalMin: quote.seasonalTotalMin,
+        seasonalTotalMax: quote.seasonalTotalMax,
+        fullSeasonTotal: billing.fullSeasonTotal,
+        seasonalDiscountedTotal: billing.seasonalDiscountedTotal,
+        seasonalSavingsTotal: billing.seasonalSavingsTotal,
+        seasonalDiscountRate: billing.seasonalDiscountRate,
+        verifiedAt: quote.verifiedAt,
+        approvedQuotePreviewImageUrl: buildPreviewUrlFromLatestDelivery(latestDelivery, input.previewImageBaseUrl),
+        createdAt: link.createdAt,
+        updatedAt: link.updatedAt
+      };
+    }
+
+    const rows = await this.prisma.$queryRaw<
+      Array<{
+        id: string;
+        quote_id: string;
+        public_quote_id: string;
+        approved_version_number: number;
+        token_revoked_at: Date | null;
+        status: QuotePaymentStatus;
+        mode: QuotePaymentMode;
+        amount_cents: number;
+        currency: string;
+        recurring_interval: string | null;
+        max_billable_visits: number | null;
+        paid_invoice_count: number;
+        season_start_at: Date | null;
+        season_end_at: Date | null;
+        stripe_customer_id: string | null;
+        stripe_checkout_session_id: string | null;
+        stripe_checkout_url: string | null;
+        stripe_checkout_expires_at: Date | null;
+        stripe_payment_intent_id: string | null;
+        stripe_subscription_id: string | null;
+        primary_email: string | null;
+        primary_name: string | null;
+        address_text: string;
+        area_m2: Prisma.Decimal | number | string;
+        perimeter_m: Prisma.Decimal | number | string;
+        service_frequency: ServiceFrequency;
+        billing_mode: BillingMode;
+        sessions_min: number;
+        sessions_max: number;
+        per_session_total: Prisma.Decimal | number | string;
+        seasonal_total_min: Prisma.Decimal | number | string;
+        seasonal_total_max: Prisma.Decimal | number | string;
+        seasonal_discount_rate: Prisma.Decimal | number | string;
+        verified_at: Date | null;
+        public_preview_token: string | null;
+        created_at: Date;
+        updated_at: Date;
+      }>
+    >(
+      Prisma.sql`
+        SELECT
+          pl."id",
+          pl."quote_id",
+          q."public_quote_id",
+          pl."approved_version_number",
+          pl."token_revoked_at",
+          pl."status",
+          pl."mode",
+          pl."amount_cents",
+          pl."currency",
+          pl."recurring_interval",
+          pl."max_billable_visits",
+          pl."paid_invoice_count",
+          pl."season_start_at",
+          pl."season_end_at",
+          pl."stripe_customer_id",
+          pl."stripe_checkout_session_id",
+          pl."stripe_checkout_url",
+          pl."stripe_checkout_expires_at",
+          pl."stripe_payment_intent_id",
+          pl."stripe_subscription_id",
+          l."primary_email",
+          l."primary_name",
+          q."address_text",
+          q."area_m2",
+          q."perimeter_m",
+          q."service_frequency",
+          q."billing_mode",
+          q."sessions_min",
+          q."sessions_max",
+          q."per_session_total",
+          q."seasonal_total_min",
+          q."seasonal_total_max",
+          q."seasonal_discount_rate",
+          q."verified_at",
+          d."public_preview_token",
+          pl."created_at",
+          pl."updated_at"
+        FROM "quote_payment_links" pl
+        INNER JOIN "quotes" q ON q."id" = pl."quote_id"
+        INNER JOIN "leads" l ON l."id" = q."lead_id"
+        LEFT JOIN LATERAL (
+          SELECT "public_preview_token"
+          FROM "approved_quote_email_deliveries"
+          WHERE "quote_id" = q."id"
+          ORDER BY "created_at" DESC
+          LIMIT 1
+        ) d ON true
+        WHERE pl."token_hash" = ${input.tokenHash}
+        LIMIT 1
+      `
+    );
+
+    const row = rows[0];
+    if (!row) {
+      return null;
+    }
+
+    const billing = deriveBillingAmounts(
+      parseDecimal(row.seasonal_total_max),
+      parseDecimal(row.seasonal_discount_rate)
+    );
+    return {
+      id: row.id,
+      quoteId: row.quote_id,
+      publicQuoteId: row.public_quote_id,
+      approvedVersionNumber: row.approved_version_number,
+      tokenRevokedAt: toIsoString(row.token_revoked_at),
+      status: row.status,
+      mode: row.mode,
+      amountCents: row.amount_cents,
+      currency: row.currency,
+      recurringInterval: row.recurring_interval,
+      maxBillableVisits: row.max_billable_visits,
+      paidInvoiceCount: row.paid_invoice_count,
+      seasonStartAt: toIsoString(row.season_start_at),
+      seasonEndAt: toIsoString(row.season_end_at),
+      stripeCustomerId: row.stripe_customer_id,
+      stripeCheckoutSessionId: row.stripe_checkout_session_id,
+      stripeCheckoutUrl: row.stripe_checkout_url,
+      stripeCheckoutExpiresAt: toIsoString(row.stripe_checkout_expires_at),
+      stripePaymentIntentId: row.stripe_payment_intent_id,
+      stripeSubscriptionId: row.stripe_subscription_id,
+      customerEmail: row.primary_email,
+      customerName: row.primary_name,
+      addressText: row.address_text,
+      metrics: {
+        areaM2: parseDecimal(row.area_m2),
+        perimeterM: parseDecimal(row.perimeter_m)
+      },
+      serviceFrequency: normalizeServiceFrequency(row.service_frequency),
+      billingMode: normalizeBillingMode(row.billing_mode),
+      sessionsMin: row.sessions_min,
+      sessionsMax: row.sessions_max,
+      perSessionTotal: parseDecimal(row.per_session_total),
+      seasonalTotalMin: parseDecimal(row.seasonal_total_min),
+      seasonalTotalMax: parseDecimal(row.seasonal_total_max),
+      fullSeasonTotal: billing.fullSeasonTotal,
+      seasonalDiscountedTotal: billing.seasonalDiscountedTotal,
+      seasonalSavingsTotal: billing.seasonalSavingsTotal,
+      seasonalDiscountRate: billing.seasonalDiscountRate,
+      verifiedAt: toIsoString(row.verified_at),
+      approvedQuotePreviewImageUrl: buildPreviewUrlFromLatestDelivery(
+        row.public_preview_token ? { publicPreviewToken: row.public_preview_token } : null,
+        input.previewImageBaseUrl
+      ),
+      createdAt: row.created_at.toISOString(),
+      updatedAt: row.updated_at.toISOString()
+    };
+  }
+
+  async getPaymentLinkByQuotePublicId(input: PaymentLinkQuoteLookupInput): Promise<QuotePaymentLinkContext | null> {
+    const isAdmin = input.access.isAdmin === true;
+    const authUserId = input.access.authUserId?.trim();
+    if (!isAdmin && !authUserId) {
+      throw new Error('AUTH_REQUIRED');
+    }
+
+    if (!this.prisma) {
+      const quote = [...this.memory.quotes.values()].find((item) => item.publicQuoteId === input.quotePublicId);
+      if (!quote) {
+        return null;
+      }
+
+      if (!isAdmin && quote.authUserId !== authUserId) {
+        throw new Error('QUOTE_FORBIDDEN');
+      }
+
+      const latestPaymentLink = this.memory.paymentLinks
+        .filter((link) => link.quoteId === quote.id)
+        .sort((left, right) => compareText(right.createdAt, left.createdAt))[0];
+
+      if (!latestPaymentLink) {
+        return null;
+      }
+
+      return this.getPaymentLinkByTokenHash({
+        tokenHash: latestPaymentLink.tokenHash,
+        previewImageBaseUrl: input.previewImageBaseUrl
+      });
+    }
+
+    const rows = await this.prisma.$queryRaw<Array<{ token_hash: string }>>(
+      Prisma.sql`
+        SELECT pl."token_hash"
+        FROM "quote_payment_links" pl
+        INNER JOIN "quotes" q ON q."id" = pl."quote_id"
+        WHERE
+          q."public_quote_id" = ${input.quotePublicId}
+          AND (${isAdmin} OR q."auth_user_id" = ${authUserId ?? null})
+        ORDER BY pl."created_at" DESC
+        LIMIT 1
+      `
+    );
+
+    const tokenHash = rows[0]?.token_hash;
+    if (!tokenHash) {
+      return null;
+    }
+
+    return this.getPaymentLinkByTokenHash({
+      tokenHash,
+      previewImageBaseUrl: input.previewImageBaseUrl
+    });
+  }
+
+  async recordPaymentCheckoutSession(
+    input: PaymentCheckoutSessionInput
+  ): Promise<QuotePaymentLinkUpdateResult | null> {
+    if (!this.prisma) {
+      const link = this.memory.paymentLinks.find((item) => item.id === input.paymentLinkId);
+      if (!link) {
+        return null;
+      }
+
+      const quote = this.memory.quotes.get(link.quoteId);
+      if (!quote) {
+        return null;
+      }
+
+      const updatedAt = nowIso();
+      link.stripeCheckoutSessionId = input.checkoutSessionId;
+      link.stripeCheckoutUrl = input.checkoutUrl;
+      link.stripeCheckoutExpiresAt = input.checkoutExpiresAt ?? null;
+      link.seasonStartAt = input.seasonStartAt ?? link.seasonStartAt;
+      link.seasonEndAt = input.seasonEndAt ?? link.seasonEndAt;
+      link.stripeCustomerId = input.stripeCustomerId ?? link.stripeCustomerId;
+      link.stripePaymentIntentId = input.stripePaymentIntentId ?? link.stripePaymentIntentId;
+      link.stripeSubscriptionId = input.stripeSubscriptionId ?? link.stripeSubscriptionId;
+      link.status = input.status ?? 'checkout_created';
+      link.updatedAt = updatedAt;
+
+      return {
+        id: link.id,
+        publicQuoteId: quote.publicQuoteId,
+        mode: link.mode,
+        status: link.status,
+        stripeSubscriptionId: link.stripeSubscriptionId,
+        maxBillableVisits: link.maxBillableVisits,
+        paidInvoiceCount: link.paidInvoiceCount,
+        seasonEndAt: link.seasonEndAt
+      };
+    }
+
+    const rows = await this.prisma.$queryRaw<Array<{
+      id: string;
+      public_quote_id: string;
+      mode: QuotePaymentMode;
+      status: QuotePaymentStatus;
+      stripe_subscription_id: string | null;
+      max_billable_visits: number | null;
+      paid_invoice_count: number;
+      season_end_at: Date | null;
+    }>>(
+      Prisma.sql`
+        WITH updated AS (
+          UPDATE "quote_payment_links"
+          SET
+            "stripe_checkout_session_id" = ${input.checkoutSessionId},
+            "stripe_checkout_url" = ${input.checkoutUrl},
+            "stripe_checkout_expires_at" = ${input.checkoutExpiresAt ? new Date(input.checkoutExpiresAt) : null},
+            "season_start_at" = COALESCE(${input.seasonStartAt ? new Date(input.seasonStartAt) : null}, "season_start_at"),
+            "season_end_at" = COALESCE(${input.seasonEndAt ? new Date(input.seasonEndAt) : null}, "season_end_at"),
+            "stripe_customer_id" = COALESCE(${input.stripeCustomerId ?? null}, "stripe_customer_id"),
+            "stripe_payment_intent_id" = COALESCE(${input.stripePaymentIntentId ?? null}, "stripe_payment_intent_id"),
+            "stripe_subscription_id" = COALESCE(${input.stripeSubscriptionId ?? null}, "stripe_subscription_id"),
+            "status" = ${input.status ?? 'checkout_created'}::"QuotePaymentStatus",
+            "updated_at" = now()
+          WHERE "id" = ${input.paymentLinkId}
+          RETURNING *
+        )
+        SELECT
+          updated."id",
+          q."public_quote_id",
+          updated."mode",
+          updated."status",
+          updated."stripe_subscription_id",
+          updated."max_billable_visits",
+          updated."paid_invoice_count",
+          updated."season_end_at"
+        FROM updated
+        INNER JOIN "quotes" q ON q."id" = updated."quote_id"
+      `
+    );
+
+    const row = rows[0];
+    return row
+      ? {
+          id: row.id,
+          publicQuoteId: row.public_quote_id,
+          mode: row.mode,
+          status: row.status,
+          stripeSubscriptionId: row.stripe_subscription_id,
+          maxBillableVisits: row.max_billable_visits,
+          paidInvoiceCount: row.paid_invoice_count,
+          seasonEndAt: toIsoString(row.season_end_at)
+        }
+      : null;
+  }
+
+  async recordPaymentCheckoutCompleted(
+    input: PaymentCheckoutCompletedInput
+  ): Promise<QuotePaymentLinkUpdateResult | null> {
+    if (!this.prisma) {
+      const link = this.memory.paymentLinks.find((item) => item.stripeCheckoutSessionId === input.checkoutSessionId);
+      if (!link) {
+        return null;
+      }
+
+      const quote = this.memory.quotes.get(link.quoteId);
+      if (!quote) {
+        return null;
+      }
+
+      const updatedAt = nowIso();
+      link.stripeCustomerId = input.stripeCustomerId ?? link.stripeCustomerId;
+      link.stripePaymentIntentId = input.stripePaymentIntentId ?? link.stripePaymentIntentId;
+      link.stripeSubscriptionId = input.stripeSubscriptionId ?? link.stripeSubscriptionId;
+      link.status = input.status;
+      link.paidAt = input.status === 'paid' ? updatedAt : link.paidAt;
+      link.updatedAt = updatedAt;
+      if (input.status === 'paid' || input.status === 'subscription_scheduled' || input.status === 'subscription_active') {
+        quote.customerStatus = 'verified';
+        quote.updatedAt = updatedAt;
+      }
+
+      return {
+        id: link.id,
+        publicQuoteId: quote.publicQuoteId,
+        mode: link.mode,
+        status: link.status,
+        stripeSubscriptionId: link.stripeSubscriptionId,
+        maxBillableVisits: link.maxBillableVisits,
+        paidInvoiceCount: link.paidInvoiceCount,
+        seasonEndAt: link.seasonEndAt
+      };
+    }
+
+    const rows = await this.prisma.$queryRaw<Array<{
+      id: string;
+      public_quote_id: string;
+      mode: QuotePaymentMode;
+      status: QuotePaymentStatus;
+      stripe_subscription_id: string | null;
+      max_billable_visits: number | null;
+      paid_invoice_count: number;
+      season_end_at: Date | null;
+    }>>(
+      Prisma.sql`
+        WITH updated AS (
+          UPDATE "quote_payment_links"
+          SET
+            "stripe_customer_id" = COALESCE(${input.stripeCustomerId ?? null}, "stripe_customer_id"),
+            "stripe_payment_intent_id" = COALESCE(${input.stripePaymentIntentId ?? null}, "stripe_payment_intent_id"),
+            "stripe_subscription_id" = COALESCE(${input.stripeSubscriptionId ?? null}, "stripe_subscription_id"),
+            "status" = ${input.status}::"QuotePaymentStatus",
+            "paid_at" = CASE
+              WHEN ${input.status}::"QuotePaymentStatus" = 'paid'::"QuotePaymentStatus" THEN now()
+              ELSE "paid_at"
+            END,
+            "updated_at" = now()
+          WHERE "stripe_checkout_session_id" = ${input.checkoutSessionId}
+          RETURNING *
+        ),
+        quote_update AS (
+          UPDATE "quotes" q
+          SET
+            "customer_status" = CASE
+              WHEN updated."status" IN ('paid'::"QuotePaymentStatus", 'subscription_scheduled'::"QuotePaymentStatus", 'subscription_active'::"QuotePaymentStatus")
+                THEN 'verified'::"CustomerStatus"
+              ELSE q."customer_status"
+            END,
+            "updated_at" = now()
+          FROM updated
+          WHERE q."id" = updated."quote_id"
+          RETURNING q."id", q."public_quote_id"
+        )
+        SELECT
+          updated."id",
+          quote_update."public_quote_id",
+          updated."mode",
+          updated."status",
+          updated."stripe_subscription_id",
+          updated."max_billable_visits",
+          updated."paid_invoice_count",
+          updated."season_end_at"
+        FROM updated
+        INNER JOIN quote_update ON quote_update."id" = updated."quote_id"
+      `
+    );
+
+    const row = rows[0];
+    return row
+      ? {
+          id: row.id,
+          publicQuoteId: row.public_quote_id,
+          mode: row.mode,
+          status: row.status,
+          stripeSubscriptionId: row.stripe_subscription_id,
+          maxBillableVisits: row.max_billable_visits,
+          paidInvoiceCount: row.paid_invoice_count,
+          seasonEndAt: toIsoString(row.season_end_at)
+        }
+      : null;
+  }
+
+  async recordPaymentInvoiceStatus(
+    input: PaymentInvoiceStatusInput
+  ): Promise<QuotePaymentLinkUpdateResult | null> {
+    if (!this.prisma) {
+      const link = this.memory.paymentLinks.find((item) => item.stripeSubscriptionId === input.stripeSubscriptionId);
+      if (!link) {
+        return null;
+      }
+
+      const quote = this.memory.quotes.get(link.quoteId);
+      if (!quote) {
+        return null;
+      }
+
+      const updatedAt = nowIso();
+      let paidInvoiceRecorded = false;
+      if (input.status === 'subscription_active') {
+        if (!input.invoiceId || !link.paidInvoiceIds.includes(input.invoiceId)) {
+          if (input.invoiceId) {
+            link.paidInvoiceIds.push(input.invoiceId);
+          }
+          link.paidInvoiceCount += 1;
+          paidInvoiceRecorded = true;
+        }
+        link.status =
+          link.maxBillableVisits !== null && link.paidInvoiceCount >= link.maxBillableVisits
+            ? 'paid'
+            : 'subscription_active';
+        link.paidAt = link.status === 'paid' ? updatedAt : link.paidAt;
+        quote.customerStatus = 'verified';
+      } else {
+        link.status = input.status;
+        quote.customerStatus = 'awaiting_payment';
+      }
+      link.updatedAt = updatedAt;
+      quote.updatedAt = updatedAt;
+
+      return {
+        id: link.id,
+        publicQuoteId: quote.publicQuoteId,
+        mode: link.mode,
+        status: link.status,
+        stripeSubscriptionId: link.stripeSubscriptionId,
+        maxBillableVisits: link.maxBillableVisits,
+        paidInvoiceCount: link.paidInvoiceCount,
+        seasonEndAt: link.seasonEndAt,
+        paidInvoiceRecorded
+      };
+    }
+
+    const isPaidInvoice = input.status === 'subscription_active';
+    const invoiceId = input.invoiceId ?? null;
+    const rows = await this.prisma.$queryRaw<Array<{
+      id: string;
+      public_quote_id: string;
+      mode: QuotePaymentMode;
+      status: QuotePaymentStatus;
+      stripe_subscription_id: string | null;
+      max_billable_visits: number | null;
+      paid_invoice_count: number;
+      season_end_at: Date | null;
+      invoice_increment: number;
+    }>>(
+      Prisma.sql`
+        WITH matched AS (
+          SELECT
+            *,
+            CASE
+              WHEN ${isPaidInvoice}
+                AND (${invoiceId}::text IS NULL OR NOT (${invoiceId}::text = ANY("paid_invoice_ids")))
+                THEN 1
+              ELSE 0
+            END AS invoice_increment
+          FROM "quote_payment_links"
+          WHERE "stripe_subscription_id" = ${input.stripeSubscriptionId}
+        ),
+        updated AS (
+          UPDATE "quote_payment_links" pl
+          SET
+            "paid_invoice_count" = pl."paid_invoice_count" + matched.invoice_increment,
+            "paid_invoice_ids" = CASE
+              WHEN ${isPaidInvoice}
+                AND ${invoiceId}::text IS NOT NULL
+                AND NOT (${invoiceId}::text = ANY(pl."paid_invoice_ids"))
+                THEN array_append(pl."paid_invoice_ids", ${invoiceId}::text)
+              ELSE pl."paid_invoice_ids"
+            END,
+            "status" = CASE
+              WHEN ${isPaidInvoice}
+                AND pl."max_billable_visits" IS NOT NULL
+                AND pl."paid_invoice_count" + matched.invoice_increment >= pl."max_billable_visits"
+                THEN 'paid'::"QuotePaymentStatus"
+              ELSE ${input.status}::"QuotePaymentStatus"
+            END,
+            "paid_at" = CASE
+              WHEN ${isPaidInvoice}
+                AND pl."max_billable_visits" IS NOT NULL
+                AND pl."paid_invoice_count" + matched.invoice_increment >= pl."max_billable_visits"
+                THEN now()
+              ELSE pl."paid_at"
+            END,
+            "updated_at" = now()
+          FROM matched
+          WHERE pl."id" = matched."id"
+          RETURNING pl.*, matched.invoice_increment
+        ),
+        quote_update AS (
+          UPDATE "quotes" q
+          SET
+            "customer_status" = CASE
+              WHEN updated."status" IN ('paid'::"QuotePaymentStatus", 'subscription_active'::"QuotePaymentStatus")
+                THEN 'verified'::"CustomerStatus"
+              WHEN updated."status" IN ('past_due'::"QuotePaymentStatus", 'failed'::"QuotePaymentStatus")
+                THEN 'awaiting_payment'::"CustomerStatus"
+              ELSE q."customer_status"
+            END,
+            "updated_at" = now()
+          FROM updated
+          WHERE q."id" = updated."quote_id"
+          RETURNING q."id", q."public_quote_id"
+        )
+        SELECT
+          updated."id",
+          quote_update."public_quote_id",
+          updated."mode",
+          updated."status",
+          updated."stripe_subscription_id",
+          updated."max_billable_visits",
+          updated."paid_invoice_count",
+          updated."season_end_at",
+          updated.invoice_increment
+        FROM updated
+        INNER JOIN quote_update ON quote_update."id" = updated."quote_id"
+      `
+    );
+
+    const row = rows[0];
+    return row
+      ? {
+          id: row.id,
+          publicQuoteId: row.public_quote_id,
+          mode: row.mode,
+          status: row.status,
+          stripeSubscriptionId: row.stripe_subscription_id,
+          maxBillableVisits: row.max_billable_visits,
+          paidInvoiceCount: row.paid_invoice_count,
+          seasonEndAt: toIsoString(row.season_end_at),
+          paidInvoiceRecorded: row.invoice_increment > 0
+        }
+      : null;
+  }
+
+  async recordPaymentSubscriptionStatus(
+    input: PaymentSubscriptionStatusInput
+  ): Promise<QuotePaymentLinkUpdateResult | null> {
+    if (!this.prisma) {
+      const link = this.memory.paymentLinks.find((item) => item.stripeSubscriptionId === input.stripeSubscriptionId);
+      if (!link) {
+        return null;
+      }
+
+      const quote = this.memory.quotes.get(link.quoteId);
+      if (!quote) {
+        return null;
+      }
+
+      const updatedAt = nowIso();
+      link.status = input.status;
+      link.updatedAt = updatedAt;
+      quote.customerStatus =
+        input.status === 'canceled' || input.status === 'past_due' || input.status === 'failed'
+          ? 'awaiting_payment'
+          : quote.customerStatus;
+      quote.updatedAt = updatedAt;
+
+      return {
+        id: link.id,
+        publicQuoteId: quote.publicQuoteId,
+        mode: link.mode,
+        status: link.status,
+        stripeSubscriptionId: link.stripeSubscriptionId,
+        maxBillableVisits: link.maxBillableVisits,
+        paidInvoiceCount: link.paidInvoiceCount,
+        seasonEndAt: link.seasonEndAt
+      };
+    }
+
+    const rows = await this.prisma.$queryRaw<Array<{
+      id: string;
+      public_quote_id: string;
+      mode: QuotePaymentMode;
+      status: QuotePaymentStatus;
+      stripe_subscription_id: string | null;
+      max_billable_visits: number | null;
+      paid_invoice_count: number;
+      season_end_at: Date | null;
+    }>>(
+      Prisma.sql`
+        WITH updated AS (
+          UPDATE "quote_payment_links"
+          SET
+            "status" = ${input.status}::"QuotePaymentStatus",
+            "updated_at" = now()
+          WHERE "stripe_subscription_id" = ${input.stripeSubscriptionId}
+          RETURNING *
+        ),
+        quote_update AS (
+          UPDATE "quotes" q
+          SET
+            "customer_status" = CASE
+              WHEN updated."status" IN ('canceled'::"QuotePaymentStatus", 'past_due'::"QuotePaymentStatus", 'failed'::"QuotePaymentStatus")
+                THEN 'awaiting_payment'::"CustomerStatus"
+              ELSE q."customer_status"
+            END,
+            "updated_at" = now()
+          FROM updated
+          WHERE q."id" = updated."quote_id"
+          RETURNING q."id", q."public_quote_id"
+        )
+        SELECT
+          updated."id",
+          quote_update."public_quote_id",
+          updated."mode",
+          updated."status",
+          updated."stripe_subscription_id",
+          updated."max_billable_visits",
+          updated."paid_invoice_count",
+          updated."season_end_at"
+        FROM updated
+        INNER JOIN quote_update ON quote_update."id" = updated."quote_id"
+      `
+    );
+
+    const row = rows[0];
+    return row
+      ? {
+          id: row.id,
+          publicQuoteId: row.public_quote_id,
+          mode: row.mode,
+          status: row.status,
+          stripeSubscriptionId: row.stripe_subscription_id,
+          maxBillableVisits: row.max_billable_visits,
+          paidInvoiceCount: row.paid_invoice_count,
+          seasonEndAt: toIsoString(row.season_end_at)
+        }
+      : null;
+  }
+
+  async recordStripeWebhookEvent(input: RecordStripeWebhookEventInput) {
+    if (!this.prisma) {
+      const existing = this.memory.stripeWebhookEvents.find((event) => event.stripeEventId === input.stripeEventId);
+      if (existing) {
+        return { replayed: true };
+      }
+
+      const createdAt = nowIso();
+      this.memory.stripeWebhookEvents.push({
+        id: nanoid(14),
+        stripeEventId: input.stripeEventId,
+        eventType: input.eventType,
+        payload: input.payload ?? null,
+        processedAt: createdAt,
+        createdAt
+      });
+      return { replayed: false };
+    }
+
+    const payloadJson = JSON.stringify(input.payload ?? {});
+    const inserted = await this.prisma.$executeRaw(
+      Prisma.sql`
+        INSERT INTO "stripe_webhook_events" (
+          "id",
+          "stripe_event_id",
+          "event_type",
+          "payload"
+        )
+        VALUES (
+          ${nanoid(14)},
+          ${input.stripeEventId},
+          ${input.eventType},
+          ${payloadJson}::jsonb
+        )
+        ON CONFLICT ("stripe_event_id") DO NOTHING
+      `
+    );
+
+    return { replayed: inserted === 0 };
   }
 
   async getApprovedQuoteEmailContext(quotePublicId: string): Promise<QuoteApprovedEmailContext> {

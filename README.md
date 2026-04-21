@@ -24,6 +24,7 @@ Autoscape is a multi-app monorepo for:
 - Authentication: Clerk (customer + admin)
 - Persistence: Prisma + PostgreSQL (Neon-compatible) + PostGIS
 - Fallback persistence: in-memory store when `DATABASE_URL` is not set (local/dev convenience)
+- Hosted Node runtime: package manifests pin `engines.node` to `20.x` for DigitalOcean App Platform builds.
 
 ## Quick Start
 
@@ -65,6 +66,8 @@ APPROVED_QUOTE_EMAIL_REPLY_TO=contact@autoscape.ca
 PUBLIC_APP_BASE_URL=http://localhost:5173
 PUBLIC_API_BASE_URL=http://localhost:4000
 MAPBOX_STATIC_ACCESS_TOKEN=pk.your_mapbox_public_token
+STRIPE_SECRET_KEY=sk_test_replace_me
+STRIPE_WEBHOOK_SECRET=whsec_replace_me
 
 # admin/.env
 VITE_API_BASE_URL=http://localhost:4000
@@ -110,9 +113,9 @@ Production-like hosting uses DigitalOcean App Platform with two isolated apps:
 - Staging: `staging` branch -> `autoscape-staging`, auto-deployed to `staging.autoscape.ca`, `api-staging.autoscape.ca`, and `admin-staging.autoscape.ca`.
 - Production: `main` branch -> `autoscape-production`, manually deployed to `autoscape.ca`, `www.autoscape.ca`, `api.autoscape.ca`, and `admin.autoscape.ca`.
 
-Each environment has `public-web` (`client/` static site), `admin-web` (`admin/` static site), `api` (`server/` Node service), a pre-deploy Prisma migration job, and its own DigitalOcean Managed PostgreSQL database with PostGIS enabled. App spec templates live in `.do/app.staging.yaml` and `.do/app.production.yaml`; fill secrets only in DigitalOcean or in ignored private spec copies. See [`docs/deployment.md`](./docs/deployment.md) for setup, env vars, DNS, smoke tests, and rollback.
+Each environment has `public-web` (`client/` static site), `admin-web` (`admin/` static site), `api` (`server/` Node service), a pre-deploy Prisma migration job, and its own DigitalOcean Managed PostgreSQL database with PostGIS enabled. App spec templates live in `.do/app.staging.yaml` and `.do/app.production.yaml`; fill secrets only in DigitalOcean or in ignored private spec copies. DigitalOcean's Node buildpack reads the committed `engines.node=20.x` package pins for runtime selection. See [`docs/deployment.md`](./docs/deployment.md) for setup, env vars, DNS, smoke tests, and rollback.
 
-Current live status: `autoscape-staging` is active in Toronto with `autoscape-staging-db` on PostgreSQL 16 and migrations applied. Staging uses self-managed GoDaddy CNAME records pointing at the DigitalOcean default ingress, and the custom domains are active. Authenticated customer/admin smoke tests passed on staging, including quote finalization, admin verification, and persistence after redeploy. The deployed API now exposes the approved-quote preview route and admin approval-email resend route; production has not been created because the end-to-end approval email/resend smoke and launch confirmation still need to happen.
+Current live status: `autoscape-staging` is active in Toronto with `autoscape-staging-db` on PostgreSQL 16 and migrations applied. Staging uses self-managed GoDaddy CNAME records pointing at the DigitalOcean default ingress, and the custom domains are active. Authenticated customer/admin smoke tests passed on staging, including quote finalization, admin verification, and persistence after redeploy. The deployed API now exposes the approved-quote preview route and admin approval-email resend route. The staging API has both Stripe secrets configured; Stripe checkout smoke testing still needs to pass. Production has not been created because the end-to-end approval email/resend smoke, Stripe staging checkout smoke, and launch confirmation still need to happen.
 
 ## Public Flow Highlights
 
@@ -184,7 +187,13 @@ Current live status: `autoscape-staging` is active in Toronto with `autoscape-st
   - `/complete-profile/*` captures required phone number for any auth method
   - `/dashboard` for profile + owned quote list
   - `/dashboard/quotes/:quoteId` for owned quote detail
-  - `/dashboard/quotes/:quoteId/payment` for the approved-quote placeholder payment page with shared preview image
+  - `/dashboard/quotes/:quoteId/payment` is the authenticated approved-quote payment surface and can start Stripe Checkout for owned quotes
+- Public payment:
+  - approved quote emails now link to `/pay/:token`
+  - public payment tokens are long random secrets stored only as SHA-256 hashes server-side
+  - `GET /api/payment-links/:token` returns sanitized quote/payment details without requiring Clerk sign-in
+  - `POST /api/payment-links/:token/checkout` creates or reuses a Stripe Checkout Session
+  - signed-in customers can also use `POST /api/account/quotes/:quoteId/payment/checkout` from the dashboard
 - Out-of-area page auto-captures expansion demand via `POST /api/service-area/request`.
 
 ## Service Area Privacy
@@ -203,15 +212,24 @@ Admin endpoints under `/api/admin/*` include:
   - satellite basemap in editor for property verification context
   - persisted quote polygons hydrate immediately when editor opens
   - editor now uses the same freehand `Draw lawn` / `Draw obstacle` workflow and shared draw-end simplifier as the public quote tool
+  - approved quotes show latest Stripe payment state and related Stripe object IDs for admin support
 - service-area request map payload (`/service-area-requests/map`) for heatmap/cluster rendering
 - quote versioning APIs:
   - `GET /api/admin/quotes/:id/editor`
   - `POST /api/admin/quotes/:id/versions`
   - `POST /api/admin/quotes/:id/versions/:versionNumber/submit`
 - approved quote delivery:
-  - selected version submit sets `status=verified` / `customer_status=awaiting_payment`, attempts a Resend transactional email, and records `approval_email_sent` or `approval_email_failed` without rolling back approval
+  - selected version submit sets `status=verified` / `customer_status=awaiting_payment`, creates a fresh secure payment token, attempts a Resend transactional email, and records `approval_email_sent` or `approval_email_failed` without rolling back approval
   - manual resend is available at `POST /api/admin/quotes/:id/approval-email/resend`
   - public preview images are served from `GET /api/approved-quote-preview/:token`, which proxies a Mapbox satellite static image with approved, added, and removed service-area overlays
+- Stripe payment APIs:
+  - `GET /api/payment-links/:token`
+  - `POST /api/payment-links/:token/checkout`
+  - `POST /api/account/quotes/:quoteId/payment/checkout`
+  - `POST /api/stripe/webhook`
+  - seasonal quotes use one-time Checkout for the approved discounted seasonal total
+  - per-visit quotes use weekly subscription Checkout, use a May 1 billing-cycle anchor before season or charge at checkout during season, cap billing at `sessionsMax`, and stop no later than September 30
+  - paid Stripe invoice IDs are stored so duplicate invoice events cannot advance the visit counter twice
 - quote notes and legacy revision endpoint (`/api/admin/quotes/:id/revise`)
 - service-area requests, leads, contacts, audit logs
 - attribution summary (`/attribution/summary`)

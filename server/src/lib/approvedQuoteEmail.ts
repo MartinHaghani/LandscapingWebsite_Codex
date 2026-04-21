@@ -83,7 +83,7 @@ export const buildApprovedQuoteEmail = (
               href="${escapeHtml(input.paymentPageUrl)}"
               style="display:inline-block;padding:18px 30px;border-radius:999px;background:#329f5b;color:#ffffff;font-size:18px;font-weight:800;text-decoration:none;box-shadow:0 10px 24px rgba(50,159,91,0.32);"
             >PAYMENT BUTTON - CONTINUE TO PAYMENT</a>
-            <p style="margin:14px 0 0;font-size:13px;line-height:1.6;color:#4d5e54;">Payment processing is not live yet on the page, but this is the payment destination for the approved quote.</p>
+            <p style="margin:14px 0 0;font-size:13px;line-height:1.6;color:#4d5e54;">This secure link opens your approved quote payment page.</p>
           </div>
 
           <div style="border:1px solid #d9ded7;border-radius:20px;overflow:hidden;background:#f7f8f5;">
@@ -131,7 +131,7 @@ export const buildApprovedQuoteEmail = (
               href="${escapeHtml(input.paymentPageUrl)}"
               style="display:inline-block;padding:16px 28px;border-radius:999px;background:#329f5b;color:#ffffff;font-size:17px;font-weight:800;text-decoration:none;box-shadow:0 10px 24px rgba(50,159,91,0.26);"
             >PAYMENT BUTTON - OPEN PAYMENT PAGE</a>
-            <p style="margin:12px 0 0;font-size:13px;line-height:1.6;color:#5a6861;">This button opens the approved quote payment page. Payment processing is still being finalized, so the page currently shows the approved quote details and contact options.</p>
+            <p style="margin:12px 0 0;font-size:13px;line-height:1.6;color:#5a6861;">This button opens your secure approved quote payment page.</p>
           </div>
         </div>
       </div>
@@ -153,7 +153,7 @@ export const buildApprovedQuoteEmail = (
     '',
     pricingAdjustmentCopy,
     '',
-    `Use the payment button above to open the approved quote payment page. Payment processing is still being finalized, so the page currently shows the approved quote details and contact options.`
+    `Use the payment button above to open your secure approved quote payment page.`
   ].join('\n');
 
   return {

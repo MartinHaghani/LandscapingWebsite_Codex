@@ -19,8 +19,9 @@ Primary domains:
 - API runtime: `server/src/index.ts` -> `server/src/server.ts`
 - Hosted runtime: DigitalOcean App Platform runs two isolated apps from the GitHub repo: staging from `staging` with auto-deploy and production from `main` with manual deploys.
 - Hosted components per environment: `public-web` static site from `client/`, `admin-web` static site from `admin/`, `api` Node service from `server/`, and a `migrate` pre-deploy job that runs `npm run prisma:migrate:deploy`.
+- Hosted Node version: the root, `server/`, `client/`, and `admin/` package manifests pin `engines.node=20.x`, which DigitalOcean App Platform's Node buildpack uses for build/runtime selection.
 - Hosted domains: staging uses `staging.autoscape.ca`, `api-staging.autoscape.ca`, and `admin-staging.autoscape.ca`; production uses `autoscape.ca`, `www.autoscape.ca`, `api.autoscape.ca`, and `admin.autoscape.ca`.
-- Live hosted status on 2026-04-21: `autoscape-staging` is active in `tor` with `public-web`, `admin-web`, `api`, and `migrate`; its custom domains use self-managed GoDaddy CNAME records and are active. Authenticated staging smoke tests pass through customer quote finalization, admin verification, and persistence after redeploy. Approved-quote preview/resend routes are deployed; production has not been created because real approval email/resend smoke testing and launch confirmation are still pending.
+- Live hosted status on 2026-04-21: `autoscape-staging` is active in `tor` with `public-web`, `admin-web`, `api`, and `migrate`; its custom domains use self-managed GoDaddy CNAME records and are active. Authenticated staging smoke tests pass through customer quote finalization, admin verification, and persistence after redeploy. Approved-quote preview/resend routes are deployed and both Stripe API secrets are configured; production has not been created because real approval email/resend smoke testing, Stripe checkout smoke testing, and launch confirmation are still pending.
 - Local dev connectivity: public/admin frontends default to `VITE_API_BASE_URL=http://localhost:4000`; the API reflects loopback origins (`localhost`, `127.0.0.1`, `[::1]`) across arbitrary local ports to avoid Vite port drift breaking quote writes.
 - Public app routes: `client/src/App.tsx`
 - Services gallery: `client/src/pages/ServicesPage.tsx` + `client/src/components/service/ServiceIllustrations.tsx` (coverage-first entry page with five shared-style inline SVG service scenes)
@@ -47,6 +48,7 @@ Primary domains:
   - `server/prisma/migrations/20260315160000_quote_pricing_v2/migration.sql`
   - `server/prisma/migrations/20260415163000_weekly_only_service_frequency/migration.sql`
   - `server/prisma/migrations/20260416130000_approved_quote_email_delivery/migration.sql`
+  - `server/prisma/migrations/20260421110000_stripe_quote_payments/migration.sql`
 
 Canonical tables:
 
@@ -55,6 +57,8 @@ Canonical tables:
 - `quotes`
 - `quote_versions` (append-only history)
 - `approved_quote_email_deliveries`
+- `quote_payment_links`
+- `stripe_webhook_events`
 - `quote_notes`
 - `service_area_requests`
 - `attribution_touches`
@@ -77,6 +81,10 @@ Spatial storage:
 - `POST /api/quote/:quoteId/contact` (idempotent, auth required, optional notes payload only)
 - `GET /api/quote/:quoteId` (auth required, owner/admin only)
 - `GET /api/approved-quote-preview/:token` (public token, proxies the Mapbox satellite image for approved quote emails/payment pages)
+- `GET /api/payment-links/:token` (public secure token, sanitized approved quote + payment state)
+- `POST /api/payment-links/:token/checkout` (creates/reuses Stripe Checkout)
+- `POST /api/account/quotes/:quoteId/payment/checkout` (authenticated owner checkout for dashboard payment page)
+- `POST /api/stripe/webhook` (Stripe signature verification + idempotent webhook processing)
 - client request wrapper converts network-level failures into a direct API reachability message so quote/contact flows do not fall back to a generic submit error
 
 ### Account
@@ -238,9 +246,12 @@ Revisions:
 - Revise endpoint treats per-visit total as canonical and recomputes seasonal range fields.
 - Quote editor versions include `actor_type` (`client` or `admin`) + `version_number` + `changed_at`.
 - Version submit endpoint applies selected version and sets `status=verified` + `customer_status=awaiting_payment`.
-- Successful verification attempts the approved-quote email through Resend and records `approval_email_sent` or `approval_email_failed`; approval is not rolled back if delivery or preview preflight fails.
-- Admins can manually resend via `POST /api/admin/quotes/:id/approval-email/resend` when a quote is verified and awaiting payment.
-- Quote lookup responses include verified status fields plus payment-page and tokenized preview-image metadata for the customer dashboard/payment page.
+- Successful verification creates a hashed public payment token, attempts the approved-quote email through Resend, and records `approval_email_sent` or `approval_email_failed`; approval is not rolled back if delivery or preview preflight fails.
+- Admins can manually resend via `POST /api/admin/quotes/:id/approval-email/resend` when a quote is verified and awaiting payment; resend rotates the public payment token and revokes prior active tokens.
+- Public `/pay/:token` pages and authenticated `/dashboard/quotes/:quoteId/payment` pages use Stripe Checkout. Seasonal quotes charge the approved discounted seasonal total once; per-session quotes create weekly subscriptions that use a May 1 billing-cycle anchor with no proration before season or charge at checkout during season, cap paid invoices at `sessionsMax`, and stop no later than September 30.
+- Hosted Checkout requires `STRIPE_SECRET_KEY` and `STRIPE_WEBHOOK_SECRET` on the API service only. Staging currently has both configured and still needs end-to-end checkout smoke testing.
+- Quote lookup responses include verified status fields plus payment-page, payment-state, and tokenized preview-image metadata for the customer dashboard/payment page.
+- Webhook events are stored idempotently by Stripe event ID; paid subscription invoice IDs are also tracked to keep the paid visit counter from advancing twice for the same invoice.
 
 Development cutover:
 

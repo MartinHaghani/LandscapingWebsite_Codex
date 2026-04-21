@@ -108,6 +108,18 @@ export interface QuoteLookupResponse {
   verifiedAt?: string | null;
   paymentPageUrl?: string | null;
   approvedQuotePreviewImageUrl?: string | null;
+  payment?: {
+    mode: QuotePaymentMode;
+    status: QuotePaymentStatus;
+    amountCents: number;
+    currency: string;
+    recurringInterval: string | null;
+    maxBillableVisits: number | null;
+    paidInvoiceCount: number;
+    seasonStartAt: string | null;
+    seasonEndAt: string | null;
+    checkoutExpiresAt: string | null;
+  } | null;
 }
 
 export interface ContactPayload {
@@ -142,6 +154,60 @@ export interface QuoteClaimResponse {
   ok: boolean;
   quoteId: string;
   claimed: boolean;
+}
+
+export type QuotePaymentMode = 'seasonal_payment' | 'per_session_subscription';
+export type QuotePaymentStatus =
+  | 'awaiting_payment'
+  | 'checkout_created'
+  | 'paid'
+  | 'subscription_scheduled'
+  | 'subscription_active'
+  | 'past_due'
+  | 'failed'
+  | 'canceled';
+
+export interface PaymentLinkResponse {
+  quote: {
+    id: string;
+    address: string;
+    metrics: {
+      areaM2: number;
+      perimeterM: number;
+    };
+    serviceFrequency: ServiceFrequency;
+    billingMode: BillingMode;
+    sessionsMin: number;
+    sessionsMax: number;
+    perSessionTotal: number;
+    seasonalTotalMin: number;
+    seasonalTotalMax: number;
+    fullSeasonTotal: number;
+    seasonalDiscountedTotal: number;
+    seasonalSavingsTotal: number;
+    seasonalDiscountRate: number;
+    verifiedAt: string | null;
+    approvedQuotePreviewImageUrl: string | null;
+  };
+  payment: {
+    mode: QuotePaymentMode;
+    status: QuotePaymentStatus;
+    amountCents: number;
+    amount: number;
+    currency: string;
+    recurringInterval: string | null;
+    maxBillableVisits: number | null;
+    paidInvoiceCount: number;
+    seasonStartAt: string | null;
+    seasonEndAt: string | null;
+    checkoutExpiresAt: string | null;
+  };
+}
+
+export interface PaymentCheckoutResponse {
+  checkoutUrl: string;
+  checkoutSessionId: string;
+  reused: boolean;
 }
 
 export interface AccountQuoteListItem {

@@ -154,6 +154,14 @@ services:
         value: __SET_IN_DIGITALOCEAN__
         scope: RUN_TIME
         type: SECRET
+      - key: STRIPE_SECRET_KEY
+        value: __SET_IN_DIGITALOCEAN__
+        scope: RUN_TIME
+        type: SECRET
+      - key: STRIPE_WEBHOOK_SECRET
+        value: __SET_IN_DIGITALOCEAN__
+        scope: RUN_TIME
+        type: SECRET
 
 jobs:
   - name: migrate

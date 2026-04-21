@@ -6,6 +6,8 @@ import type {
   QuoteClaimResponse,
   QuoteContactPayload,
   QuoteContactResponse,
+  PaymentCheckoutResponse,
+  PaymentLinkResponse,
   QuoteLookupResponse,
   QuotePayload,
   QuoteResponse,
@@ -157,6 +159,23 @@ export const api = {
     return request<QuoteLookupResponse>(`/api/account/quotes/${encodeURIComponent(quoteId)}`, {
       authToken
     });
+  },
+  getPaymentLink(token: string) {
+    return request<PaymentLinkResponse>(`/api/payment-links/${encodeURIComponent(token)}`);
+  },
+  createPaymentCheckout(token: string) {
+    return request<PaymentCheckoutResponse>(`/api/payment-links/${encodeURIComponent(token)}/checkout`, {
+      method: 'POST'
+    });
+  },
+  createAccountQuoteCheckout(quoteId: string, authToken: string) {
+    return request<PaymentCheckoutResponse>(
+      `/api/account/quotes/${encodeURIComponent(quoteId)}/payment/checkout`,
+      {
+        method: 'POST',
+        authToken
+      }
+    );
   },
   getAttributionFromUrl(location: Pick<Window['location'], 'search' | 'pathname'>): AttributionPayload {
     const params = new URLSearchParams(location.search);

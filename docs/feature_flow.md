@@ -59,8 +59,8 @@
 
 1. Codex/local work happens on feature branches and is verified locally before merge.
 2. Staging deploys automatically from the `staging` branch to the DigitalOcean `autoscape-staging` app.
-3. Current staging status on 2026-04-21: the app deployment and migration job are active, custom domains use self-managed GoDaddy CNAME records, and authenticated customer/admin quote smoke tests pass through admin verification plus persistence after redeploy.
-4. Staging smoke tests cover API health, public/admin SPA refreshes, quote creation, Clerk auth, admin review, CORS, and persistence after API redeploy. The approved-quote preview and resend routes are deployed; production remains blocked until a real authenticated approval email/resend smoke passes and launch is confirmed.
+3. Current staging status on 2026-04-21: the app deployment and migration job are active, package manifests pin Node `20.x`, custom domains use self-managed GoDaddy CNAME records, and authenticated customer/admin quote smoke tests pass through admin verification plus persistence after redeploy.
+4. Staging smoke tests cover API health, public/admin SPA refreshes, quote creation, Clerk auth, admin review, CORS, and persistence after API redeploy. The approved-quote preview and resend routes are deployed, and the API has both Stripe secrets configured; production remains blocked until real authenticated approval email/resend smoke, Stripe checkout smoke, and launch confirmation are complete.
 5. Production deploys manually from `main` to the DigitalOcean `autoscape-production` app only after staging blockers are cleared and launch is confirmed.
 6. Schema migrations run through the App Platform `migrate` pre-deploy job before the API rollout in each environment.
 
@@ -169,8 +169,19 @@
 - profile summary
 - linked quote list/statuses
 - quote detail screen (`/dashboard/quotes/:quoteId`)
-- approved quote placeholder payment screen (`/dashboard/quotes/:quoteId/payment`)
+- authenticated approved-quote payment screen (`/dashboard/quotes/:quoteId/payment`) that can start Stripe Checkout for the owned quote
 - placeholder Billing and Messages cards
+
+### Public Approved Quote Payment
+
+1. Admin approval or manual resend creates a fresh secure payment token and emails `/pay/:token`.
+2. `GET /api/payment-links/:token` loads sanitized approved quote details, payment status, and the shared approved quote preview image without requiring sign-in.
+3. `POST /api/payment-links/:token/checkout` creates or reuses a Stripe Checkout Session. Signed-in customers can also create/reuse Checkout from `POST /api/account/quotes/:quoteId/payment/checkout`.
+4. Seasonal quotes use one-time Checkout for the approved discounted seasonal total.
+5. Per-session quotes use weekly subscription Checkout; if paid before May 1, the subscription uses a May 1 billing-cycle anchor with no proration, otherwise the first charge starts at checkout.
+6. Per-session billing is capped at the approved `sessionsMax` count and no later than September 30.
+7. Stripe webhooks, not success redirects, update payment state. Duplicate webhook events are ignored idempotently, and duplicate paid invoice IDs do not advance the visit counter twice.
+8. Staging Checkout has the required API Stripe env configured and still needs to be smoke-tested end to end.
 
 ## Out-of-Area Expansion Capture
 
@@ -220,10 +231,12 @@
 - save new version (`POST /api/admin/quotes/:id/versions`)
 - submit selected version (`POST /api/admin/quotes/:id/versions/:versionNumber/submit`)
   - sets `status=verified`, `customer_status=awaiting_payment`
-  - attempts the payment-focused approved-quote email through Resend and records `approval_email_sent` or `approval_email_failed` without rolling back approval
+  - creates a fresh secure payment token, attempts the payment-focused approved-quote email through Resend, and records `approval_email_sent` or `approval_email_failed` without rolling back approval
   - creates a tokenized approved-quote preview URL backed by the saved client/admin polygon sources and Mapbox satellite static imagery
-- resend approved quote email (`POST /api/admin/quotes/:id/approval-email/resend`) for verified quotes awaiting payment
+- resend approved quote email (`POST /api/admin/quotes/:id/approval-email/resend`) for verified quotes awaiting payment; resend rotates the payment token and revokes older active payment links
 - public approved-quote preview image (`GET /api/approved-quote-preview/:token`) proxies the Mapbox image without exposing the Mapbox token
+- public approved-quote payment link (`/pay/:token`) opens Stripe Checkout through `POST /api/payment-links/:token/checkout`
+- quote editor shows the latest Stripe payment mode/status, paid invoice count, lifecycle timestamps, and related Stripe object IDs for support/debugging
 - legacy revise endpoint remains for backward compatibility
 - add internal note
 

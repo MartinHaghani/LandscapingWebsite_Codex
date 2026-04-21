@@ -13,6 +13,8 @@ Staging is created and active in DigitalOcean:
 - Database cluster: `autoscape-staging-db`, PostgreSQL 16, size `db-s-1vcpu-1gb`
 - Database/user names: `autoscape_staging`
 - Migration status: the `migrate` pre-deploy job applied all committed Prisma migrations successfully; redeploy `9d5878fa-20e7-4f60-a33d-d876f456cdd4` completed `ACTIVE` with no pending migrations.
+- Runtime status: the root, `server/`, `client/`, and `admin/` package manifests pin `engines.node` to `20.x`; DigitalOcean App Platform's Node buildpack reads this package setting for Node version selection.
+- Stripe status: the API has both staging Stripe secrets set as secret runtime env vars after deployment `3fd59849-4f83-4964-b09b-e1535fcdbe58`; staging Checkout still needs an end-to-end smoke test.
 - Smoke-test status: authenticated staging smoke mostly passes. Custom domains, API health, public/admin SPA routes, CORS, service-area check, draft quote creation, customer Clerk claim/finalize/dashboard, admin Clerk health/list/editor/version submit, verified quote page, CSV export, audit logging, and persistence after redeploy passed for quote `Q-D6S4ZMR2`. The deployed API now exposes the public approved-quote preview route and admin approval-email resend route; the remaining email gate is an authenticated end-to-end approval/resend smoke against a real verified quote.
 - Production status: not created. Do not create or route production until the approval email delivery/resend smoke passes on staging, production Clerk/Mapbox/Resend values are confirmed, and Martin confirms launch.
 
@@ -60,6 +62,8 @@ Staging environment variable audit, names only:
 | `VITE_MAPBOX_TOKEN` | found |
 | `MAPBOX_STATIC_ACCESS_TOKEN` | no dedicated value found; staging uses the allowed browser-token fallback until a separate static token is added |
 | `RESEND_API_KEY` | found |
+| `STRIPE_WEBHOOK_SECRET` | found |
+| `STRIPE_SECRET_KEY` | found |
 | `AUTOSCAPE_BASE_STATIONS_JSON` | found |
 | `SERVICE_AREA_REGIONS` | found |
 | `SYSTEM_LAUNCH_AT` | found |
@@ -81,6 +85,8 @@ Each app contains:
 | `admin-web` | static site | `admin/` | `npm ci && npm run build` | serves `dist` with `index.html` catch-all |
 | `api` | web service | `server/` | `npm ci && npm run prisma:generate && npm run build` | `npm start` |
 | `migrate` | pre-deploy job | `server/` | `npm ci && npm run prisma:generate && npm run build` | `npm run prisma:migrate:deploy` |
+
+Node runtime selection is pinned in package manifests, not in the App Platform YAML. Keep `engines.node` set to `20.x` in the root, `server/`, `client/`, and `admin/` `package.json` files. DigitalOcean's Node buildpack currently defaults to Node 22 when no engine is specified, so removing those pins can silently change the build/runtime version.
 
 App specs live in:
 
@@ -193,6 +199,8 @@ RESEND_API_KEY=<staging resend key>
 APPROVED_QUOTE_EMAIL_FROM=Autoscape <contact@autoscape.ca>
 APPROVED_QUOTE_EMAIL_REPLY_TO=contact@autoscape.ca
 MAPBOX_STATIC_ACCESS_TOKEN=<mapbox static image token>
+STRIPE_SECRET_KEY=<staging Stripe test secret key>
+STRIPE_WEBHOOK_SECRET=<staging Stripe webhook signing secret>
 ```
 
 Set `DATABASE_URL` on the `migrate` job as the same staging database URL/bindable variable.
@@ -214,6 +222,15 @@ Resend:
 
 - Use a staging-safe API key/sender until production launch.
 - Before production launch, smoke-test approved quote email delivery/resend plus `https://api-staging.autoscape.ca/api/approved-quote-preview/:token` with a real verified quote. Approval should remain successful even if email delivery fails, and the admin editor should show the latest delivery error plus manual resend.
+
+Stripe:
+
+- Use the Autoscape sandbox/test account for staging.
+- Set `STRIPE_SECRET_KEY` on the `api` service from the Stripe Dashboard API keys page. Use a test secret key for staging and a live secret key only for production.
+- Set `STRIPE_WEBHOOK_SECRET` on the `api` service from the Stripe webhook endpoint signing secret. Both staging Stripe secrets have been applied in DigitalOcean.
+- The webhook endpoint URL should be `https://api-staging.autoscape.ca/api/stripe/webhook` for staging and `https://api.autoscape.ca/api/stripe/webhook` for production.
+- The code uses hosted Checkout with inline prices, so no Stripe Product or Price records are required for v1.
+- Keep payment methods, receipts, retry/dunning behavior, branding, and live-account activation configured in Stripe Dashboard before launch.
 
 DNS:
 

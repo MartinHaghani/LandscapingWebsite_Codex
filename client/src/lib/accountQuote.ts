@@ -16,6 +16,7 @@ export interface NormalizedAccountQuote extends QuoteLookupResponse {
   verifiedAt: string | null;
   paymentPageUrl: string | null;
   approvedQuotePreviewImageUrl: string | null;
+  payment: QuoteLookupResponse['payment'] | null;
 }
 
 export const normalizeAccountQuote = (result: QuoteLookupResponse): NormalizedAccountQuote => {
@@ -44,6 +45,7 @@ export const normalizeAccountQuote = (result: QuoteLookupResponse): NormalizedAc
     customerStatus: result.customerStatus ?? 'pending',
     verifiedAt: result.verifiedAt ?? null,
     paymentPageUrl: result.paymentPageUrl ?? null,
-    approvedQuotePreviewImageUrl: result.approvedQuotePreviewImageUrl ?? null
+    approvedQuotePreviewImageUrl: result.approvedQuotePreviewImageUrl ?? null,
+    payment: result.payment ?? null
   };
 };
