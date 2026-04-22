@@ -16,14 +16,15 @@ interface RequestsMapProps {
 
 const styleSpec: StyleSpecification = {
   version: 8,
+  glyphs: 'https://demotiles.maplibre.org/font/{fontstack}/{range}.pbf',
   sources: {
-    dark_tiles: {
+    base_tiles: {
       type: 'raster',
       tiles: [
-        'https://a.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}.png',
-        'https://b.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}.png',
-        'https://c.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}.png',
-        'https://d.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}.png'
+        'https://a.basemaps.cartocdn.com/light_all/{z}/{x}/{y}.png',
+        'https://b.basemaps.cartocdn.com/light_all/{z}/{x}/{y}.png',
+        'https://c.basemaps.cartocdn.com/light_all/{z}/{x}/{y}.png',
+        'https://d.basemaps.cartocdn.com/light_all/{z}/{x}/{y}.png'
       ],
       tileSize: 256,
       attribution:
@@ -32,9 +33,9 @@ const styleSpec: StyleSpecification = {
   },
   layers: [
     {
-      id: 'dark_tiles',
+      id: 'base_tiles',
       type: 'raster',
-      source: 'dark_tiles',
+      source: 'base_tiles',
       minzoom: 0,
       maxzoom: 22
     }
@@ -157,9 +158,9 @@ export const RequestsMap = ({ points, showHeatmap, showClusters }: RequestsMapPr
             '#8bffaf'
           ],
           'circle-radius': ['step', ['get', 'point_count'], 14, 20, 19, 60, 24],
-          'circle-opacity': 0.8,
-          'circle-stroke-color': '#e9f6ed',
-          'circle-stroke-width': 1.2
+          'circle-opacity': 0.86,
+          'circle-stroke-color': '#ffffff',
+          'circle-stroke-width': 1.6
         }
       });
 
@@ -188,8 +189,8 @@ export const RequestsMap = ({ points, showHeatmap, showClusters }: RequestsMapPr
         paint: {
           'circle-color': '#8bffaf',
           'circle-radius': 6,
-          'circle-stroke-color': '#0f1f16',
-          'circle-stroke-width': 1.2,
+          'circle-stroke-color': '#101713',
+          'circle-stroke-width': 1.4,
           'circle-opacity': 0.95
         }
       });
@@ -236,8 +237,8 @@ export const RequestsMap = ({ points, showHeatmap, showClusters }: RequestsMapPr
         };
 
         const html = `
-          <div style="font-size:12px;color:#d9efe0;line-height:1.5;min-width:180px;">
-            <strong style="color:#ffffff;display:block;margin-bottom:4px;">${props.addressText ?? 'Request'}</strong>
+          <div style="font-size:12px;color:#4d5f53;line-height:1.5;min-width:180px;">
+            <strong style="color:#101713;display:block;margin-bottom:4px;">${props.addressText ?? 'Request'}</strong>
             <div>Source: ${props.source ?? 'n/a'}</div>
             <div>Status: ${props.status ?? 'n/a'}</div>
             <div>Created: ${props.createdAt ? new Date(props.createdAt).toLocaleString() : 'n/a'}</div>

@@ -38,6 +38,7 @@ const EMPTY_EDITOR_STATE: PolygonEditorState = {
   activePolygonId: null
 };
 const SERVICE_FREQUENCY = 'weekly' as const;
+const MAPBOX_TOKEN = import.meta.env?.VITE_MAPBOX_TOKEN;
 
 const createPolygonId = () => {
   if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
@@ -99,26 +100,6 @@ const formatCurrency = (amountCents: number, currency = 'CAD') =>
     currencyDisplay: 'narrowSymbol',
     maximumFractionDigits: 2
   }).format(amountCents / 100);
-
-const activeDrawButtonStyle = (kind: PolygonKind) =>
-  kind === 'service'
-    ? {
-        borderColor: 'rgba(37,118,68,0.95)',
-        background: 'rgba(50,159,91,0.92)',
-        color: '#ffffff',
-        boxShadow: '0 0 0 2px rgba(50,159,91,0.2)'
-      }
-    : {
-        borderColor: 'rgba(185,28,28,0.95)',
-        background: 'rgba(220,38,38,0.92)',
-        color: '#ffffff',
-        boxShadow: '0 0 0 2px rgba(220,38,38,0.18)'
-      };
-
-const inactiveObstacleButtonStyle = {
-  borderColor: 'rgba(220,38,38,0.28)',
-  color: 'var(--danger)'
-};
 
 export const QuoteEditorPage = ({ getToken, quoteId, onBack }: QuoteEditorPageProps) => {
   const polygonCounterRef = useRef(0);
@@ -596,123 +577,93 @@ export const QuoteEditorPage = ({ getToken, quoteId, onBack }: QuoteEditorPagePr
               <p className="error-banner">Obstacles remove the entire service area. Adjust boundaries before saving.</p>
             ) : null}
 
-            <div style={{ position: 'relative' }}>
-              <QuoteEditorMap
-                center={center}
-                drawMode={drawMode}
-                selection={selection}
-                polygons={polygons}
-                activePolygonId={activePolygonId}
-                onPolygonDrawn={(kind, shape) => {
-                  createDrawnPolygon(kind, shape.ringPoints, shape.rawStrokePoints);
-                }}
-                onPolygonRingPointsChange={(polygonId, nextPoints) => {
-                  applyPolygonPointsEdit(polygonId, nextPoints);
-                }}
-                onSelectionChange={handleMapSelectionChange}
-              />
-
-              <div
-                style={{
-                  position: 'absolute',
-                  top: '1rem',
-                  left: '1rem',
-                  zIndex: 20,
-                  display: 'flex',
-                  gap: '0.45rem',
-                  padding: '0.45rem',
-                  borderRadius: '14px',
-                  border: '1px solid rgba(255,255,255,0.18)',
-                  background: 'rgba(14,20,17,0.86)',
-                  boxShadow: '0 14px 28px rgba(0,0,0,0.26)',
-                  backdropFilter: 'blur(10px)'
-                }}
-              >
-                <button
-                  type="button"
-                  className="button"
-                  onClick={handleUndo}
-                  disabled={!canUndo}
-                  aria-label="Undo"
-                  style={{ minWidth: '2.6rem', minHeight: '2.6rem', padding: '0.35rem 0.55rem' }}
-                >
-                  <span aria-hidden="true">&larr;</span>
-                </button>
-                <button
-                  type="button"
-                  className="button"
-                  onClick={handleRedo}
-                  disabled={!canRedo}
-                  aria-label="Redo"
-                  style={{ minWidth: '2.6rem', minHeight: '2.6rem', padding: '0.35rem 0.55rem' }}
-                >
-                  <span aria-hidden="true">&rarr;</span>
-                </button>
-              </div>
-
-              <div
-                style={{
-                  position: 'absolute',
-                  top: '1rem',
-                  left: '50%',
-                  transform: 'translateX(-50%)',
-                  zIndex: 20,
-                  display: 'flex',
-                  gap: '0.45rem',
-                  flexWrap: 'wrap',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  maxWidth: 'calc(100% - 7.5rem)',
-                  padding: '0.6rem 0.7rem',
-                  borderRadius: '18px',
-                  border: '1px solid rgba(255,255,255,0.16)',
-                  background: 'rgba(11,17,14,0.88)',
-                  boxShadow: '0 18px 32px rgba(0,0,0,0.24)',
-                  backdropFilter: 'blur(10px)'
-                }}
-              >
-                <button
-                  type="button"
-                  className="button"
-                  onClick={() => toggleDrawMode('service')}
-                  style={isServiceDrawMode ? activeDrawButtonStyle('service') : undefined}
-                >
-                  {isServiceDrawMode ? 'Stop drawing' : 'Draw lawn'}
-                </button>
-                <button
-                  type="button"
-                  className="button"
-                  onClick={() => toggleDrawMode('obstacle')}
-                  style={isObstacleDrawMode ? activeDrawButtonStyle('obstacle') : inactiveObstacleButtonStyle}
-                >
-                  {isObstacleDrawMode ? 'Stop drawing' : 'Draw obstacle'}
-                </button>
-                <div
-                  aria-hidden="true"
-                  style={{ width: '1px', height: '2rem', background: 'rgba(255,255,255,0.14)' }}
+            {!MAPBOX_TOKEN ? (
+              <p className="error-banner">
+                `VITE_MAPBOX_TOKEN` is missing. Add your Mapbox public token to `admin/.env` to edit quote
+                geometry.
+              </p>
+            ) : (
+              <div className="quote-editor-map-stage">
+                <QuoteEditorMap
+                  token={MAPBOX_TOKEN}
+                  center={center}
+                  drawMode={drawMode}
+                  selection={selection}
+                  polygons={polygons}
+                  activePolygonId={activePolygonId}
+                  onPolygonDrawn={(kind, shape) => {
+                    createDrawnPolygon(kind, shape.ringPoints, shape.rawStrokePoints);
+                  }}
+                  onPolygonRingPointsChange={(polygonId, nextPoints) => {
+                    applyPolygonPointsEdit(polygonId, nextPoints);
+                  }}
+                  onSelectionChange={handleMapSelectionChange}
                 />
-                <div style={{ display: 'flex', gap: '0.45rem', flexWrap: 'wrap' }}>
+
+                <div className="quote-editor-map-undo-cluster">
                   <button
                     type="button"
-                    className="button"
-                    onClick={handleDeleteSelection}
-                    disabled={selection.kind === 'none'}
-                    style={selection.kind === 'none' ? undefined : inactiveObstacleButtonStyle}
+                    className="quote-editor-map-icon-button"
+                    onClick={handleUndo}
+                    disabled={!canUndo}
+                    aria-label="Undo"
                   >
-                    Delete
+                    <span aria-hidden="true">&larr;</span>
                   </button>
                   <button
                     type="button"
-                    className="button"
-                    onClick={handleClearAll}
-                    disabled={polygons.length === 0}
-                    style={clearAllConfirmation ? activeDrawButtonStyle('obstacle') : inactiveObstacleButtonStyle}
+                    className="quote-editor-map-icon-button"
+                    onClick={handleRedo}
+                    disabled={!canRedo}
+                    aria-label="Redo"
                   >
-                    {clearAllConfirmation ? 'Confirm clear all' : 'Clear all'}
+                    <span aria-hidden="true">&rarr;</span>
                   </button>
                 </div>
+
+                <div className="quote-editor-map-toolbar-rail">
+                  <div className="quote-editor-map-toolbar">
+                    <button
+                      type="button"
+                      className={`quote-editor-map-tool-button ${isServiceDrawMode ? 'is-service-active' : ''}`}
+                      onClick={() => toggleDrawMode('service')}
+                    >
+                      {isServiceDrawMode ? 'Stop drawing' : 'Draw lawn'}
+                    </button>
+                    <button
+                      type="button"
+                      className={`quote-editor-map-tool-button is-danger-tool ${
+                        isObstacleDrawMode ? 'is-obstacle-active' : ''
+                      }`}
+                      onClick={() => toggleDrawMode('obstacle')}
+                    >
+                      {isObstacleDrawMode ? 'Stop drawing' : 'Draw obstacle'}
+                    </button>
+                    <div className="quote-editor-map-toolbar-divider" aria-hidden="true" />
+                    <div className="quote-editor-map-danger-group">
+                      <button
+                        type="button"
+                        className="quote-editor-map-tool-button is-danger-tool"
+                        onClick={handleDeleteSelection}
+                        disabled={selection.kind === 'none'}
+                      >
+                        Delete
+                      </button>
+                      <button
+                        type="button"
+                        className={`quote-editor-map-tool-button is-danger-tool ${
+                          clearAllConfirmation ? 'is-obstacle-active' : ''
+                        }`}
+                        onClick={handleClearAll}
+                        disabled={polygons.length === 0}
+                      >
+                        {clearAllConfirmation ? 'Confirm clear all' : 'Clear all'}
+                      </button>
+                    </div>
+                  </div>
+                </div>
               </div>
-            </div>
+            )}
           </div>
 
           <div style={{ display: 'grid', gap: '0.75rem' }}>

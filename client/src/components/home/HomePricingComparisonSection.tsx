@@ -15,8 +15,6 @@ const autoscapePerVisit = getQuoteTotal(
 );
 const autoscapeSeasonal = getSeasonalPricing(autoscapePerVisit, 'weekly');
 const competitorSeasonTotal = COMPETITOR_RATE_PER_VISIT * autoscapeSeasonal.sessionsMax;
-const perVisitSavings = COMPETITOR_RATE_PER_VISIT - autoscapePerVisit;
-const seasonSavings = competitorSeasonTotal - autoscapeSeasonal.seasonalDiscountedTotal;
 const SAMPLE_LAWN_FILL_PATH = [
   'M98 38',
   'H236',
@@ -118,7 +116,7 @@ const SampleLawnGraphic = () => (
 
 export const HomePricingComparisonSection = () => (
   <section
-    className="relative overflow-hidden border-b border-stroke bg-white"
+    className="relative overflow-hidden border-b border-stroke bg-[linear-gradient(180deg,rgba(255,255,255,0.98),rgba(247,244,238,0.72))]"
     data-home-pricing-comparison="true"
   >
     <div className="mx-auto w-full max-w-6xl px-4 py-14 text-center md:px-8 md:py-16">
@@ -131,34 +129,34 @@ export const HomePricingComparisonSection = () => (
       </p>
 
       <div
-        className="mx-auto mt-8 grid max-w-6xl gap-4 md:grid-cols-[minmax(0,0.62fr)_minmax(0,1.38fr)] md:items-stretch md:gap-5"
+        className="mx-auto mt-12 grid max-w-6xl gap-4 md:grid-cols-[minmax(0,0.62fr)_minmax(0,1.38fr)] md:items-stretch md:gap-5"
         data-home-pricing-band="true"
       >
         <div
-          className="h-full rounded-2xl border border-stroke bg-surface px-4 py-5 text-center shadow-[0_18px_40px_-34px_rgba(16,23,19,0.22)]"
+          className="h-full px-2 py-4 text-center md:px-4 md:py-5"
           data-home-pricing-context="true"
         >
           <p className="text-xs font-semibold uppercase tracking-[0.18em] text-copy-soft">
             Sample lawn
           </p>
           <div
-            className="mx-auto mt-4 flex w-full max-w-[8rem] items-center justify-center sm:max-w-[8.5rem] md:max-w-[7.25rem]"
+            className="mx-auto mt-5 flex w-full max-w-[10rem] items-center justify-center sm:max-w-[11rem] md:max-w-[10.5rem]"
             data-home-pricing-lawn="true"
           >
             <SampleLawnGraphic />
           </div>
-          <dl className="mt-4 grid gap-2 text-left">
-            <div className="rounded-xl border border-stroke bg-white px-4 py-3">
-              <dt className="text-xs font-semibold uppercase tracking-[0.16em] text-copy-soft">
+          <dl className="mt-5 grid grid-cols-2 gap-4 border-t border-stroke/70 pt-4 text-left">
+            <div>
+              <dt className="text-[0.68rem] font-semibold uppercase tracking-[0.16em] text-copy-soft">
                 Size
               </dt>
-              <dd className="mt-1 text-sm font-semibold text-ink">3,000 sq ft lawn</dd>
+              <dd className="mt-1 text-xs font-medium text-copy-muted">3,000 sq ft lawn</dd>
             </div>
-            <div className="rounded-xl border border-stroke bg-white px-4 py-3">
-              <dt className="text-xs font-semibold uppercase tracking-[0.16em] text-copy-soft">
+            <div>
+              <dt className="text-[0.68rem] font-semibold uppercase tracking-[0.16em] text-copy-soft">
                 Schedule
               </dt>
-              <dd className="mt-1 text-sm font-semibold text-ink">
+              <dd className="mt-1 text-xs font-medium text-copy-muted">
                 {autoscapeSeasonal.sessionsMax} weekly visits
               </dd>
             </div>
@@ -166,33 +164,30 @@ export const HomePricingComparisonSection = () => (
         </div>
 
         <div
-          className="flex h-full flex-col rounded-2xl border border-stroke bg-surface p-4 text-left shadow-[0_22px_48px_-36px_rgba(16,23,19,0.28)] sm:p-5"
+          className="flex h-full flex-col rounded-lg border-y border-stroke/80 bg-white/70 p-4 text-left shadow-[0_20px_44px_-40px_rgba(16,23,19,0.28)] sm:p-5 md:border md:bg-surface/90"
           data-home-pricing-panel="true"
         >
           <div
-            className="grid flex-1 grid-cols-[minmax(0,1.15fr)_minmax(5.5rem,0.9fr)_minmax(5.5rem,0.9fr)] gap-x-2 gap-y-4 sm:grid-cols-[minmax(0,1.2fr)_minmax(7.5rem,1fr)_minmax(7.5rem,1fr)] sm:gap-x-4"
+            className="grid flex-1 grid-cols-[minmax(6.5rem,0.72fr)_minmax(0,1fr)_minmax(0,1fr)] gap-x-2 gap-y-4 sm:grid-cols-[minmax(8rem,0.72fr)_minmax(0,1fr)_minmax(0,1fr)] sm:gap-x-4"
             data-home-pricing-standard-grid="true"
           >
-            <div />
-            <p className="flex items-center justify-center rounded-full bg-brand/10 px-3 py-2 text-center text-xs font-semibold uppercase tracking-[0.18em] text-brand sm:text-sm">
+            <div className="border-b border-stroke pb-3" />
+            <p className="border-b border-stroke pb-3 text-center text-xs font-semibold uppercase tracking-[0.18em] text-brand sm:text-sm">
               Autoscape
             </p>
-            <p className="flex items-center justify-center rounded-full border border-stroke bg-white px-3 py-2 text-center text-xs font-semibold uppercase tracking-[0.18em] text-copy-soft sm:text-sm">
+            <p className="border-b border-stroke pb-3 text-center text-xs font-semibold uppercase tracking-[0.18em] text-copy-soft sm:text-sm">
               Local competitors
             </p>
 
-            <div className="border-t border-stroke pt-4">
+            <div className="pt-1">
               <p className="text-base font-semibold text-ink sm:text-lg">Per visit</p>
-              <p className="mt-1 text-xs leading-5 text-copy-muted">
-                Standard weekly mowing price
-              </p>
             </div>
-            <div className="border-t border-stroke pt-4 text-center">
-              <p className="text-3xl font-bold tracking-tight text-ink sm:text-4xl">
+            <div className="pt-1 text-center">
+              <p className="text-3xl font-bold tracking-tight text-brand sm:text-4xl">
                 {formatDollars(autoscapePerVisit)}
               </p>
             </div>
-            <div className="border-t border-stroke pt-4 text-center">
+            <div className="pt-1 text-center">
               <p className="text-3xl font-bold tracking-tight text-copy-soft sm:text-4xl">
                 {formatDollars(COMPETITOR_RATE_PER_VISIT)}
               </p>
@@ -200,14 +195,20 @@ export const HomePricingComparisonSection = () => (
 
             <div className="border-t border-stroke pt-4">
               <p className="text-base font-semibold text-ink sm:text-lg">Per season</p>
-              <p className="mt-1 text-xs leading-5 text-copy-muted">
-                Includes 20% seasonal savings
-              </p>
             </div>
-            <div className="border-t border-stroke pt-4 text-center">
+            <div
+              className="relative border-t border-stroke pt-4 text-center"
+              data-home-pricing-discount-cell="true"
+            >
               <p className="text-3xl font-bold tracking-tight text-brand sm:text-4xl">
                 {formatDollars(autoscapeSeasonal.seasonalDiscountedTotal)}
               </p>
+              <span
+                className="absolute right-0 top-0 -translate-y-1/2 border border-brand/30 bg-surface px-1.5 py-0.5 text-[0.55rem] font-semibold uppercase tracking-[0.1em] text-brand shadow-[0_10px_18px_-18px_rgba(16,23,19,0.35)] sm:right-1 sm:px-2 sm:text-[0.6rem]"
+                data-home-pricing-discount-badge="true"
+              >
+                20% off
+              </span>
             </div>
             <div className="border-t border-stroke pt-4 text-center">
               <p className="text-3xl font-bold tracking-tight text-copy-soft sm:text-4xl">
@@ -216,12 +217,7 @@ export const HomePricingComparisonSection = () => (
             </div>
           </div>
 
-          <p className="mt-5 text-base font-semibold leading-7 text-ink">
-            Save {formatDollars(perVisitSavings)} per visit and {formatDollars(seasonSavings)} per
-            season.
-          </p>
-
-          <p className="mt-3 text-xs leading-5 text-copy-soft">
+          <p className="mt-6 text-xs leading-5 text-copy-soft">
             Benchmark uses the current public posted weekly mowing rate. Taxes, extras, drawn
             area, perimeter, cadence, and service distance can change a final quote.
           </p>

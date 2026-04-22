@@ -16,6 +16,51 @@ const emptyForm = {
   message: ''
 };
 
+const contactMethods = [
+  {
+    value: '+1 (416) 848-2841',
+    href: 'tel:+14168482841',
+    helper: 'Best for quote help, scheduling, and urgent service questions.',
+    icon: 'phone'
+  },
+  {
+    value: 'contact@autoscape.ca',
+    href: 'mailto:contact@autoscape.ca',
+    helper: 'Best for property details, documents, and follow-up questions.',
+    icon: 'mail'
+  }
+] as const;
+
+type ContactMethodIcon = (typeof contactMethods)[number]['icon'];
+
+const ContactIcon = ({ icon }: { icon: ContactMethodIcon }) => {
+  const commonProps = {
+    'aria-hidden': true,
+    className: 'h-5 w-5',
+    fill: 'none',
+    stroke: 'currentColor',
+    strokeLinecap: 'round' as const,
+    strokeLinejoin: 'round' as const,
+    strokeWidth: 1.8,
+    viewBox: '0 0 24 24'
+  };
+
+  if (icon === 'phone') {
+    return (
+      <svg {...commonProps}>
+        <path d="M6.65 4.75 9.2 4.1l1.75 4.55-1.7 1.02a9.2 9.2 0 0 0 5.08 5.08l1.02-1.7 4.55 1.75-.65 2.55a2.25 2.25 0 0 1-2.4 1.67C9.9 18.42 5.58 14.1 4.98 7.15a2.25 2.25 0 0 1 1.67-2.4Z" />
+      </svg>
+    );
+  }
+
+  return (
+    <svg {...commonProps}>
+      <path d="M4.75 6.75h14.5v10.5H4.75Z" />
+      <path d="m5.25 7.25 6.75 5.5 6.75-5.5" />
+    </svg>
+  );
+};
+
 export const ContactPage = () => {
   const [form, setForm] = useState(emptyForm);
   const [loading, setLoading] = useState(false);
@@ -63,139 +108,177 @@ export const ContactPage = () => {
   };
 
   return (
-    <div className="mx-auto w-full max-w-7xl px-4 py-16 md:px-8 md:py-20">
-      <SectionTitle
-        badge="Contact"
-        title="Send us a message"
-        description="Need help with service coverage, quote setup, or account follow-up? Our team will respond promptly."
-      />
+    <div className="border-b border-stroke bg-[linear-gradient(180deg,rgba(255,255,255,0.98),rgba(247,244,238,0.72))]">
+      <div className="mx-auto w-full max-w-7xl px-4 py-16 md:px-8 md:py-20">
+        <SectionTitle
+          badge="Contact"
+          title="Talk to the Autoscape Team"
+          description="Need help with service coverage, quote setup, or account follow-up? Call, email, or send the details here."
+        />
 
-      <div className="mt-10 grid gap-8 lg:grid-cols-[0.95fr_1.05fr]">
-        <Card className="border-brand/20 bg-surface-raised">
-          <h3 className="text-xl font-semibold text-ink">Autoscape HQ</h3>
-          <p className="mt-3 text-sm text-copy-muted">Service region: Greater Toronto Area</p>
-          <p className="mt-2 text-sm text-copy-muted">
-            Phone:{' '}
-            <a href="tel:+14168482841" className="transition-colors hover:text-brand">
-              +1 (416) 848-2841
-            </a>
-          </p>
-          <p className="mt-2 text-sm text-copy-muted">
-            Email:{' '}
-            <a href="mailto:contact@autoscape.ca" className="transition-colors hover:text-brand">
-              contact@autoscape.ca
-            </a>
-          </p>
-          <p className="mt-5 text-xs text-copy-muted">Mon-Sat 7:00 AM - 7:00 PM</p>
-        </Card>
-
-        <Card>
-          <form className="space-y-4" onSubmit={handleSubmit}>
-            <div>
-              <label htmlFor="name" className="form-label">
-                Name
-              </label>
-              <input
-                id="name"
-                required
-                value={form.name}
-                onChange={(event) =>
-                  setForm((current) => ({ ...current, name: event.target.value }))
-                }
-                autoComplete="name"
-                className="form-input"
-                placeholder="Jane Doe"
-              />
-            </div>
-
-            <div>
-              <label htmlFor="email" className="form-label">
-                Email
-              </label>
-              <input
-                id="email"
-                type="email"
-                required
-                value={form.email}
-                onChange={(event) =>
-                  setForm((current) => ({ ...current, email: event.target.value }))
-                }
-                autoComplete="email"
-                className="form-input"
-                placeholder="jane@example.com"
-              />
-            </div>
-
-            <div>
-              <label htmlFor="phone" className="form-label">
-                Phone
-              </label>
-              <input
-                id="phone"
-                type="tel"
-                required
-                value={form.phone}
-                onChange={(event) =>
-                  setForm((current) => ({ ...current, phone: event.target.value }))
-                }
-                autoComplete="tel"
-                className="form-input"
-                placeholder="+1 416 000 0000"
-              />
-            </div>
-
-            <div>
-              <label htmlFor="address" className="form-label">
-                Address (optional)
-              </label>
-              <input
-                id="address"
-                value={form.address}
-                onChange={(event) =>
-                  setForm((current) => ({ ...current, address: event.target.value }))
-                }
-                autoComplete="street-address"
-                className="form-input"
-                placeholder="123 Greenway Blvd, Vaughan, ON"
-              />
-            </div>
-
-            <div>
-              <label htmlFor="message" className="form-label">
-                Message
-              </label>
-              <textarea
-                id="message"
-                rows={5}
-                required
-                value={form.message}
-                onChange={(event) =>
-                  setForm((current) => ({ ...current, message: event.target.value }))
-                }
-                className="form-input min-h-[140px]"
-                placeholder="Tell us about your property, service goals, or any timeline requirements."
-              />
-            </div>
-
-            {result ? (
-              <p
-                className={
-                  result.type === 'success' ? 'text-sm text-brand' : 'text-sm text-red-700'
-                }
-              >
-                {result.message}
-              </p>
-            ) : null}
-
-            <Button type="submit" disabled={!canSubmit || loading}>
-              {loading ? 'Submitting...' : 'Send message'}
-            </Button>
-            <p className="form-help">
-              Name, email, phone, and message are required. Address is optional, but it helps us
-              answer your query better.
+        <div className="mt-10 grid gap-8 lg:grid-cols-[0.92fr_1.08fr] lg:items-start">
+          <section
+            className="rounded-lg border border-stroke/80 bg-white/70 p-5 shadow-[0_18px_44px_-40px_rgba(16,23,19,0.24)] md:bg-surface/80 md:p-6"
+            aria-labelledby="direct-contact-heading"
+          >
+            <h2 id="direct-contact-heading" className="text-2xl font-semibold text-ink">
+              Reach the team directly
+            </h2>
+            <p className="mt-3 max-w-xl text-sm leading-6 text-copy-muted">
+              Phone and email are monitored during service hours for customers starting quotes,
+              checking coverage, or following up on a property request.
             </p>
-          </form>
-        </Card>
+
+            <div className="mt-6 divide-y divide-stroke/80 border-y border-stroke/80">
+              {contactMethods.map((method) => (
+                <a
+                  key={method.href}
+                  href={method.href}
+                  className="grid grid-cols-[2.75rem_minmax(0,1fr)] gap-4 py-5 transition-colors hover:text-brand"
+                >
+                  <span className="flex h-11 w-11 items-center justify-center rounded-lg border border-brand/25 bg-brand/10 text-brand">
+                    <ContactIcon icon={method.icon} />
+                  </span>
+                  <span>
+                    <span className="block break-words font-display text-2xl font-bold leading-tight text-ink md:text-3xl">
+                      {method.value}
+                    </span>
+                    <span className="mt-2 block text-sm leading-6 text-copy-muted">
+                      {method.helper}
+                    </span>
+                  </span>
+                </a>
+              ))}
+            </div>
+
+            <dl className="mt-6 grid gap-4 border-y border-stroke/80 py-5 text-sm sm:grid-cols-2">
+              <div>
+                <dt className="text-xs font-semibold uppercase tracking-[0.16em] text-copy-soft">
+                  Service region
+                </dt>
+                <dd className="mt-1 font-semibold text-ink">Greater Toronto Area</dd>
+              </div>
+              <div>
+                <dt className="text-xs font-semibold uppercase tracking-[0.16em] text-copy-soft">
+                  Hours
+                </dt>
+                <dd className="mt-1 font-semibold text-ink">Mon-Sat 7:00 AM - 7:00 PM</dd>
+              </div>
+            </dl>
+          </section>
+
+          <Card className="rounded-lg bg-white/90 shadow-[0_20px_48px_-40px_rgba(16,23,19,0.28)]">
+            <h2 className="text-2xl font-semibold text-ink">Send a message</h2>
+            <p className="mt-2 text-sm leading-6 text-copy-muted">
+              Share the essentials and we will route your note to the right person.
+            </p>
+            <form className="mt-6 space-y-4" onSubmit={handleSubmit}>
+              <div>
+                <label htmlFor="name" className="form-label">
+                  Name
+                </label>
+                <input
+                  id="name"
+                  required
+                  value={form.name}
+                  onChange={(event) =>
+                    setForm((current) => ({ ...current, name: event.target.value }))
+                  }
+                  autoComplete="name"
+                  className="form-input"
+                  placeholder="Jane Doe"
+                />
+              </div>
+
+              <div>
+                <label htmlFor="email" className="form-label">
+                  Email
+                </label>
+                <input
+                  id="email"
+                  type="email"
+                  required
+                  value={form.email}
+                  onChange={(event) =>
+                    setForm((current) => ({ ...current, email: event.target.value }))
+                  }
+                  autoComplete="email"
+                  className="form-input"
+                  placeholder="jane@example.com"
+                />
+              </div>
+
+              <div>
+                <label htmlFor="phone" className="form-label">
+                  Phone
+                </label>
+                <input
+                  id="phone"
+                  type="tel"
+                  required
+                  value={form.phone}
+                  onChange={(event) =>
+                    setForm((current) => ({ ...current, phone: event.target.value }))
+                  }
+                  autoComplete="tel"
+                  className="form-input"
+                  placeholder="+1 416 000 0000"
+                />
+              </div>
+
+              <div>
+                <label htmlFor="address" className="form-label">
+                  Address (optional)
+                </label>
+                <input
+                  id="address"
+                  value={form.address}
+                  onChange={(event) =>
+                    setForm((current) => ({ ...current, address: event.target.value }))
+                  }
+                  autoComplete="street-address"
+                  className="form-input"
+                  placeholder="123 Greenway Blvd, Vaughan, ON"
+                />
+              </div>
+
+              <div>
+                <label htmlFor="message" className="form-label">
+                  Message
+                </label>
+                <textarea
+                  id="message"
+                  rows={5}
+                  required
+                  value={form.message}
+                  onChange={(event) =>
+                    setForm((current) => ({ ...current, message: event.target.value }))
+                  }
+                  className="form-input min-h-[140px]"
+                  placeholder="Tell us about your property, service goals, or any timeline requirements."
+                />
+              </div>
+
+              {result ? (
+                <p
+                  className={
+                    result.type === 'success' ? 'text-sm text-brand' : 'text-sm text-red-700'
+                  }
+                >
+                  {result.message}
+                </p>
+              ) : null}
+
+              <Button type="submit" disabled={!canSubmit || loading}>
+                {loading ? 'Submitting...' : 'Send message'}
+              </Button>
+              <p className="form-help">
+                Name, email, phone, and message are required. Address is optional, but it helps us
+                answer your query better.
+              </p>
+            </form>
+          </Card>
+        </div>
       </div>
     </div>
   );

@@ -18,23 +18,22 @@
    - `learning your lawn...`: mower fades in and traces the inset perimeter walls while dimensions reveal after each cleared segment
    - `Generating path`: a 2-second infill build phase draws a subtle 11-pass horizontal boustrophedon coverage pattern with softer rounded U-turns and denser direction arrows across the lawn interior
    - `Mowing...`: mower appears directly at the first scanline point, follows the full generated infill path, then the mower/path fade out before the next learning cycle
-6. The status capsule is stacked directly beneath the lawn shape, resizes to the active label width, and uses a ticker-flip transition with no separate stats strip beneath the two-column hero.
+6. The status capsule is stacked directly beneath the lawn shape, centered against the full lawn graphic width, resizes to the active label width, and uses a ticker-flip transition with no separate stats strip beneath the two-column hero.
 
 ## Home: Pricing Comparison
 
 1. User continues directly below the hero into a tighter pricing comparison section.
-2. Section anchors the example around a 3,000 sq ft weekly sample lawn and keeps the portrait asymmetrical lawn SVG as supporting context only, with the same downward-facing driveway cutout, no decorative interior strokes, and the same solid brand-green fill treatment used by the hero parcel.
+2. Section anchors the example around a 3,000 sq ft weekly sample lawn and keeps the larger portrait asymmetrical lawn SVG as supporting context only, with the same downward-facing driveway cutout, no decorative interior strokes, the same solid brand-green fill treatment used by the hero parcel, and no rounded bubble wrapper around the sample lawn area.
 3. Autoscape pricing is derived from existing client quote helpers, not separate marketing-only constants:
    - `$45` per visit
    - `$720` per season after the default 20% seasonal savings
-4. Layout uses two parts instead of three equal cards:
-   - left: slimmer sample context block with the reduced lawn visual, `3,000 sq ft lawn`, and `20 weekly visits`
-   - right: one shared comparison panel with larger `Autoscape` and `Local competitors` columns kept adjacent on mobile
+4. Layout uses two flatter parts instead of three equal cards:
+   - left: unboxed sample context with the lawn visual and one muted metadata row for `3,000 sq ft lawn` and `20 weekly visits`
+   - right: one shared comparison panel with a narrower row-label column and structured `Autoscape` and `Local competitors` column headers kept adjacent on mobile
 5. Shared comparison panel shows:
-   - `Per visit`: `$45` vs `$55`
-   - `Per season`: `$720` vs `$1,100`
-   - summary copy: save `$10` per visit and `$380` per season
-6. Desktop layout stretches the shared comparison panel to match the sample box height, enlarges the `Per visit` and `Per season` row labels, and keeps the bottom disclaimer in smaller grey supporting text.
+   - `Per visit`: green `$45` vs `$55`
+   - `Per season`: centered `$720` with a top-right `20% off` badge lifted off the number vs `$1,100`
+6. Desktop layout stretches the shared comparison panel to match the sample box height, enlarges the `Per visit` and `Per season` row labels, and keeps only the bottom disclaimer in smaller grey supporting text.
 
 ## Home: Lawnmower Section
 
@@ -45,15 +44,18 @@
 3. Selling points highlight:
    - `Centimetre precision`
    - `5 sensor types`
-   - `Tested rigorously`
+   - `Rigorously tested`
    - `Built-in safety features`
-4. Section remains informational only and is intended to build trust before the visitor reaches the services overview.
+4. The sensor copy uses `sensor fusion`, and each selling point has a consistent line-style green icon: horizontal ruler, signal/sensor, flask/experiment, and safety shield.
+5. Section remains informational only and is intended to build trust before the visitor reaches the services overview.
 
 ## Home: Streamlined Marketing Flow
 
-1. After the pricing comparison, the page moves into the mower technology section and then the services overview.
-2. The retired Why Electric, How It Works, Why Autoscape, and Testimonials sections are no longer part of the landing-page flow.
-3. The page closes with FAQ cards and the final instant-quote CTA.
+1. After the pricing comparison, the page moves into the mower technology section and then the services overview, with the remaining sections using flatter warm-light surfaces, restrained borders, and fewer rounded card treatments so they match the hero area.
+2. Home services overview includes Autonomous Mowing, Edging, and Cleanup & Debris before the FAQ and final quote CTA.
+3. The retired Why Electric, How It Works, Why Autoscape, and Testimonials sections are no longer part of the landing-page flow.
+4. The FAQ answers cover cut cadence, Vaughan-area service coverage, home access, kids/pets safety, weather timing, and pricing, using larger answer text with bold key phrases.
+5. The page closes with FAQ cards and the final instant-quote CTA.
 
 ## Deployment Promotion Flow
 
@@ -203,31 +205,33 @@
 
 ## Contact Form
 
-1. User submits contact form (name/email/phone/message required, address optional).
-2. Client sends idempotent `POST /api/contact`.
-3. Server writes/updates lead + contact event.
+1. User opens `/contact` under the `Talk to the Autoscape Team` heading and sees prominent direct phone and email links in rounded panels beside the message form.
+2. User can call/email directly or submit the contact form (name/email/phone/message required, address optional).
+3. Client sends idempotent `POST /api/contact`.
+4. Server writes/updates lead + contact event.
 
 ## Admin Operations Flow
 
 ### Sign-In Session
 
 1. Admin app opens at `admin/`.
-2. User signs in through Clerk.
-3. App sends bearer token on all admin requests.
-4. Server verifies token + organization membership + mapped admin role.
-5. App verifies access via `GET /api/admin/health`.
+2. The shell uses the fixed Autoscape light theme with a sidebar that stays in place while content scrolls.
+3. User signs in through Clerk.
+4. App sends bearer token on all admin requests.
+5. Server verifies token + organization membership + mapped admin role.
+6. App verifies access via `GET /api/admin/health`.
 
 ### Quote Inbox
 
-1. Load `GET /api/admin/quotes` (cursor pagination + search/filter/sort params).
+1. Load `GET /api/admin/quotes` (cursor pagination + search/filter/sort params); controls start inside a collapsed filter/sort disclosure.
 2. Admin actions:
 
 - open route-based editor `/quotes/:quoteId/edit` for `in_review` quotes
 - full map edit with the same freehand draw + vertex-refine tools used in public quote flow
-  - editor map uses satellite imagery for visual verification
+  - editor map uses the same Mapbox satellite imagery, polygon colors, selected-state styling, vertex markers, and control placement as the public instant quote map
   - saved quote polygons are rendered immediately when the editor opens from stored `polygonSource v2`
   - editor uses the same distance-normalized draw-end simplification pass as the public quote tool, including the per-distance vertex cap, straight-edge wobble cleanup, and close-loop overlap trimming
-  - selected polygon outlines in both public and admin can be clicked near an edge to insert and select a new vertex
+  - selected polygon outlines in both public and admin can be clicked near an edge to insert and select a new vertex; selected polygons or selected points can be deleted with the same toolbar action
 - save new version (`POST /api/admin/quotes/:id/versions`)
 - submit selected version (`POST /api/admin/quotes/:id/versions/:versionNumber/submit`)
   - sets `status=verified`, `customer_status=awaiting_payment`
@@ -242,7 +246,7 @@
 
 ### Expansion + CRM Views
 
-- `GET /api/admin/service-area-requests` (list)
+- `Area requests`: `GET /api/admin/service-area-requests` (list)
 - `GET /api/admin/service-area-requests/map` (heatmap + cluster point payload)
 - `GET /api/admin/leads`
 - `GET /api/admin/contacts`
@@ -251,4 +255,4 @@
 ### Attribution + Export
 
 - `GET /api/admin/attribution/summary` (launch-cutoff aware)
-- `GET /api/admin/exports/quotes.csv` (masked/full based on role)
+- `GET /api/admin/exports/quotes.csv` (masked/full based on role), exposed as a quieter bottom-page action in the admin UI

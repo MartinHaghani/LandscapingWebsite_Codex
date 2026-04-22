@@ -19,14 +19,14 @@ export const Navbar = () => {
     const lastName = user?.lastName?.trim();
 
     if (firstName && lastName) {
-      return `${firstName}, ${lastName}`;
+      return `${firstName} ${lastName}`;
     }
 
     const fullName = user?.fullName?.trim();
     if (fullName) {
       const nameParts = fullName.split(/\s+/).filter(Boolean);
       if (nameParts.length > 1) {
-        return `${nameParts[0]}, ${nameParts.slice(1).join(' ')}`;
+        return `${nameParts[0]} ${nameParts.slice(1).join(' ')}`;
       }
       return fullName;
     }
@@ -86,7 +86,7 @@ export const Navbar = () => {
               <Link to="/sign-in" className="transition-colors hover:text-brand">
                 Sign In
               </Link>
-              <span className="text-copy-soft">,</span>
+              <span className="h-4 w-px bg-stroke" aria-hidden="true" />
               <Link to="/sign-up" className="transition-colors hover:text-brand">
                 Sign Up
               </Link>
@@ -95,7 +95,7 @@ export const Navbar = () => {
 
           <SignedIn>
             <Link to="/dashboard" className="hidden md:block">
-              <span className="font-script text-[1.55rem] leading-none text-brand transition-colors hover:text-brand-muted">
+              <span className="text-sm font-semibold text-copy-muted transition-colors hover:text-brand">
                 {accountName}
               </span>
             </Link>
@@ -152,9 +152,9 @@ export const Navbar = () => {
             <SignedIn>
               <Link
                 to="/dashboard"
-                className="mt-3 block rounded-xl border border-stroke/90 bg-surface-muted px-4 py-3 text-center"
+                className="mt-3 block rounded-lg border border-stroke/90 bg-surface-muted px-4 py-3 text-center text-sm font-semibold text-copy-muted transition-colors hover:border-brand/45 hover:text-brand"
               >
-                <span className="font-script text-[1.6rem] leading-none text-brand">{accountName}</span>
+                {accountName}
               </Link>
             </SignedIn>
           </nav>

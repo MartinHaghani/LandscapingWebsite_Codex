@@ -21,12 +21,11 @@ import {
   type RequestListParams
 } from './lib/api';
 
-type ThemeMode = 'system' | 'light' | 'dark';
 type TabKey = 'quotes' | 'requests' | 'contacts' | 'leads' | 'attribution' | 'audit';
 
 const tabs: Array<{ key: TabKey; label: string }> = [
   { key: 'quotes', label: 'Quotes' },
-  { key: 'requests', label: 'Requests' },
+  { key: 'requests', label: 'Area requests' },
   { key: 'contacts', label: 'Contacts' },
   { key: 'leads', label: 'Leads' },
   { key: 'attribution', label: 'Attribution' },
@@ -124,36 +123,56 @@ const Toolbar = ({
   onApply: () => void;
   onClear: () => void;
   children?: ReactNode;
-}) => (
-  <section className="toolbar">
-    <div className="toolbar-row">
-      <input
-        value={search}
-        onChange={(event) => onSearchChange(event.target.value)}
-        placeholder="Search"
-        className="toolbar-search"
-      />
-      <select value={sortBy} onChange={(event) => onSortByChange(event.target.value)}>
-        {sortOptions.map((option) => (
-          <option key={option.value} value={option.value}>
-            Sort: {option.label}
-          </option>
-        ))}
-      </select>
-      <select value={sortDir} onChange={(event) => onSortDirChange(event.target.value as 'asc' | 'desc')}>
-        <option value="desc">Descending</option>
-        <option value="asc">Ascending</option>
-      </select>
-      <button type="button" className="button primary" onClick={onApply}>
-        Apply
+}) => {
+  const [isOpen, setIsOpen] = useState(false);
+
+  return (
+    <section className="toolbar">
+      <button
+        type="button"
+        className="toolbar-toggle"
+        aria-expanded={isOpen}
+        onClick={() => setIsOpen((current) => !current)}
+      >
+        <span>Filters & sorting</span>
+        <span className="toolbar-toggle-icon" aria-hidden="true">
+          {isOpen ? '^' : 'v'}
+        </span>
       </button>
-      <button type="button" className="button" onClick={onClear}>
-        Clear
-      </button>
-    </div>
-    {children ? <div className="toolbar-filters">{children}</div> : null}
-  </section>
-);
+
+      {isOpen ? (
+        <div className="toolbar-panel">
+          <div className="toolbar-row">
+            <input
+              value={search}
+              onChange={(event) => onSearchChange(event.target.value)}
+              placeholder="Search"
+              className="toolbar-search"
+            />
+            <select value={sortBy} onChange={(event) => onSortByChange(event.target.value)}>
+              {sortOptions.map((option) => (
+                <option key={option.value} value={option.value}>
+                  Sort: {option.label}
+                </option>
+              ))}
+            </select>
+            <select value={sortDir} onChange={(event) => onSortDirChange(event.target.value as 'asc' | 'desc')}>
+              <option value="desc">Descending</option>
+              <option value="asc">Ascending</option>
+            </select>
+            <button type="button" className="button primary" onClick={onApply}>
+              Apply
+            </button>
+            <button type="button" className="button" onClick={onClear}>
+              Clear
+            </button>
+          </div>
+          {children ? <div className="toolbar-filters">{children}</div> : null}
+        </div>
+      ) : null}
+    </section>
+  );
+};
 
 
 const App = () => {
@@ -177,7 +196,6 @@ const App = () => {
     [isSignedIn, getToken, adminOrgId]
   );
   const [tab, setTab] = useState<TabKey>('quotes');
-  const [themeMode, setThemeMode] = useState<ThemeMode>('system');
 
   const [health, setHealth] = useState<{
     role: AdminRole;
@@ -260,11 +278,6 @@ const App = () => {
   const quoteEditorMatch = location.pathname.match(/^\/quotes\/([^/]+)\/edit$/);
   const editorQuoteId = quoteEditorMatch ? decodeURIComponent(quoteEditorMatch[1]) : null;
   const activeTabForUi: TabKey = editorQuoteId ? 'quotes' : tab;
-
-  useEffect(() => {
-    const root = document.documentElement;
-    root.dataset.theme = themeMode;
-  }, [themeMode]);
 
   const loadHealth = async (activeSession: AuthTokenProvider) => {
     try {
@@ -524,6 +537,23 @@ const App = () => {
           </p>
         </div>
 
+        <div className="sidebar-account">
+          <div className="sidebar-user-button">
+            <UserButton afterSignOutUrl="/" />
+          </div>
+          <button
+            type="button"
+            className="sidebar-signout"
+            onClick={async () => {
+              await signOut({ redirectUrl: '/' });
+              setTab('quotes');
+              navigate('/');
+            }}
+          >
+            Sign out
+          </button>
+        </div>
+
         <nav className="sidebar-nav">
           {tabs.map((item) => (
             <button
@@ -555,48 +585,13 @@ const App = () => {
               {health?.capabilities.viewAttribution ? 'enabled' : 'disabled'}
             </p>
           </div>
-          <div className="topbar-actions">
-            <select value={themeMode} onChange={(event) => setThemeMode(event.target.value as ThemeMode)}>
-              <option value="system">Theme: System</option>
-              <option value="light">Theme: Light</option>
-              <option value="dark">Theme: Dark</option>
-            </select>
-            <button
-              type="button"
-              className="button"
-              onClick={async () => {
-                try {
-                  const exportResult = await adminApi.downloadQuotesCsv(session);
-                  makeCsvDownload(exportResult.filename, exportResult.content);
-                } catch (err) {
-                  setError(err instanceof Error ? err.message : 'Export failed.');
-                }
-              }}
-            >
-              Export Quotes CSV
-            </button>
-            <div className="button">
-              <UserButton afterSignOutUrl="/" />
-            </div>
-            <button
-              type="button"
-              className="button"
-              onClick={async () => {
-                await signOut({ redirectUrl: '/' });
-                setTab('quotes');
-                navigate('/');
-              }}
-            >
-              Sign out
-            </button>
-          </div>
         </header>
 
         <section className="metrics-grid">
           <MetricCard label="Pending" value={stats.pending} />
           <MetricCard label="In Review" value={stats.inReview} />
           <MetricCard label="Verified (Awaiting Payment)" value={stats.verifiedAwaitingPayment} />
-          <MetricCard label="Open Requests" value={stats.requestsOpen} />
+          <MetricCard label="Open area requests" value={stats.requestsOpen} />
         </section>
 
         {error ? <p className="error-banner">{error}</p> : null}
@@ -1292,6 +1287,29 @@ const App = () => {
                 Load more
               </button>
             </div>
+          </section>
+        ) : null}
+
+        {!editorQuoteId ? (
+          <section className="export-panel" aria-label="Quote export">
+            <div>
+              <h3>Quote export</h3>
+              <p className="hint">Download the role-aware quote CSV when operational review needs it.</p>
+            </div>
+            <button
+              type="button"
+              className="button quiet"
+              onClick={async () => {
+                try {
+                  const exportResult = await adminApi.downloadQuotesCsv(session);
+                  makeCsvDownload(exportResult.filename, exportResult.content);
+                } catch (err) {
+                  setError(err instanceof Error ? err.message : 'Export failed.');
+                }
+              }}
+            >
+              Export quotes CSV
+            </button>
           </section>
         ) : null}
       </section>

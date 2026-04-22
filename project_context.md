@@ -17,13 +17,13 @@ Autoscape provides:
 - Coverage is explicitly approximate and privacy-hardened.
 - Service-area coverage uses server-side base-station config and falls back to the default Vaughan station when no base-station env is provided.
 - Services marketing grid now uses five shared-style inline SVG illustrations: Autonomous Mowing, Smart Edging, Cleanup & Debris, Seasonal Maintenance, and Performance Reporting.
-- Navigation includes mobile menu support and quote CTA.
+- Navigation includes mobile menu support, quote CTA, signed-out auth links separated by a slim divider, and a signed-in dashboard link styled with the standard site font/color treatment.
 - Footer includes production contact details and internal quick links.
-- Marketing pages (home/services/contact) use non-placeholder production copy and a warm-light readability-first design system.
-- Home hero uses a symmetric desktop split with copy/CTAs on the left, `No sign-up required.` helper text under the CTA row, and a responsive animated lawn parcel on the right with a perimeter-learning wall trace, an 11-pass rounded horizontal infill raster with denser direction arrows, direct mowing spawn on the first scanline, mowing follow-through, visible CAD dimensions, a restrained under-shadow, and a dynamically sized ticker-flip status capsule stacked directly under the lawn.
-- Home page places a tighter pricing comparison section directly below the hero, using a slimmer sample-lawn context block with a reduced portrait lawn SVG on the left and a shared comparison panel on the right so Autoscape and local competitors stay visually adjacent on mobile, the two boxes match height on desktop, and the same asymmetrical lawn-only mask, no interior decorative strokes, downward-facing driveway cutout, and brand-green fill treatment remain intact.
-- Home page adds a `Meet our lawnmowers` section below pricing, pairing four unnumbered selling points on the left with a cleaned transparent mower asset on the right.
-- Home page is streamlined to hero, pricing comparison, mower technology, services, FAQ, and the closing instant-quote CTA.
+- Marketing pages (home/services/contact) use non-placeholder production copy and a warm-light readability-first design system; the contact page makes phone and email primary actions in rounded panels beside the message form.
+- Home hero uses a symmetric desktop split with copy/CTAs on the left, `No sign-up required.` helper text under the CTA row, and a responsive animated lawn parcel on the right with a perimeter-learning wall trace, an 11-pass rounded horizontal infill raster with denser direction arrows, direct mowing spawn on the first scanline, mowing follow-through, visible CAD dimensions, a restrained under-shadow, and a dynamically sized ticker-flip status capsule centered under the full lawn graphic.
+- Home page places a tighter pricing comparison section directly below the hero, using an unboxed sample-lawn context with a larger portrait lawn SVG and a muted two-column size/schedule row on the left, plus a flatter shared comparison panel on the right with a narrower row-label column and a top-right seasonal discount badge in the Autoscape season cell, so Autoscape and local competitors stay visually adjacent on mobile, the sample lawn avoids rounded bubble wrappers, and the same asymmetrical lawn-only mask, no interior decorative strokes, downward-facing driveway cutout, and brand-green fill treatment remain intact.
+- Home page adds a `Meet our lawnmowers` section below pricing, pairing four icon-led unnumbered selling points on the left with a cleaned transparent mower asset on the right; the sensor copy uses sensor fusion language.
+- Home page is streamlined to hero, pricing comparison, mower technology, a three-card services overview with Autonomous Mowing, Edging, and Cleanup & Debris, an FAQ covering cadence, service area, access, safety, weather, and pricing, and the closing instant-quote CTA, with the post-hero sections using a flatter warm-light rhythm that matches the landing area.
 
 ### Instant Quote Flow
 
@@ -107,6 +107,7 @@ Autoscape provides:
 
 ### Contact Flow
 
+- Contact page presents prominent direct phone/email links for fast outreach.
 - Contact form captures name/email/phone/message (required) + address (optional).
 - Contact submission is idempotent (`POST /api/contact`).
 
@@ -114,12 +115,12 @@ Autoscape provides:
 
 Admin app (separate Vite frontend) supports:
 
-- modern sidebar + top utility bar layout (auto light/dark theme)
+- fixed Autoscape light theme with a sticky sidebar + top utility bar layout
 - quote inbox with pending semantics (`in_review + pending`) and verified-awaiting-payment label
 - route-based quote editor (`/quotes/:quoteId/edit`) with full polygon tools and editable quote controls
-  - satellite basemap for property-context editing
+  - Mapbox satellite basemap for property-context editing
   - stored customer polygons render immediately on editor load
-  - editor uses the same freehand draw workflow, shared draw-end simplifier, and v2 polygon-source contract as the public quote tool
+  - editor mirrors the public quote map styling and controls, including the same freehand draw workflow, vertex dragging, outline-click vertex insertion, delete/clear behavior, shared draw-end simplifier, and v2 polygon-source contract as the public quote tool
 - append-only version flow:
   - client draft creates version number `1` (`actorType=client`) using `polygonSource.schemaVersion=2`
   - admin edits create new versions (`actorType=admin`)
@@ -128,12 +129,12 @@ Admin app (separate Vite frontend) supports:
   - manual approval email resend is available for verified quotes, rotates the public payment token, and the public preview endpoint serves the tokenized Mapbox satellite delta image used by the email/payment page
 - quote mutation endpoints are restricted to `OWNER`, `ADMIN`, and `REVIEWER` roles
 - quote notes
-- service-area request queue with heatmap + cluster map module and hotspot list
+- `Area requests` queue with heatmap + cluster map module and hotspot list
 - lead/contact inbox
 - attribution summary (submit snapshot aggregation)
 - audit events
-- CSV export with role-based PII controls
-- search/filter/sort controls across all admin tabs
+- CSV export with role-based PII controls, placed as a low-prominence bottom-page action
+- collapsed search/filter/sort controls across all admin tabs
 - Clerk-backed admin sign-in (invite-only organization membership)
 - bearer-token auth only against `/api/admin/*` (no legacy role headers/static token)
 

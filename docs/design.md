@@ -193,20 +193,22 @@ Decision:
 
 Implementation:
 
-- persistent sidebar navigation + top utility bar
-- auto light/dark theme with manual override
+- persistent sidebar navigation that stays fixed while content scrolls + top utility bar
+- fixed Autoscape light theme matching the public site; no theme selector
 - route-based quote editor (`/quotes/:quoteId/edit`) with full polygon controls and version submit flow
-  - satellite basemap to align map context with on-site property imagery
+  - Mapbox satellite basemap to align map context with on-site property imagery
+  - map surface mirrors the public instant quote editor controls, polygon colors, selected state, vertex markers, freehand drawing, and outline-click vertex insertion
   - immediate polygon hydration on load to avoid blank-editor states
   - latest approved-quote email attempt is visible in the editor with manual resend support for verified quotes
-- unified toolbar pattern on all tabs:
+- collapsed filter/sort disclosure on all tabs:
   - search
   - tab-specific filters
   - sort field/direction
-- requests tab combines:
+- `Area requests` tab combines:
   - map module (heatmap + clustered points toggles)
   - hotspot list
   - request table
+- quote CSV export moves out of the top bar into a less prominent bottom-page action
 
 ## 15) Launch-Ready Public Content
 
@@ -217,6 +219,8 @@ Decision:
 Implementation:
 
 - home/services/contact pages now use production content
+- contact page uses the warm-light section rhythm with phone and email promoted as large direct actions in rounded panels beside the message form
+- desktop signed-out navigation uses a slim divider between `Sign In` and `Sign Up` instead of punctuation
 - services page uses five shared-style inline SVG illustrations and removes the old mixed photo/placeholder card treatment, including removal of `Multi-Zone Scheduling`
 - footer uses real contact links (`tel:` + `mailto:`) and quick navigation links
 - mobile navigation includes in-header menu with quote CTA
@@ -342,7 +346,7 @@ Implementation:
 - generated infill path uses a subtle, light sage raster line set inside the lawn so the pattern reads like a premium 3D-printer-style coverage plan rather than a harsh technical overlay, with denser directional arrows that clarify travel without cluttering the shape
 - primary fill stays anchored to the brand green (`#329F5B`) with no texture, blueprint panel, or heavy gradient treatment
 - a slightly heavier white outline and restrained under-shadow keep the parcel crisp over the page background
-- the mower status cycles through `learning your lawn...`, `Generating path`, and `Mowing...` inside a compact glass-like capsule stacked immediately beneath the lawn, with width that follows the active label and a ticker-flip transition for state changes
+- the mower status cycles through `learning your lawn...`, `Generating path`, and `Mowing...` inside a compact glass-like capsule stacked immediately beneath the lawn, centered against the full lawn graphic width, with width that follows the active label and a ticker-flip transition for state changes
 - no separate stats strip sits beneath the hero; the lawn animation and under-lawn status capsule carry the right-side emphasis on their own
 
 ## 21) Quote Ownership + Account Dashboard
@@ -403,12 +407,12 @@ Implementation:
   - heading: `Save with Autoscape`
   - intro: `Get a cheaper visit rate and 20% off when you choose the seasonal plan.`
 - Autoscape values come from existing quote helpers: `$45` per visit and `$720` per season after the default 20% seasonal savings
-- layout keeps one slimmer sample context block on the left and one shared comparison panel on the right instead of three tall marketing cards
-- the lawn visual stays as supporting context only, using a reduced realistic lawn-only SVG that reads like lawn masked out of a top-view property, with asymmetrical broad lawn areas, firmer corners, a downward-facing driveway cutout, the same solid brand-green fill treatment as the hero parcel, a white outline, hero-style shadow, and no decorative interior line strokes
-- the shared comparison panel shows larger `Autoscape` and `Local competitors` labels, larger `Per visit` and `Per season` row headers, and a green `$720` vs `$1,100` season row
+- layout keeps one unboxed sample context on the left and one shared comparison panel on the right instead of three tall marketing cards, with flatter ruled surfaces instead of stacked rounded bubbles
+- the lawn visual stays as supporting context only, using a larger realistic lawn-only SVG that reads like lawn masked out of a top-view property, with asymmetrical broad lawn areas, firmer corners, a downward-facing driveway cutout, the same solid brand-green fill treatment as the hero parcel, a white outline, hero-style shadow, no decorative interior line strokes, and no rounded wrapper around the sample lawn area
+- the sample size and schedule sit in one muted row below the lawn visual
+- the shared comparison panel uses a narrower row-label column with structured `Autoscape` and `Local competitors` column headers, larger `Per visit` and `Per season` row headers, green Autoscape pricing, a slight rounded panel corner, and a top-right `20% off` badge lifted above the Autoscape season price so `$720` stays centered in its column
 - on desktop, the shared comparison panel stretches to match the sample context box height
-- summary copy states `Save $10 per visit and $380 per season.`
-- footer copy keeps the benchmark source and final-quote caveats close to the comparison in smaller grey supporting text, and the two price columns stay visually adjacent on mobile
+- footer copy keeps only the benchmark source and final-quote caveats close to the comparison in smaller grey supporting text, and the two price columns stay visually adjacent on mobile
 
 ## 24) Streamlined Home Page Narrative
 
@@ -418,7 +422,7 @@ Decision:
 
 Implementation:
 
-- home page now flows from hero to pricing comparison, then into the mower technology section, services, FAQ, and the closing quote CTA
+- home page now flows from hero to pricing comparison, then into the mower technology section, a three-card services overview with Autonomous Mowing, Edging, and Cleanup & Debris, an FAQ with larger answer text and bold key phrases, and the closing quote CTA, with the post-hero sections using a flatter warm-light border rhythm that better matches the hero
 - removed the standalone `Why Electric`, `How It Works`, `Why Autoscape`, and `Testimonials` sections
 - removed the separate `/about` page and its navbar link so the public marketing surface is limited to home, services, contact, and the quote flow
 
@@ -435,10 +439,11 @@ Implementation:
 - the right-side asset is a cleaned transparent export derived from `/Users/martinhaghani/Downloads/Gemini_Generated_Image_7pnfyf7pnfyf7pnf.png` and stored as `client/public/images/home/mower-technology-transparent.png`
 - left-side content uses:
   - heading: `Meet our lawnmowers`
-  - premium product intro copy focused on repeatable route execution, disciplined coverage, and property-aware sensing
 - an unnumbered editorial spec list calls out:
   - `Centimetre precision`
   - `5 sensor types`
-  - `Tested rigorously`
+  - `Rigorously tested`
   - `Built-in safety features`
-- section remains informational only, with no CTA, and removes the boxed artwork treatment so the transparent mower sits directly in the page background with only ambient glow and drop shadow
+- the sensor point uses sensor fusion language
+- each spec uses a consistent line-style green icon: horizontal ruler, signal/sensor, flask/experiment, and safety shield
+- section remains informational only, with no CTA, and removes the boxed artwork treatment so the transparent mower sits directly in the page background with only restrained ambient shadow

@@ -76,6 +76,7 @@ const HERO_STATUS_MEASURE_TEXT: Record<HeroStatusPhase, string> = {
   mowing: 'Mowing...'
 };
 const HERO_STATUS_MOTION = 'tickerFlip';
+const HERO_STATUS_RAIL_WIDTH_BUFFER_PX = 28;
 
 const easeInOut = (value: number) => value * value * (3 - 2 * value);
 const clamp = (value: number, min: number, max: number) => Math.min(max, Math.max(min, value));
@@ -626,7 +627,7 @@ export const HomeHeroLawnGraphic = ({ className }: HomeHeroLawnGraphicProps) => 
 
     const frameId = window.requestAnimationFrame(() => {
       const nextWidth = statusMeasureRef.current?.offsetWidth ?? 0;
-      setStatusRailWidth(nextWidth > 0 ? nextWidth : null);
+      setStatusRailWidth(nextWidth > 0 ? nextWidth + HERO_STATUS_RAIL_WIDTH_BUFFER_PX : null);
     });
 
     return () => {
@@ -667,7 +668,7 @@ export const HomeHeroLawnGraphic = ({ className }: HomeHeroLawnGraphicProps) => 
           coveragePathProgress={animationState.coveragePathProgress}
         />
 
-        <div className="-mt-10 flex justify-center md:-mt-12" data-hero-status-stack="true">
+        <div className="-mt-10 flex w-full justify-center md:-mt-12" data-hero-status-stack="true">
           <div className="flex flex-col items-center">
             <div
               className={cn(
@@ -694,7 +695,7 @@ export const HomeHeroLawnGraphic = ({ className }: HomeHeroLawnGraphicProps) => 
               >
                 <span
                   ref={statusMeasureRef}
-                  className="pointer-events-none invisible whitespace-nowrap tracking-[0.03em]"
+                  className="pointer-events-none invisible shrink-0 whitespace-nowrap tracking-[0.03em]"
                   aria-hidden="true"
                 >
                   {activeStatusText}

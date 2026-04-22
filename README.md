@@ -19,7 +19,7 @@ Autoscape is a multi-app monorepo for:
 ## Stack
 
 - Public frontend: React + Vite + TypeScript + Tailwind + Mapbox GL + Turf.js
-- Admin frontend: React + Vite + TypeScript + MapLibre GL
+- Admin frontend: React + Vite + TypeScript + Mapbox GL for quote editing + MapLibre GL for request maps
 - Backend API: Node.js + TypeScript + Zod
 - Authentication: Clerk (customer + admin)
 - Persistence: Prisma + PostgreSQL (Neon-compatible) + PostGIS
@@ -71,6 +71,7 @@ STRIPE_WEBHOOK_SECRET=whsec_replace_me
 
 # admin/.env
 VITE_API_BASE_URL=http://localhost:4000
+VITE_MAPBOX_TOKEN=pk.your_mapbox_public_token
 VITE_CLERK_PUBLISHABLE_KEY=pk_test_replace_me
 ```
 
@@ -124,9 +125,9 @@ Current live status: `autoscape-staging` is active in Toronto with `autoscape-st
 - Service-area endpoints use configured server-side base stations, with the default Vaughan station loaded whenever no base-station env is provided so production does not silently become empty coverage.
 - Services page uses CTA-only handoff to `/instant-quote`.
 - Services page now presents five inline premium-vector service illustrations for Autonomous Mowing, Smart Edging, Cleanup & Debris, Seasonal Maintenance, and Performance Reporting.
-- Marketing pages now use launch-ready production copy (no placeholder content), warm-light visual tokens, and readability-first spacing/contrast across the home, services, and contact surfaces, with mobile navigation and footer quick links.
-- Home hero now uses a balanced desktop split: left-side headline and CTA group with `No sign-up required.`, right-side animated transparent lawn parcel with a looping three-state sequence: perimeter `learning your lawn...`, 2-second `Generating path`, then `Mowing...` along an 11-pass rounded boustrophedon infill path with denser direction arrows, direct mowing spawn on the first scanline, and a ticker-flip status capsule sized to the active label.
-- Home page now keeps a tighter top-of-page flow: hero, pricing comparison, mower technology section, services overview, FAQ, and final quote CTA, with the older Why Electric, How It Works, Why Autoscape, and Testimonials sections removed.
+- Marketing pages now use launch-ready production copy (no placeholder content), warm-light visual tokens, and readability-first spacing/contrast across the home, services, and contact surfaces, with mobile navigation, a cleaner signed-out header divider, footer quick links, and a contact page that promotes direct phone/email actions in rounded panels beside the message form.
+- Home hero now uses a balanced desktop split: left-side headline and CTA group with `No sign-up required.`, right-side animated transparent lawn parcel with a looping three-state sequence: perimeter `learning your lawn...`, 2-second `Generating path`, then `Mowing...` along an 11-pass rounded boustrophedon infill path with denser direction arrows, direct mowing spawn on the first scanline, and a ticker-flip status capsule sized to the active label and centered under the full lawn graphic.
+- Home page now keeps a tighter top-of-page flow: hero, pricing comparison, mower technology section, three-card services overview with Autonomous Mowing, Edging, and Cleanup & Debris, FAQ, and final quote CTA, with flatter post-hero sections, an unboxed larger sample lawn price check with extra intro spacing, a narrower row-label column, a seasonal `20% off` corner badge, icon-led mower specs, larger FAQ answers with bolded key phrases, and the older Why Electric, How It Works, Why Autoscape, and Testimonials sections removed.
 - Instant Quote flow is now draft-first:
   - intro chrome uses a badge-only heading and a three-step progress rail instead of marketing helper copy
   - map step uses a thin address pill instead of a large step header card
@@ -209,9 +210,9 @@ Admin endpoints under `/api/admin/*` include:
 
 - quotes inbox (`/quotes`) with cursor pagination
 - quote editor (`/quotes/:quoteId/edit`) with full polygon tools, calculated vs actual quote panel, and version history
-  - satellite basemap in editor for property verification context
+  - Mapbox satellite basemap in editor for property verification context
   - persisted quote polygons hydrate immediately when editor opens
-  - editor now uses the same freehand `Draw lawn` / `Draw obstacle` workflow and shared draw-end simplifier as the public quote tool
+  - editor now mirrors the public quote map styling and uses the same freehand `Draw lawn` / `Draw obstacle` workflow, vertex dragging, outline-click vertex insertion, delete/clear actions, and shared draw-end simplifier as the public quote tool
   - approved quotes show latest Stripe payment state and related Stripe object IDs for admin support
 - service-area request map payload (`/service-area-requests/map`) for heatmap/cluster rendering
 - quote versioning APIs:
@@ -233,9 +234,9 @@ Admin endpoints under `/api/admin/*` include:
 - quote notes and legacy revision endpoint (`/api/admin/quotes/:id/revise`)
 - service-area requests, leads, contacts, audit logs
 - attribution summary (`/attribution/summary`)
-- CSV export with role-aware PII policy (`/exports/quotes.csv`)
+- CSV export with role-aware PII policy (`/exports/quotes.csv`); the admin UI exposes this as a quieter bottom-page action
 
-All major list endpoints support `q`, tab-specific filters, `sortBy`, and `sortDir`.
+The admin shell uses the fixed Autoscape light theme, a non-scrolling sidebar with the service-area queue labeled `Area requests`, and collapsed filter/sort panels for `q`, tab-specific filters, `sortBy`, and `sortDir`.
 
 Admin auth:
 

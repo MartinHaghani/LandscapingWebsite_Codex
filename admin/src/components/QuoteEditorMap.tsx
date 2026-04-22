@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef } from 'react';
-import maplibregl, { type GeoJSONSource, type StyleSpecification } from 'maplibre-gl';
+import mapboxgl, { type GeoJSONSource } from 'mapbox-gl';
 import type { FeatureCollection, LineString, Polygon } from 'geojson';
 import type { EditablePolygon, LngLat, PolygonKind, SelectionTarget } from '../lib/quoteEditorTypes';
 import {
@@ -10,48 +10,26 @@ import {
 } from '../lib/edgeInsertion';
 import { finalizeFreehandStroke } from '../lib/freehand';
 import { buildPolygonFeature } from '../lib/quoteEditorGeometry';
-import 'maplibre-gl/dist/maplibre-gl.css';
-
-const styleSpec: StyleSpecification = {
-  version: 8,
-  sources: {
-    satellite_tiles: {
-      type: 'raster',
-      tiles: [
-        'https://services.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}'
-      ],
-      tileSize: 256,
-      maxzoom: 19,
-      attribution:
-        'Tiles © Esri — Source: Esri, i-cubed, USDA, USGS, AEX, GeoEye, Getmapping, Aerogrid, IGN, IGP, UPR-EGP, and the GIS User Community'
-    }
-  },
-  layers: [
-    {
-      id: 'satellite_tiles',
-      type: 'raster',
-      source: 'satellite_tiles',
-      minzoom: 0,
-      maxzoom: 22,
-      paint: {
-        'raster-saturation': -0.18,
-        'raster-contrast': 0.14,
-        'raster-brightness-max': 0.92,
-        'raster-fade-duration': 0
-      }
-    }
-  ]
-};
+import {
+  quotePolygonFillColorExpression,
+  quotePolygonFillOpacityExpression,
+  quotePolygonOutlineColorExpression,
+  quotePolygonOutlineWidthExpression
+} from '../lib/polygonPresentation';
+import 'mapbox-gl/dist/mapbox-gl.css';
 
 interface QuoteEditorMapProps {
+  token: string;
   center: LngLat;
   drawMode: PolygonKind | null;
   selection: SelectionTarget;
   polygons: EditablePolygon[];
   activePolygonId: string | null;
+  className?: string;
   onPolygonDrawn: (kind: PolygonKind, shape: { ringPoints: LngLat[]; rawStrokePoints: LngLat[] }) => void;
   onPolygonRingPointsChange: (polygonId: string, ringPoints: LngLat[]) => void;
   onSelectionChange: (selection: SelectionTarget) => void;
+  onMapReady?: () => void;
 }
 
 const POLYGON_SOURCE_ID = 'quote-polygons-source';
@@ -59,6 +37,7 @@ const PATH_SOURCE_ID = 'quote-active-path-source';
 const POLYGON_FILL_LAYER_ID = 'quote-polygons-fill';
 const POLYGON_OUTLINE_LAYER_ID = 'quote-polygons-outline';
 const PATH_LAYER_ID = 'quote-active-path-line';
+const MAP_STYLE = 'mapbox://styles/mapbox/satellite-v9';
 
 const getSelectedPolygonId = (selection: SelectionTarget) => {
   if (selection.kind === 'none') {
@@ -184,21 +163,24 @@ const applyMarkerStyle = (
 };
 
 export const QuoteEditorMap = ({
+  token,
   center,
   drawMode,
   selection,
   polygons,
   activePolygonId,
+  className,
   onPolygonDrawn,
   onPolygonRingPointsChange,
-  onSelectionChange
+  onSelectionChange,
+  onMapReady
 }: QuoteEditorMapProps) => {
   const selectedPolygonId = useMemo(() => getSelectedPolygonId(selection), [selection]);
 
   const containerRef = useRef<HTMLDivElement | null>(null);
-  const mapRef = useRef<maplibregl.Map | null>(null);
-  const centerMarkerRef = useRef<maplibregl.Marker | null>(null);
-  const vertexMarkersRef = useRef<maplibregl.Marker[]>([]);
+  const mapRef = useRef<mapboxgl.Map | null>(null);
+  const centerMarkerRef = useRef<mapboxgl.Marker | null>(null);
+  const vertexMarkersRef = useRef<mapboxgl.Marker[]>([]);
   const vertexMarkerElementsRef = useRef<
     Array<{ element: HTMLButtonElement; kind: PolygonKind; selected: boolean }>
   >([]);
@@ -207,6 +189,7 @@ export const QuoteEditorMap = ({
   const onPolygonDrawnRef = useRef(onPolygonDrawn);
   const onPolygonRingPointsChangeRef = useRef(onPolygonRingPointsChange);
   const onSelectionChangeRef = useRef(onSelectionChange);
+  const onMapReadyRef = useRef(onMapReady);
   const centerRef = useRef(center);
   const polygonsRef = useRef(polygons);
   const selectedPolygonIdRef = useRef<string | null>(selectedPolygonId);
@@ -239,6 +222,10 @@ export const QuoteEditorMap = ({
   }, [onSelectionChange]);
 
   useEffect(() => {
+    onMapReadyRef.current = onMapReady;
+  }, [onMapReady]);
+
+  useEffect(() => {
     centerRef.current = center;
   }, [center]);
 
@@ -255,21 +242,22 @@ export const QuoteEditorMap = ({
       return;
     }
 
-    const map = new maplibregl.Map({
+    mapboxgl.accessToken = token;
+    const map = new mapboxgl.Map({
       container: containerRef.current,
-      style: styleSpec,
+      style: MAP_STYLE,
       center,
       zoom: 16,
       pitch: 0,
       bearing: 0,
       maxPitch: 0,
-      maxZoom: 19
+      antialias: true
     });
 
     map.dragRotate.disable();
     map.touchZoomRotate.disableRotation();
     map.addControl(
-      new maplibregl.NavigationControl({
+      new mapboxgl.NavigationControl({
         showCompass: false,
         visualizePitch: false
       }),
@@ -286,6 +274,35 @@ export const QuoteEditorMap = ({
       pathSource.setData(
         activePathFeatureCollection(activePolygon, strokePointsRef.current, isStrokeDrawingRef.current ? drawModeRef.current : null)
       );
+    };
+
+    const syncPolygonSource = () => {
+      const polygonSource = map.getSource(POLYGON_SOURCE_ID) as GeoJSONSource | undefined;
+      if (!polygonSource) {
+        return;
+      }
+
+      const selectedPolygonId = selectedPolygonIdRef.current;
+      polygonSource.setData({
+        type: 'FeatureCollection',
+        features: polygonsRef.current
+          .map((polygonState) => {
+            const feature = buildPolygonFeature(polygonState.ringPoints);
+            if (!feature) {
+              return null;
+            }
+
+            return {
+              ...feature,
+              properties: {
+                polygonId: polygonState.id,
+                polygonKind: polygonState.kind,
+                selected: polygonState.id === selectedPolygonId
+              }
+            };
+          })
+          .filter((feature): feature is NonNullable<typeof feature> => feature !== null)
+      });
     };
 
     const syncCanvasCursor = () => {
@@ -341,7 +358,8 @@ export const QuoteEditorMap = ({
 
     const toLngLat = (clientX: number, clientY: number): LngLat => {
       const rect = map.getCanvas().getBoundingClientRect();
-      const lngLat = map.unproject([clientX - rect.left, clientY - rect.top]);
+      const point = new mapboxgl.Point(clientX - rect.left, clientY - rect.top);
+      const lngLat = map.unproject(point);
       return [lngLat.lng, lngLat.lat];
     };
 
@@ -402,7 +420,7 @@ export const QuoteEditorMap = ({
     window.addEventListener('pointercancel', handlePointerCancel);
     map.on('zoom', syncVertexMarkerSizes);
 
-    const handleMapMouseMove = (event: maplibregl.MapMouseEvent) => {
+    const handleMapMouseMove = (event: mapboxgl.MapMouseEvent) => {
       hoveredInsertHitRef.current = getInsertHit({
         x: event.point.x,
         y: event.point.y
@@ -410,7 +428,7 @@ export const QuoteEditorMap = ({
       syncCanvasCursor();
     };
 
-    const handleMapClick = (event: maplibregl.MapMouseEvent) => {
+    const handleMapClick = (event: mapboxgl.MapMouseEvent) => {
       if (isMarkerDraggingRef.current || drawModeRef.current) {
         return;
       }
@@ -470,94 +488,64 @@ export const QuoteEditorMap = ({
     map.on('click', handleMapClick);
     canvas.addEventListener('mouseleave', clearHoveredInsertHit);
 
-    const ensureSourcesAndLayers = () => {
-      if (!map.isStyleLoaded()) {
-        return;
-      }
+    map.on('load', () => {
+      const polygonFeatureCollection: FeatureCollection<Polygon> = {
+        type: 'FeatureCollection',
+        features: []
+      };
 
-      if (!map.getSource(POLYGON_SOURCE_ID)) {
-        map.addSource(POLYGON_SOURCE_ID, {
-          type: 'geojson',
-          data: {
-            type: 'FeatureCollection',
-            features: []
-          } as FeatureCollection<Polygon>
-        });
-      }
+      const pathFeatureCollection: FeatureCollection<LineString> = {
+        type: 'FeatureCollection',
+        features: []
+      };
 
-      if (!map.getSource(PATH_SOURCE_ID)) {
-        map.addSource(PATH_SOURCE_ID, {
-          type: 'geojson',
-          data: {
-            type: 'FeatureCollection',
-            features: []
-          } as FeatureCollection<LineString>
-        });
-      }
+      map.addSource(POLYGON_SOURCE_ID, {
+        type: 'geojson',
+        data: polygonFeatureCollection
+      });
 
-      if (!map.getLayer(POLYGON_FILL_LAYER_ID)) {
-        map.addLayer({
-          id: POLYGON_FILL_LAYER_ID,
-          source: POLYGON_SOURCE_ID,
-          type: 'fill',
-          paint: {
-            'fill-color': [
-              'case',
-              ['==', ['get', 'polygonKind'], 'obstacle'],
-              '#DC2626',
-              '#329F5B'
-            ],
-            'fill-opacity': [
-              'case',
-              ['==', ['get', 'polygonKind'], 'obstacle'],
-              ['case', ['==', ['get', 'selected'], true], 0.42, 0.2],
-              ['case', ['==', ['get', 'selected'], true], 0.54, 0.24]
-            ]
-          }
-        });
-      }
+      map.addSource(PATH_SOURCE_ID, {
+        type: 'geojson',
+        data: pathFeatureCollection
+      });
 
-      if (!map.getLayer(POLYGON_OUTLINE_LAYER_ID)) {
-        map.addLayer({
-          id: POLYGON_OUTLINE_LAYER_ID,
-          source: POLYGON_SOURCE_ID,
-          type: 'line',
-          paint: {
-            'line-color': [
-              'case',
-              ['==', ['get', 'polygonKind'], 'obstacle'],
-              ['case', ['==', ['get', 'selected'], true], '#FFE4E6', '#FDA4AF'],
-              ['case', ['==', ['get', 'selected'], true], '#FFFFFF', '#BFEBCF']
-            ],
-            'line-width': ['case', ['==', ['get', 'selected'], true], 3.2, 2.1]
-          }
-        });
-      }
+      map.addLayer({
+        id: POLYGON_FILL_LAYER_ID,
+        source: POLYGON_SOURCE_ID,
+        type: 'fill',
+        paint: {
+          'fill-color': quotePolygonFillColorExpression,
+          'fill-opacity': quotePolygonFillOpacityExpression
+        }
+      });
 
-      if (!map.getLayer(PATH_LAYER_ID)) {
-        map.addLayer({
-          id: PATH_LAYER_ID,
-          source: PATH_SOURCE_ID,
-          type: 'line',
-          paint: {
-            'line-color': [
-              'case',
-              ['==', ['get', 'polygonKind'], 'obstacle'],
-              '#FDA4AF',
-              '#7DE8A6'
-            ],
-            'line-width': 2,
-            'line-dasharray': [2, 1]
-          }
-        });
-      }
+      map.addLayer({
+        id: POLYGON_OUTLINE_LAYER_ID,
+        source: POLYGON_SOURCE_ID,
+        type: 'line',
+        paint: {
+          'line-color': quotePolygonOutlineColorExpression,
+          'line-width': quotePolygonOutlineWidthExpression
+        }
+      });
 
-    };
+      map.addLayer({
+        id: PATH_LAYER_ID,
+        source: PATH_SOURCE_ID,
+        type: 'line',
+        paint: {
+          'line-color': ['case', ['==', ['get', 'polygonKind'], 'obstacle'], '#FDA4AF', '#7DE8A6'],
+          'line-width': 2,
+          'line-dasharray': [2, 1]
+        }
+      });
 
-    map.on('load', ensureSourcesAndLayers);
-    map.on('styledata', ensureSourcesAndLayers);
+      syncPolygonSource();
+      syncActivePath();
+      onMapReadyRef.current?.();
+    });
 
-    centerMarkerRef.current = new maplibregl.Marker({
+    centerMarkerRef.current = new mapboxgl.Marker({
       element: createHomeMarkerElement()
     })
       .setLngLat(centerRef.current)
@@ -582,11 +570,12 @@ export const QuoteEditorMap = ({
       }
       map.off('zoom', syncVertexMarkerSizes);
       map.off('mousemove', handleMapMouseMove);
+      map.off('click', handleMapClick);
       map.remove();
       mapRef.current = null;
       syncCanvasCursorRef.current = () => {};
     };
-  }, []);
+  }, [token]);
 
   useEffect(() => {
     const map = mapRef.current;
@@ -596,7 +585,7 @@ export const QuoteEditorMap = ({
 
     map.flyTo({
       center,
-      zoom: 17,
+      zoom: 18,
       speed: 1,
       essential: true
     });
@@ -666,7 +655,10 @@ export const QuoteEditorMap = ({
     const markers = selectedPolygon.ringPoints.map((point, index) => {
       const element = document.createElement('button');
       element.type = 'button';
-      element.className = 'rounded-full border-2';
+      element.style.borderRadius = '999px';
+      element.style.borderWidth = '2px';
+      element.style.borderStyle = 'solid';
+      element.style.padding = '0';
 
       const isSelectedVertex =
         selection.kind === 'vertex' &&
@@ -683,7 +675,7 @@ export const QuoteEditorMap = ({
         onSelectionChangeRef.current({ kind: 'vertex', polygonId: selectedPolygonId, index });
       });
 
-      const marker = new maplibregl.Marker({ element, draggable: true }).setLngLat(point).addTo(map);
+      const marker = new mapboxgl.Marker({ element, draggable: true }).setLngLat(point).addTo(map);
 
       marker.on('dragstart', () => {
         isMarkerDraggingRef.current = true;
@@ -731,29 +723,8 @@ export const QuoteEditorMap = ({
   }, [polygons, selection, selectedPolygonId]);
 
   return (
-    <div
-      style={{
-        position: 'relative',
-        width: '100%',
-        height: '620px',
-        overflow: 'hidden',
-        borderRadius: '16px',
-        border: '1px solid rgba(255,255,255,0.14)',
-        background:
-          'radial-gradient(circle at top left, rgba(50,159,91,0.14), transparent 34%), radial-gradient(circle at top right, rgba(255,255,255,0.08), transparent 28%), rgba(4,6,5,0.92)',
-        boxShadow: '0 28px 60px rgba(0,0,0,0.34)'
-      }}
-    >
-      <div ref={containerRef} style={{ height: '100%', width: '100%' }} />
-      <div
-        style={{
-          pointerEvents: 'none',
-          position: 'absolute',
-          inset: 0,
-          background:
-            'linear-gradient(180deg, rgba(6,10,8,0.18) 0%, rgba(6,10,8,0) 18%, rgba(6,10,8,0) 78%, rgba(6,10,8,0.18) 100%)'
-        }}
-      />
+    <div className={['quote-editor-map-shell', className].filter(Boolean).join(' ')}>
+      <div ref={containerRef} className="quote-editor-map-canvas" />
     </div>
   );
 };
