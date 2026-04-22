@@ -190,7 +190,7 @@ Current live status: `autoscape-staging` is active in Toronto with `autoscape-st
   - `/dashboard/quotes/:quoteId` for owned quote detail
   - `/dashboard/quotes/:quoteId/payment` is the authenticated approved-quote payment surface and can start Stripe Checkout for owned quotes
 - Public payment:
-  - approved quote emails now link to `/pay/:token`
+  - approved quote emails now use a simplified Autoscape-styled transactional layout with one `/pay/:token` CTA, the actual selected payment amount/mode, quote details, Stripe reassurance, and the unchanged approved map preview
   - public payment tokens are long random secrets stored only as SHA-256 hashes server-side
   - `GET /api/payment-links/:token` returns sanitized quote/payment details without requiring Clerk sign-in
   - `POST /api/payment-links/:token/checkout` creates or reuses a Stripe Checkout Session
@@ -220,7 +220,7 @@ Admin endpoints under `/api/admin/*` include:
   - `POST /api/admin/quotes/:id/versions`
   - `POST /api/admin/quotes/:id/versions/:versionNumber/submit`
 - approved quote delivery:
-  - selected version submit sets `status=verified` / `customer_status=awaiting_payment`, creates a fresh secure payment token, attempts a Resend transactional email, and records `approval_email_sent` or `approval_email_failed` without rolling back approval
+  - selected version submit sets `status=verified` / `customer_status=awaiting_payment`, creates a fresh secure payment token, attempts a one-button payment-focused Resend transactional email, and records `approval_email_sent` or `approval_email_failed` without rolling back approval
   - manual resend is available at `POST /api/admin/quotes/:id/approval-email/resend`
   - public preview images are served from `GET /api/approved-quote-preview/:token`, which proxies a Mapbox satellite static image with approved, added, and removed service-area overlays
 - Stripe payment APIs:

@@ -125,7 +125,8 @@ Admin app (separate Vite frontend) supports:
   - client draft creates version number `1` (`actorType=client`) using `polygonSource.schemaVersion=2`
   - admin edits create new versions (`actorType=admin`)
   - selected version submit sets `status=verified`, `customer_status=awaiting_payment`
-  - verified approval creates a fresh secure payment token, attempts the payment-focused approved-quote email through Resend, and records delivery state without rolling back approval on failure
+  - verified approval creates a fresh secure payment token, attempts a simplified payment-focused approved-quote email through Resend, and records delivery state without rolling back approval on failure
+  - the approved-quote payment email uses one secure `/pay/:token` CTA, shows only the actual selected Stripe payment amount/mode, includes the quote address/ID/schedule, and keeps the existing tokenized map preview with a minimal conditional legend
   - manual approval email resend is available for verified quotes, rotates the public payment token, and the public preview endpoint serves the tokenized Mapbox satellite delta image used by the email/payment page
 - quote mutation endpoints are restricted to `OWNER`, `ADMIN`, and `REVIEWER` roles
 - quote notes

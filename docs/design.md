@@ -123,8 +123,8 @@ Transitions:
 - revision updates `customer_status` while remaining `in_review`
 - runtime finalize path moves `draft -> in_review` directly (while preserving enum compatibility for `submitted`)
 - selected version submit sets `status=verified`, `customer_status=awaiting_payment`
-- verified submit creates a fresh secure payment token, attempts a payment-focused Resend email, records sent/failed delivery state for auditability, keeps approval successful on delivery failure, and exposes manual resend for verified quotes awaiting payment
-- approved quote map previews are tokenized public image URLs backed by server-proxied Mapbox satellite static imagery; they show approved service area, added-by-admin area, and removed-by-admin area using the quote-tool color family
+- verified submit creates a fresh secure payment token, attempts a simplified payment-focused Resend email with one payment CTA and only the selected Stripe amount/mode, records sent/failed delivery state for auditability, keeps approval successful on delivery failure, and exposes manual resend for verified quotes awaiting payment
+- approved quote map previews are tokenized public image URLs backed by server-proxied Mapbox satellite static imagery; they show approved service area, added-by-admin area, and removed-by-admin area using the quote-tool color family, while email legends only include added/removed keys when those deltas exist
 - approved quote payment links are tokenized public URLs (`/pay/:token`) stored as hashes server-side; resend rotates the payment token and revokes older active links
 
 ## 10) Event-Oriented Audit Logging

@@ -248,9 +248,10 @@ Revisions:
 - Revise endpoint treats per-visit total as canonical and recomputes seasonal range fields.
 - Quote editor versions include `actor_type` (`client` or `admin`) + `version_number` + `changed_at`.
 - Version submit endpoint applies selected version and sets `status=verified` + `customer_status=awaiting_payment`.
-- Successful verification creates a hashed public payment token, attempts the approved-quote email through Resend, and records `approval_email_sent` or `approval_email_failed`; approval is not rolled back if delivery or preview preflight fails.
+- Successful verification creates a hashed public payment token, attempts the simplified one-button approved-quote payment email through Resend, and records `approval_email_sent` or `approval_email_failed`; approval is not rolled back if delivery or preview preflight fails.
 - Admins can manually resend via `POST /api/admin/quotes/:id/approval-email/resend` when a quote is verified and awaiting payment; resend rotates the public payment token and revokes prior active tokens.
 - Public `/pay/:token` pages and authenticated `/dashboard/quotes/:quoteId/payment` pages use Stripe Checkout. Seasonal quotes charge the approved discounted seasonal total once; per-session quotes create weekly subscriptions that use a May 1 billing-cycle anchor with no proration before season or charge at checkout during season, cap paid invoices at `sessionsMax`, and stop no later than September 30.
+- Approved-quote payment emails show only the payment-link amount/mode that will be sent to Stripe, include the approved map preview unchanged, and render added/removed map legend keys only when those preview deltas exist.
 - Hosted Checkout requires `STRIPE_SECRET_KEY` and `STRIPE_WEBHOOK_SECRET` on the API service only. Staging currently has both configured and still needs end-to-end checkout smoke testing.
 - Quote lookup responses include verified status fields plus payment-page, payment-state, and tokenized preview-image metadata for the customer dashboard/payment page.
 - Webhook events are stored idempotently by Stripe event ID; paid subscription invoice IDs are also tracked to keep the paid visit counter from advancing twice for the same invoice.

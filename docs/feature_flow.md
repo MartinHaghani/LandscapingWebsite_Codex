@@ -176,7 +176,7 @@
 
 ### Public Approved Quote Payment
 
-1. Admin approval or manual resend creates a fresh secure payment token and emails `/pay/:token`.
+1. Admin approval or manual resend creates a fresh secure payment token and sends a simplified approved-quote payment email with one `/pay/:token` button, the actual selected payment amount/mode, quote details, and the unchanged approved map preview.
 2. `GET /api/payment-links/:token` loads sanitized approved quote details, payment status, and the shared approved quote preview image without requiring sign-in.
 3. `POST /api/payment-links/:token/checkout` creates or reuses a Stripe Checkout Session. Signed-in customers can also create/reuse Checkout from `POST /api/account/quotes/:quoteId/payment/checkout`.
 4. Seasonal quotes use one-time Checkout for the approved discounted seasonal total.
@@ -235,7 +235,7 @@
 - save new version (`POST /api/admin/quotes/:id/versions`)
 - submit selected version (`POST /api/admin/quotes/:id/versions/:versionNumber/submit`)
   - sets `status=verified`, `customer_status=awaiting_payment`
-  - creates a fresh secure payment token, attempts the payment-focused approved-quote email through Resend, and records `approval_email_sent` or `approval_email_failed` without rolling back approval
+  - creates a fresh secure payment token, attempts the one-button payment-focused approved-quote email through Resend, and records `approval_email_sent` or `approval_email_failed` without rolling back approval
   - creates a tokenized approved-quote preview URL backed by the saved client/admin polygon sources and Mapbox satellite static imagery
 - resend approved quote email (`POST /api/admin/quotes/:id/approval-email/resend`) for verified quotes awaiting payment; resend rotates the payment token and revokes older active payment links
 - public approved-quote preview image (`GET /api/approved-quote-preview/:token`) proxies the Mapbox image without exposing the Mapbox token

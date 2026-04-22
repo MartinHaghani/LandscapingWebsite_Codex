@@ -734,13 +734,16 @@ export const createServer = (options: CreateServerOptions = {}) => {
         recipientName: context.recipientName,
         addressText: context.addressText,
         serviceFrequency: context.serviceFrequency,
-        sessionsMin: context.sessionsMin,
         sessionsMax: context.sessionsMax,
-        perSessionTotal: context.perSessionTotal,
-        seasonalDiscountedTotal: context.seasonalDiscountedTotal,
-        fullSeasonTotal: context.fullSeasonTotal,
-        seasonalSavingsTotal: context.seasonalSavingsTotal,
-        seasonalDiscountRate: context.seasonalDiscountRate,
+        payment: {
+          mode: paymentLink.mode,
+          amountCents: paymentLink.amountCents,
+          currency: paymentLink.currency
+        },
+        mapLegend: {
+          hasAddedArea: previewContext.addedGeometry !== null,
+          hasRemovedArea: previewContext.removedGeometry !== null
+        },
         paymentPageUrl,
         previewImageUrl
       });
