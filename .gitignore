@@ -9,3 +9,4 @@ server/.env
 client/dist
 server/dist
 coverage
+admin/dist

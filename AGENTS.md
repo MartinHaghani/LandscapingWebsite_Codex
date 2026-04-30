@@ -48,7 +48,6 @@ When touching quote flow, preserve:
 - Preserve backward-compatible API response shapes unless explicitly asked to change them.
 
 ## Safety Constraints
-- Do not modify secrets or rotate keys in `.env` files.
 - Do not rewrite git history (`rebase -i`, force-push, hard reset) unless explicitly requested.
 - Do not silently change geometry math or quote formula constants.
 - Ask for review before shipping critical changes in pricing, geometry validation, security controls, or deployment/runtime scripts.
