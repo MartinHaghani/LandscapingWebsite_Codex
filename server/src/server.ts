@@ -352,6 +352,11 @@ const mapStoreError = (error: unknown): { statusCode: number; message: string } 
         statusCode: 409,
         message: 'Payment is only available for approved quotes awaiting payment.'
       };
+    case 'QUOTE_BILLING_PORTAL_NOT_AVAILABLE':
+      return {
+        statusCode: 409,
+        message: 'Card management is not available for this quote yet.'
+      };
     case 'QUOTE_EDITOR_SOURCE_INVALID':
       return {
         statusCode: 400,
@@ -553,22 +558,21 @@ export const createServer = (options: CreateServerOptions = {}) => {
     configuredApiBaseUrl ??
     getRequestOrigin(req);
 
-  const buildPaymentPageUrl = (req: http.IncomingMessage, quoteId: string) => {
+  const buildAppUrl = (req: http.IncomingMessage, path: string) => {
     const appBaseUrl = resolveAppBaseUrl(req);
     if (!appBaseUrl) {
       return null;
     }
 
-    return `${appBaseUrl}/dashboard/quotes/${encodeURIComponent(quoteId)}/payment`;
+    return `${appBaseUrl}${path.startsWith('/') ? path : `/${path}`}`;
+  };
+
+  const buildPaymentPageUrl = (req: http.IncomingMessage, quoteId: string) => {
+    return buildAppUrl(req, `/dashboard/quotes/${encodeURIComponent(quoteId)}/payment`);
   };
 
   const buildPublicPaymentPageUrl = (req: http.IncomingMessage, paymentToken: string) => {
-    const appBaseUrl = resolveAppBaseUrl(req);
-    if (!appBaseUrl) {
-      return null;
-    }
-
-    return `${appBaseUrl}/pay/${encodeURIComponent(paymentToken)}`;
+    return buildAppUrl(req, `/pay/${encodeURIComponent(paymentToken)}`);
   };
 
   const buildPreviewImageBaseUrl = (req: http.IncomingMessage) => {
@@ -1581,7 +1585,16 @@ export const createServer = (options: CreateServerOptions = {}) => {
           cursor
         });
 
-        json(res, 200, result);
+        json(res, 200, {
+          ...result,
+          items: result.items.map((item) => ({
+            ...item,
+            paymentPageUrl:
+              typeof item.id === 'string'
+                ? buildPaymentPageUrl(req, item.id)
+                : null
+          }))
+        });
         return;
       } catch (error) {
         const mapped = mapStoreError(error);
@@ -1646,6 +1659,51 @@ export const createServer = (options: CreateServerOptions = {}) => {
       }
     }
 
+    const accountQuoteBillingPortalId = getPathMatch(pathname, /^\/api\/account\/quotes\/([^/]+)\/billing-portal$/);
+    if (method === 'POST' && accountQuoteBillingPortalId) {
+      try {
+        const customerIdentity = await customerIdentityResolver(req);
+        if (!customerIdentity) {
+          throw new Error('AUTH_REQUIRED');
+        }
+        assertCustomerPhoneProfile(customerIdentity);
+
+        const paymentLink = await dataStore.getPaymentLinkByQuotePublicId({
+          quotePublicId: accountQuoteBillingPortalId,
+          access: {
+            authUserId: customerIdentity.userId,
+            isAdmin: false
+          },
+          previewImageBaseUrl: buildPreviewImageBaseUrl(req)
+        });
+
+        if (!paymentLink?.stripeCustomerId) {
+          throw new Error('QUOTE_BILLING_PORTAL_NOT_AVAILABLE');
+        }
+
+        const returnUrl = buildAppUrl(req, '/dashboard');
+        if (!returnUrl) {
+          json(res, 500, { error: 'Public application URL is not configured for account management.' });
+          return;
+        }
+
+        const session = await stripeProvider.createBillingPortalSession(paymentLink.stripeCustomerId, returnUrl);
+        json(res, 200, {
+          portalUrl: session.url
+        });
+        return;
+      } catch (error) {
+        if (error instanceof StripePaymentConfigurationError) {
+          json(res, 503, { error: error.message });
+          return;
+        }
+
+        const mapped = mapStoreError(error);
+        json(res, mapped.statusCode, { error: mapped.message });
+        return;
+      }
+    }
+
     const accountQuoteId = getPathMatch(pathname, /^\/api\/account\/quotes\/([^/]+)$/);
     if (method === 'GET' && accountQuoteId) {
       try {
@@ -1667,7 +1725,43 @@ export const createServer = (options: CreateServerOptions = {}) => {
           return;
         }
 
-        json(res, 200, quote);
+        let billing: {
+          canManageCard: boolean;
+          cardOnFile: {
+            brand: string;
+            last4: string;
+            expMonth: number;
+            expYear: number;
+          } | null;
+        } = {
+          canManageCard: false,
+          cardOnFile: null
+        };
+
+        const paymentLink = await dataStore.getPaymentLinkByQuotePublicId({
+          quotePublicId: accountQuoteId,
+          access: {
+            authUserId: customerIdentity.userId,
+            isAdmin: false
+          },
+          previewImageBaseUrl: buildPreviewImageBaseUrl(req)
+        });
+
+        if (paymentLink?.stripeCustomerId) {
+          try {
+            billing = await stripeProvider.getCustomerBillingState({
+              customerId: paymentLink.stripeCustomerId,
+              subscriptionId: paymentLink.stripeSubscriptionId
+            });
+          } catch (error) {
+            console.warn('Failed to load Stripe billing state for account quote:', error);
+          }
+        }
+
+        json(res, 200, {
+          ...quote,
+          billing
+        });
         return;
       } catch (error) {
         const mapped = mapStoreError(error);

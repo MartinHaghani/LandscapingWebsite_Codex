@@ -108,18 +108,8 @@ export interface QuoteLookupResponse {
   verifiedAt?: string | null;
   paymentPageUrl?: string | null;
   approvedQuotePreviewImageUrl?: string | null;
-  payment?: {
-    mode: QuotePaymentMode;
-    status: QuotePaymentStatus;
-    amountCents: number;
-    currency: string;
-    recurringInterval: string | null;
-    maxBillableVisits: number | null;
-    paidInvoiceCount: number;
-    seasonStartAt: string | null;
-    seasonEndAt: string | null;
-    checkoutExpiresAt: string | null;
-  } | null;
+  payment?: QuotePaymentSummary | null;
+  billing?: AccountQuoteBillingSummary | null;
 }
 
 export interface ContactPayload {
@@ -166,6 +156,31 @@ export type QuotePaymentStatus =
   | 'past_due'
   | 'failed'
   | 'canceled';
+
+export interface QuotePaymentSummary {
+  mode: QuotePaymentMode;
+  status: QuotePaymentStatus;
+  amountCents: number;
+  currency: string;
+  recurringInterval: string | null;
+  maxBillableVisits: number | null;
+  paidInvoiceCount: number;
+  seasonStartAt: string | null;
+  seasonEndAt: string | null;
+  checkoutExpiresAt: string | null;
+}
+
+export interface CardOnFileSummary {
+  brand: string;
+  last4: string;
+  expMonth: number;
+  expYear: number;
+}
+
+export interface AccountQuoteBillingSummary {
+  canManageCard: boolean;
+  cardOnFile: CardOnFileSummary | null;
+}
 
 export interface PaymentLinkResponse {
   quote: {
@@ -215,6 +230,7 @@ export interface AccountQuoteListItem {
   createdAt: string;
   address: string;
   status: string;
+  customerStatus?: string;
   contactPending: boolean;
   serviceFrequency: ServiceFrequency;
   perSessionTotal: number;
@@ -226,6 +242,9 @@ export interface AccountQuoteListItem {
   seasonalDiscountRate?: number;
   billingMode?: BillingMode;
   submittedAt: string | null;
+  verifiedAt?: string | null;
+  paymentPageUrl?: string | null;
+  payment?: QuotePaymentSummary | null;
 }
 
 export interface AccountQuoteListResponse {
@@ -252,6 +271,10 @@ export interface AttributionPayload {
   deviceType?: string;
   browser?: string;
   geoCity?: string;
+}
+
+export interface BillingPortalSessionResponse {
+  portalUrl: string;
 }
 
 export interface ServiceAreaRequestPayload {

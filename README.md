@@ -186,7 +186,8 @@ Current live status: `autoscape-staging` is active in Toronto with `autoscape-st
   8. Confirmation page `/quote-confirmation/:quoteId`
 - Customer dashboard:
   - `/complete-profile/*` captures required phone number for any auth method
-  - `/dashboard` for profile + owned quote list
+  - `/dashboard` is now an action-first customer home with a primary quote state, lifecycle timeline, May-September schedule note, support panel, conditional quote history, and conditional card-on-file panel
+  - `/dashboard/account/*` renders Clerk profile/security/password management inside the dashboard area
   - `/dashboard/quotes/:quoteId` for owned quote detail
   - `/dashboard/quotes/:quoteId/payment` is the authenticated approved-quote payment surface and can start Stripe Checkout for owned quotes
 - Public payment:
@@ -195,6 +196,7 @@ Current live status: `autoscape-staging` is active in Toronto with `autoscape-st
   - `GET /api/payment-links/:token` returns sanitized quote/payment details without requiring Clerk sign-in
   - `POST /api/payment-links/:token/checkout` creates or reuses a Stripe Checkout Session
   - signed-in customers can also use `POST /api/account/quotes/:quoteId/payment/checkout` from the dashboard
+  - `POST /api/account/quotes/:quoteId/billing-portal` opens Stripe-hosted card management for owners when Stripe has customer billing context, and account quote detail now includes conditional card-on-file metadata
 - Out-of-area page auto-captures expansion demand via `POST /api/service-area/request`.
 
 ## Service Area Privacy

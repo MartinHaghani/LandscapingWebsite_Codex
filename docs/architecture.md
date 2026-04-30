@@ -90,8 +90,9 @@ Spatial storage:
 
 ### Account
 
-- `GET /api/account/quotes` (auth required)
-- `GET /api/account/quotes/:quoteId` (auth required, owner scoped)
+- `GET /api/account/quotes` (auth required; returns owned quotes plus customer status, verification timing, payment summary, and dashboard payment-page URL)
+- `GET /api/account/quotes/:quoteId` (auth required, owner scoped; returns quote detail plus conditional Stripe card-on-file metadata)
+- `POST /api/account/quotes/:quoteId/billing-portal` (auth required, owner scoped; opens Stripe-hosted card management when a Stripe customer billing context exists)
 
 Client-side quote draft resilience:
 
@@ -253,7 +254,8 @@ Revisions:
 - Public `/pay/:token` pages and authenticated `/dashboard/quotes/:quoteId/payment` pages use Stripe Checkout. Seasonal quotes charge the approved discounted seasonal total once; per-session quotes create weekly subscriptions that use a May 1 billing-cycle anchor with no proration before season or charge at checkout during season, cap paid invoices at `sessionsMax`, and stop no later than September 30.
 - Approved-quote payment emails show only the payment-link amount/mode that will be sent to Stripe, include the approved map preview unchanged, and render added/removed map legend keys only when those preview deltas exist.
 - Hosted Checkout requires `STRIPE_SECRET_KEY` and `STRIPE_WEBHOOK_SECRET` on the API service only. Staging currently has both configured and still needs end-to-end checkout smoke testing.
-- Quote lookup responses include verified status fields plus payment-page, payment-state, and tokenized preview-image metadata for the customer dashboard/payment page.
+- Quote lookup responses include verified status fields plus payment-page, payment-state, and tokenized preview-image metadata for the customer dashboard/payment page. Account quote detail responses also include conditional Stripe billing metadata so the dashboard can surface the current saved card and link into Stripe Customer Portal without duplicating card-management UI.
+- The customer dashboard ranks one primary quote by urgency (`awaiting payment/payment issue` -> `in review` -> `draft/contact pending` -> `paid/active`) and renders quote history only when multiple quotes exist and the primary quote is not complete.
 - Webhook events are stored idempotently by Stripe event ID; paid subscription invoice IDs are also tracked to keep the paid visit counter from advancing twice for the same invoice.
 
 Development cutover:

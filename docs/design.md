@@ -353,7 +353,7 @@ Implementation:
 
 Decision:
 
-- Enforce owner-only customer quote access and bind drafts to authenticated users before finalize.
+- Enforce owner-only customer quote access, bind drafts to authenticated users before finalize, and make the customer dashboard a single-action home rather than a generic profile/quote list.
 
 Implementation:
 
@@ -366,13 +366,20 @@ Implementation:
   - `autoscapeProfile.defaultAddress`
   - `autoscapeProfile.addressHistory` (latest-first, deduped, max 10)
 - account APIs:
-  - `GET /api/account/quotes`
-  - `GET /api/account/quotes/:quoteId`
+  - `GET /api/account/quotes` returns owned quotes plus customer status, verification timing, payment summary, and dashboard payment-page URL
+  - `GET /api/account/quotes/:quoteId` returns owned quote detail plus conditional Stripe card-on-file metadata
+  - `POST /api/account/quotes/:quoteId/billing-portal` creates a Stripe-hosted customer portal session when billing context exists
 - dashboard routes:
   - `/complete-profile/*`
   - `/dashboard`
+  - `/dashboard/account/*`
   - `/dashboard/quotes/:quoteId`
   - `/dashboard/quotes/:quoteId/payment`
+- `/dashboard` selects one primary quote by urgency (`awaiting payment/payment issue` -> `in review` -> `draft/contact pending` -> `paid/active`) and keeps quote history secondary so the page always leads with the next customer action
+- the top dashboard panel uses a dark account shell with state-driven copy for `Get instant quote`, `Quote is in review`, `Waiting for payment`, `All done`, plus a draft recovery state for unfinished submissions
+- the active property card keeps the address prominent, quote ID subdued, and price conditional on `contact_pending=false`
+- incomplete quotes show a simple lifecycle timeline, May-September schedule note, and help panel; complete quotes swap the timeline for plan summary details
+- saved-card management is intentionally delegated to Stripe Customer Portal instead of a custom card editor, and the `Card on file` panel is hidden when Stripe has no reusable default payment method
 - public `/pay/:token` page uses the approved quote/payment visual language, shows the tokenized preview image when available, summarizes the exact approved payment terms, and sends the client to Stripe Checkout without a sign-in gate
 - seasonal payments present one final upfront amount; per-session payments present weekly billing terms, May 1/start-at-checkout timing, the approved visit cap, and the September 30 outer stop
 - `/dashboard/quotes/:quoteId/payment` uses the same approved payment visual language as an authenticated checkout surface for signed-in customers

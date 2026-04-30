@@ -90,12 +90,14 @@ Autoscape provides:
 - Phone is stored on account metadata (`unsafeMetadata.autoscapeProfile.phone`).
 - Users without phone are gated before dashboard and quote confirmation routes.
 - Protected dashboard routes:
-  - `/dashboard` (profile + owned quotes + placeholder billing/messages cards)
+  - `/dashboard` (action-first account home with primary quote state, lifecycle timeline, support/schedule panels, conditional quote history, and conditional Stripe card-on-file panel)
+  - `/dashboard/account/*` (Clerk-managed profile, password, and security settings)
   - `/dashboard/quotes/:quoteId` (owned quote detail)
   - `/dashboard/quotes/:quoteId/payment` (authenticated approved-quote payment surface that can start Stripe Checkout)
 - Approved quote emails link to public `/pay/:token` pages. Tokens are long random secrets stored only as SHA-256 hashes and are regenerated on approval/resend.
-- Public/authenticated payment APIs are `GET /api/payment-links/:token`, `POST /api/payment-links/:token/checkout`, `POST /api/account/quotes/:quoteId/payment/checkout`, and `POST /api/stripe/webhook`.
+- Public/authenticated payment APIs are `GET /api/payment-links/:token`, `POST /api/payment-links/:token/checkout`, `POST /api/account/quotes/:quoteId/payment/checkout`, `POST /api/account/quotes/:quoteId/billing-portal`, and `POST /api/stripe/webhook`.
 - Seasonal quotes create one-time Stripe Checkout Sessions for the approved discounted seasonal total. Per-session quotes create weekly Stripe subscription Checkout Sessions, use a May 1 billing-cycle anchor before season or charge immediately during season, cap paid invoices at `sessionsMax`, and stop no later than September 30.
+- Account quote detail responses now include conditional billing metadata so the dashboard can show the current card-on-file summary when Stripe has a reusable saved method.
 - Quote lookup APIs are owner-only unless caller is admin.
 
 ### Out-of-Area Flow

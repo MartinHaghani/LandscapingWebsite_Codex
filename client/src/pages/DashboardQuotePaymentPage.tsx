@@ -28,23 +28,23 @@ const formatCurrency = (value: number, currency = 'CAD') =>
 
 const paymentStatusCopy: Record<string, { title: string; body: string }> = {
   awaiting_payment: {
-    title: 'Ready for payment',
+    title: 'Waiting for payment',
     body: 'Continue to Stripe Checkout from this dashboard page or use the secure link from your approval email.'
   },
   checkout_created: {
-    title: 'Checkout started',
-    body: 'A Stripe Checkout session is ready. You can reopen it if the previous tab was closed.'
+    title: 'Waiting for payment',
+    body: 'Your Stripe Checkout session is ready. You can reopen it if the previous tab was closed.'
   },
   paid: {
-    title: 'Payment complete',
+    title: 'All done',
     body: 'Stripe has confirmed payment for this approved quote.'
   },
   subscription_scheduled: {
-    title: 'Weekly payments scheduled',
+    title: 'All done',
     body: 'Weekly per-visit payments are set up and will begin on the seasonal start date.'
   },
   subscription_active: {
-    title: 'Weekly payments active',
+    title: 'All done',
     body: 'Weekly per-visit billing is active for this approved quote.'
   },
   past_due: {

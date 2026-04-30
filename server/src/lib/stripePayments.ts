@@ -36,9 +36,30 @@ export interface StripeWebhookEvent {
   };
 }
 
+export interface StripeBillingPortalSessionResult {
+  url: string;
+}
+
+export interface StripeCardOnFileSummary {
+  brand: string;
+  last4: string;
+  expMonth: number;
+  expYear: number;
+}
+
+export interface StripeCustomerBillingState {
+  canManageCard: boolean;
+  cardOnFile: StripeCardOnFileSummary | null;
+}
+
 export interface StripePaymentProvider {
   createCheckoutSession(input: CreateStripeCheckoutSessionInput): Promise<StripeCheckoutSessionResult>;
   constructWebhookEvent(payload: Buffer, signature: string | undefined): StripeWebhookEvent;
+  createBillingPortalSession(customerId: string, returnUrl: string): Promise<StripeBillingPortalSessionResult>;
+  getCustomerBillingState(input: {
+    customerId: string;
+    subscriptionId?: string | null;
+  }): Promise<StripeCustomerBillingState>;
   updateSubscriptionCancelAt(subscriptionId: string, cancelAtUnix: number): Promise<void>;
   cancelSubscription(subscriptionId: string): Promise<void>;
 }
@@ -57,6 +78,43 @@ const getStripeObjectId = (value: unknown) => {
   }
 
   return null;
+};
+
+const toCardOnFileSummary = (paymentMethod: unknown): StripeCardOnFileSummary | null => {
+  if (!paymentMethod || typeof paymentMethod !== 'object') {
+    return null;
+  }
+
+  const maybePaymentMethod = paymentMethod as {
+    type?: string;
+    card?: {
+      brand?: string | null;
+      last4?: string | null;
+      exp_month?: number | null;
+      exp_year?: number | null;
+    } | null;
+  };
+
+  if (maybePaymentMethod.type !== 'card' || !maybePaymentMethod.card) {
+    return null;
+  }
+
+  const { brand, last4, exp_month: expMonth, exp_year: expYear } = maybePaymentMethod.card;
+  if (
+    typeof brand !== 'string' ||
+    typeof last4 !== 'string' ||
+    typeof expMonth !== 'number' ||
+    typeof expYear !== 'number'
+  ) {
+    return null;
+  }
+
+  return {
+    brand,
+    last4,
+    expMonth,
+    expYear
+  };
 };
 
 export const createStripePaymentProvider = (config?: {
@@ -153,6 +211,46 @@ export const createStripePaymentProvider = (config?: {
       }
 
       return getClient().webhooks.constructEvent(payload, signature, webhookSecret) as StripeWebhookEvent;
+    },
+
+    async createBillingPortalSession(customerId, returnUrl) {
+      const session = await getClient().billingPortal.sessions.create({
+        customer: customerId,
+        return_url: returnUrl
+      });
+
+      return {
+        url: session.url
+      };
+    },
+
+    async getCustomerBillingState(input) {
+      const stripe = getClient();
+      const customer = await stripe.customers.retrieve(input.customerId, {
+        expand: ['invoice_settings.default_payment_method']
+      });
+
+      if (customer.deleted) {
+        return {
+          canManageCard: false,
+          cardOnFile: null
+        };
+      }
+
+      let subscriptionDefaultPaymentMethod: string | Stripe.PaymentMethod | null = null;
+      if (input.subscriptionId) {
+        const subscription = await stripe.subscriptions.retrieve(input.subscriptionId, {
+          expand: ['default_payment_method']
+        });
+        subscriptionDefaultPaymentMethod = subscription.default_payment_method;
+      }
+
+      return {
+        canManageCard: true,
+        cardOnFile:
+          toCardOnFileSummary(subscriptionDefaultPaymentMethod) ??
+          toCardOnFileSummary(customer.invoice_settings.default_payment_method)
+      };
     },
 
     async updateSubscriptionCancelAt(subscriptionId, cancelAtUnix) {

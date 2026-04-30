@@ -8,6 +8,7 @@ import type { ApprovedQuoteEmailSender } from './lib/approvedQuoteEmail.js';
 import type { BaseStationConfig } from './lib/serviceAreaConfig.js';
 import type {
   CreateStripeCheckoutSessionInput,
+  StripeCustomerBillingState,
   StripePaymentProvider,
   StripeWebhookEvent
 } from './lib/stripePayments.js';
@@ -200,10 +201,14 @@ const createFakeStripeProvider = (state: {
   sessions?: CreateStripeCheckoutSessionInput[];
   updatedCancelAt?: Array<{ subscriptionId: string; cancelAtUnix: number }>;
   canceledSubscriptions?: string[];
+  billingPortalSessions?: Array<{ customerId: string; returnUrl: string }>;
+  billingStateByCustomerId?: Record<string, StripeCustomerBillingState>;
 }) => {
   const sessions = state.sessions ?? [];
   const updatedCancelAt = state.updatedCancelAt ?? [];
   const canceledSubscriptions = state.canceledSubscriptions ?? [];
+  const billingPortalSessions = state.billingPortalSessions ?? [];
+  const billingStateByCustomerId = state.billingStateByCustomerId ?? {};
 
   return {
     async createCheckoutSession(input) {
@@ -224,6 +229,18 @@ const createFakeStripeProvider = (state: {
       }
 
       return JSON.parse(payload.toString('utf8')) as StripeWebhookEvent;
+    },
+    async createBillingPortalSession(customerId, returnUrl) {
+      billingPortalSessions.push({ customerId, returnUrl });
+      return {
+        url: `https://billing.stripe.test/session/${customerId}`
+      };
+    },
+    async getCustomerBillingState({ customerId }) {
+      return billingStateByCustomerId[customerId] ?? {
+        canManageCard: false,
+        cardOnFile: null
+      };
     },
     async updateSubscriptionCancelAt(subscriptionId, cancelAtUnix) {
       updatedCancelAt.push({ subscriptionId, cancelAtUnix });
@@ -1497,6 +1514,227 @@ describe('admin quote editor workflow', () => {
     };
     assert.equal(accountQuote.payment?.status, 'checkout_created');
     assert.equal(accountQuote.payment?.amountCents, 319984);
+  });
+
+  it('includes customer status, payment status, and payment page links in account quote lists', async () => {
+    const sentEmails: Array<{ to: string; subject: string; html: string; text: string }> = [];
+    const { baseUrl } = await startServer({
+      approvedQuoteEmailSender: {
+        async send(message) {
+          sentEmails.push(message);
+          return {
+            provider: 'resend',
+            messageId: `msg-list-${sentEmails.length}`
+          };
+        }
+      },
+      publicUrls: {
+        appBaseUrl: 'https://client.autoscape.test',
+        apiBaseUrl: 'https://api.autoscape.test'
+      },
+      approvedQuotePreview: {
+        mapboxAccessToken: 'test-mapbox-token',
+        fetchImpl: createMapboxImageFetch([])
+      },
+      stripeProvider: createFakeStripeProvider({})
+    });
+    const scenario = await createReviewQuoteVersion(baseUrl, 'dashboard-list');
+
+    const submitResponse = await fetch(
+      `${baseUrl}/api/admin/quotes/${scenario.quoteId}/versions/${scenario.version}/submit`,
+      {
+        method: 'POST',
+        headers: {
+          Authorization: 'Bearer admin-reviewer'
+        }
+      }
+    );
+    assert.equal(submitResponse.status, 200);
+
+    const accountQuotesResponse = await fetch(`${baseUrl}/api/account/quotes`, {
+      headers: {
+        Authorization: 'Bearer customer-reviewer'
+      }
+    });
+    assert.equal(accountQuotesResponse.status, 200);
+    const accountQuotesBody = (await accountQuotesResponse.json()) as {
+      items: Array<{
+        id: string;
+        customerStatus: string;
+        verifiedAt: string | null;
+        paymentPageUrl: string | null;
+        payment: { status: string; amountCents: number } | null;
+      }>;
+    };
+    const quote = accountQuotesBody.items.find((item) => item.id === scenario.quoteId);
+    assert.ok(quote);
+    assert.equal(quote?.customerStatus, 'awaiting_payment');
+    assert.equal(typeof quote?.verifiedAt, 'string');
+    assert.equal(
+      quote?.paymentPageUrl,
+      `https://client.autoscape.test/dashboard/quotes/${scenario.quoteId}/payment`
+    );
+    assert.equal(quote?.payment?.status, 'awaiting_payment');
+    assert.equal(quote?.payment?.amountCents, 319984);
+  });
+
+  it('returns billing metadata and opens Stripe billing portal when a saved card exists', async () => {
+    const sentEmails: Array<{ to: string; subject: string; html: string; text: string }> = [];
+    const sessions: CreateStripeCheckoutSessionInput[] = [];
+    const billingPortalSessions: Array<{ customerId: string; returnUrl: string }> = [];
+    const { baseUrl } = await startServer({
+      approvedQuoteEmailSender: {
+        async send(message) {
+          sentEmails.push(message);
+          return {
+            provider: 'resend',
+            messageId: `msg-billing-${sentEmails.length}`
+          };
+        }
+      },
+      publicUrls: {
+        appBaseUrl: 'https://client.autoscape.test',
+        apiBaseUrl: 'https://api.autoscape.test'
+      },
+      approvedQuotePreview: {
+        mapboxAccessToken: 'test-mapbox-token',
+        fetchImpl: createMapboxImageFetch([])
+      },
+      stripeProvider: createFakeStripeProvider({
+        sessions,
+        billingPortalSessions,
+        billingStateByCustomerId: {
+          cus_test_1: {
+            canManageCard: true,
+            cardOnFile: {
+              brand: 'visa',
+              last4: '4242',
+              expMonth: 4,
+              expYear: 2030
+            }
+          }
+        }
+      })
+    });
+    const scenario = await createReviewQuoteVersion(baseUrl, 'dashboard-billing-card', undefined, {
+      billingMode: 'per_session'
+    });
+
+    const submitResponse = await fetch(
+      `${baseUrl}/api/admin/quotes/${scenario.quoteId}/versions/${scenario.version}/submit`,
+      {
+        method: 'POST',
+        headers: {
+          Authorization: 'Bearer admin-reviewer'
+        }
+      }
+    );
+    assert.equal(submitResponse.status, 200);
+
+    const checkoutResponse = await fetch(
+      `${baseUrl}/api/account/quotes/${scenario.quoteId}/payment/checkout`,
+      {
+        method: 'POST',
+        headers: {
+          Authorization: 'Bearer customer-reviewer'
+        }
+      }
+    );
+    assert.equal(checkoutResponse.status, 200);
+    assert.equal(sessions.length, 1);
+
+    const accountQuoteResponse = await fetch(`${baseUrl}/api/account/quotes/${scenario.quoteId}`, {
+      headers: {
+        Authorization: 'Bearer customer-reviewer'
+      }
+    });
+    assert.equal(accountQuoteResponse.status, 200);
+    const accountQuote = (await accountQuoteResponse.json()) as {
+      billing: {
+        canManageCard: boolean;
+        cardOnFile: {
+          brand: string;
+          last4: string;
+          expMonth: number;
+          expYear: number;
+        } | null;
+      };
+    };
+    assert.equal(accountQuote.billing.canManageCard, true);
+    assert.deepEqual(accountQuote.billing.cardOnFile, {
+      brand: 'visa',
+      last4: '4242',
+      expMonth: 4,
+      expYear: 2030
+    });
+
+    const billingPortalResponse = await fetch(
+      `${baseUrl}/api/account/quotes/${scenario.quoteId}/billing-portal`,
+      {
+        method: 'POST',
+        headers: {
+          Authorization: 'Bearer customer-reviewer'
+        }
+      }
+    );
+    assert.equal(billingPortalResponse.status, 200);
+    const billingPortalBody = (await billingPortalResponse.json()) as { portalUrl: string };
+    assert.equal(billingPortalBody.portalUrl, 'https://billing.stripe.test/session/cus_test_1');
+    assert.deepEqual(billingPortalSessions, [
+      {
+        customerId: 'cus_test_1',
+        returnUrl: 'https://client.autoscape.test/dashboard'
+      }
+    ]);
+  });
+
+  it('rejects billing portal access when no Stripe customer billing context exists yet', async () => {
+    const sentEmails: Array<{ to: string; subject: string; html: string; text: string }> = [];
+    const { baseUrl } = await startServer({
+      approvedQuoteEmailSender: {
+        async send(message) {
+          sentEmails.push(message);
+          return {
+            provider: 'resend',
+            messageId: `msg-no-billing-${sentEmails.length}`
+          };
+        }
+      },
+      publicUrls: {
+        appBaseUrl: 'https://client.autoscape.test',
+        apiBaseUrl: 'https://api.autoscape.test'
+      },
+      approvedQuotePreview: {
+        mapboxAccessToken: 'test-mapbox-token',
+        fetchImpl: createMapboxImageFetch([])
+      },
+      stripeProvider: createFakeStripeProvider({})
+    });
+    const scenario = await createReviewQuoteVersion(baseUrl, 'dashboard-billing-missing');
+
+    const submitResponse = await fetch(
+      `${baseUrl}/api/admin/quotes/${scenario.quoteId}/versions/${scenario.version}/submit`,
+      {
+        method: 'POST',
+        headers: {
+          Authorization: 'Bearer admin-reviewer'
+        }
+      }
+    );
+    assert.equal(submitResponse.status, 200);
+
+    const billingPortalResponse = await fetch(
+      `${baseUrl}/api/account/quotes/${scenario.quoteId}/billing-portal`,
+      {
+        method: 'POST',
+        headers: {
+          Authorization: 'Bearer customer-reviewer'
+        }
+      }
+    );
+    assert.equal(billingPortalResponse.status, 409);
+    const billingPortalBody = (await billingPortalResponse.json()) as { error: string };
+    assert.equal(billingPortalBody.error, 'Card management is not available for this quote yet.');
   });
 
   it('starts per-visit subscription billing at checkout on or after May 1', async () => {

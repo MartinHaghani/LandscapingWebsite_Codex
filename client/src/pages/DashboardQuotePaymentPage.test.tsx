@@ -43,6 +43,10 @@ const quote: NormalizedAccountQuote = {
     seasonStartAt: null,
     seasonEndAt: null,
     checkoutExpiresAt: null
+  },
+  billing: {
+    canManageCard: false,
+    cardOnFile: null
   }
 };
 
@@ -70,7 +74,7 @@ describe('DashboardQuotePaymentPage', () => {
     expect(markup).toContain('Stripe Checkout');
     expect(markup).toContain('Approved quote summary');
     expect(markup).toContain('Seasonal Payment');
-    expect(markup).toContain('Ready for payment');
+    expect(markup).toContain('Waiting for payment');
     expect(markup).toContain('Pay seasonal total');
     expect(markup).toContain('Area legend');
     expect(markup).toContain('Approved service area');

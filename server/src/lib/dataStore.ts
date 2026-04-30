@@ -2952,12 +2952,16 @@ export class DataStore {
           quote.seasonalTotalMax,
           quote.seasonalDiscountRate ?? PRICING_CONSTANTS.defaultSeasonalDiscountRate
         );
+        const latestPaymentLink = this.memory.paymentLinks
+          .filter((link) => link.quoteId === quote.id)
+          .sort((left, right) => compareText(right.createdAt, left.createdAt))[0] ?? null;
 
         return {
           id: quote.publicQuoteId,
           createdAt: quote.createdAt,
           address: quote.addressText,
           status: quote.status,
+          customerStatus: quote.customerStatus,
           contactPending: quote.contactPending,
           serviceFrequency: quote.serviceFrequency,
           perSessionTotal: quote.perSessionTotal,
@@ -2968,7 +2972,9 @@ export class DataStore {
           seasonalSavingsTotal: billing.seasonalSavingsTotal,
           seasonalDiscountRate: billing.seasonalDiscountRate,
           billingMode: normalizeBillingMode(quote.billingMode),
-          submittedAt: quote.submittedAt
+          submittedAt: quote.submittedAt,
+          verifiedAt: quote.verifiedAt,
+          payment: latestPaymentLink ? buildPaymentSummary(latestPaymentLink) : null
         };
       });
 
@@ -3006,6 +3012,14 @@ export class DataStore {
       where: {
         AND: [where, cursorCondition]
       },
+      include: {
+        paymentLinks: {
+          orderBy: {
+            createdAt: 'desc'
+          },
+          take: 1
+        }
+      },
       orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
       take: input.limit + 1
     });
@@ -3028,6 +3042,7 @@ export class DataStore {
           createdAt: row.createdAt.toISOString(),
           address: row.addressText,
           status: row.status,
+          customerStatus: row.customerStatus,
           contactPending: row.contactPending,
           serviceFrequency: normalizeServiceFrequency(row.serviceFrequency),
           perSessionTotal: parseDecimal(row.perSessionTotal),
@@ -3038,7 +3053,23 @@ export class DataStore {
           seasonalSavingsTotal: billing.seasonalSavingsTotal,
           seasonalDiscountRate: billing.seasonalDiscountRate,
           billingMode: normalizeBillingMode(row.billingMode),
-          submittedAt: row.submittedAt ? row.submittedAt.toISOString() : null
+          submittedAt: row.submittedAt ? row.submittedAt.toISOString() : null,
+          verifiedAt: row.verifiedAt?.toISOString() ?? null,
+          payment:
+            row.paymentLinks[0]
+              ? buildPaymentSummary({
+                  mode: row.paymentLinks[0].mode,
+                  status: row.paymentLinks[0].status,
+                  amountCents: row.paymentLinks[0].amountCents,
+                  currency: row.paymentLinks[0].currency,
+                  recurringInterval: row.paymentLinks[0].recurringInterval,
+                  maxBillableVisits: row.paymentLinks[0].maxBillableVisits,
+                  paidInvoiceCount: row.paymentLinks[0].paidInvoiceCount,
+                  seasonStartAt: row.paymentLinks[0].seasonStartAt?.toISOString() ?? null,
+                  seasonEndAt: row.paymentLinks[0].seasonEndAt?.toISOString() ?? null,
+                  stripeCheckoutExpiresAt: row.paymentLinks[0].stripeCheckoutExpiresAt?.toISOString() ?? null
+                })
+              : null
         };
       }),
       nextCursor,

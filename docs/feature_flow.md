@@ -166,13 +166,19 @@
 - `GET /api/account/quotes/:quoteId`
 - `GET /api/quote/:quoteId` (owner/admin only)
 
-4. Dashboard shows:
+4. Dashboard ranks one primary quote by urgency: awaiting payment/payment issue first, then in review, then draft/contact-pending recovery, then paid/active.
+5. Dashboard shows an action-first customer home:
 
-- profile summary
-- linked quote list/statuses
-- quote detail screen (`/dashboard/quotes/:quoteId`)
+- `Next action` panel with one of: get instant quote, finish submitting quote, quote is in review, waiting for payment, or all done
+- active property card with address, subdued quote ID, billing mode, and price only after `contact_pending=false`
+- lifecycle timeline while the primary quote is not complete
+- May-September schedule note and need-help contact panel
+- conditional quote history only when multiple quotes exist and the primary quote is still in progress
+- conditional Stripe `Card on file` panel only when Stripe returns a reusable saved/default payment method
+- account summary card with link to `/dashboard/account/*` for Clerk-managed password, profile, and security tasks
+- secondary quote detail screen (`/dashboard/quotes/:quoteId`)
 - authenticated approved-quote payment screen (`/dashboard/quotes/:quoteId/payment`) that can start Stripe Checkout for the owned quote
-- placeholder Billing and Messages cards
+6. If a saved Stripe billing method exists, `POST /api/account/quotes/:quoteId/billing-portal` creates a Stripe Customer Portal session so the customer can update the card on file from the dashboard without a custom card form.
 
 ### Public Approved Quote Payment
 

@@ -39,6 +39,9 @@ const DashboardQuoteDetailPage = lazy(() =>
 const DashboardQuotePaymentPage = lazy(() =>
   import('./pages/DashboardQuotePaymentPage').then((module) => ({ default: module.DashboardQuotePaymentPage }))
 );
+const DashboardAccountPage = lazy(() =>
+  import('./pages/DashboardAccountPage').then((module) => ({ default: module.DashboardAccountPage }))
+);
 const PublicQuotePaymentPage = lazy(() =>
   import('./pages/PublicQuotePaymentPage').then((module) => ({ default: module.PublicQuotePaymentPage }))
 );
@@ -82,6 +85,7 @@ const App = () => (
         <Route path="/complete-profile/*" element={<CompleteProfilePage />} />
         <Route path="/pay/:token" element={<PublicQuotePaymentPage />} />
         <Route path="/dashboard" element={<DashboardPage />} />
+        <Route path="/dashboard/account/*" element={<DashboardAccountPage />} />
         <Route path="/dashboard/quotes/:quoteId" element={<DashboardQuoteDetailPage />} />
         <Route path="/dashboard/quotes/:quoteId/payment" element={<DashboardQuotePaymentPage />} />
         <Route path="*" element={<Navigate to="/" replace />} />

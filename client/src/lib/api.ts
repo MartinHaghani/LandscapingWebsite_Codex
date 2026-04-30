@@ -1,5 +1,6 @@
 import type {
   AccountQuoteListResponse,
+  BillingPortalSessionResponse,
   AttributionPayload,
   ContactPayload,
   ContactResponse,
@@ -171,6 +172,15 @@ export const api = {
   createAccountQuoteCheckout(quoteId: string, authToken: string) {
     return request<PaymentCheckoutResponse>(
       `/api/account/quotes/${encodeURIComponent(quoteId)}/payment/checkout`,
+      {
+        method: 'POST',
+        authToken
+      }
+    );
+  },
+  createAccountQuoteBillingPortal(quoteId: string, authToken: string) {
+    return request<BillingPortalSessionResponse>(
+      `/api/account/quotes/${encodeURIComponent(quoteId)}/billing-portal`,
       {
         method: 'POST',
         authToken
