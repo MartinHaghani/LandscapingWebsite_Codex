@@ -219,12 +219,14 @@ Decision:
 Implementation:
 
 - home/services/contact pages now use production content
-- contact page uses the warm-light section rhythm with phone and email promoted as large direct actions in rounded panels beside the message form
+- contact page uses the warm-light section rhythm with phone and email promoted as compact direct actions beside the message form
 - desktop signed-out navigation uses a slim divider between `Sign In` and `Sign Up` instead of punctuation
 - services page uses five shared-style inline SVG illustrations and removes the old mixed photo/placeholder card treatment, including removal of `Multi-Zone Scheduling`
-- footer uses real contact links (`tel:` + `mailto:`) and quick navigation links
+- footer uses real contact links (`tel:` + `mailto:`), quick navigation links, and a compact variant for quote/auth/payment funnel routes
 - mobile navigation includes in-header menu with quote CTA
 - metadata updates in `client/index.html` improve social preview and launch polish
+- `client/index.html` also loads the public Google Ads tag `AW-17991079326`; the admin shell stays separate from public advertising measurement
+- successful public quote draft submissions fire the Google Ads `Submit lead form` conversion after server acceptance, using the quote ID as the transaction ID so repeat fires can be deduplicated
 
 ## 16) Quote Draft Recovery UX
 
@@ -258,6 +260,7 @@ Implementation:
   - `/sign-in/*`, `/sign-up/*`
   - Google sign-in enabled
   - email/password with forgot/reset
+  - shared `autoscapeClerkAppearance` themes Clerk cards, buttons, inputs, and account profile UI with Autoscape colors
   - required phone captured through in-app `/complete-profile/*`
   - phone persisted to `unsafeMetadata.autoscapeProfile.phone`
   - users missing phone are routed to `/complete-profile/*` before dashboard/confirmation
@@ -277,9 +280,9 @@ Decision:
 Implementation:
 
 - `/instant-quote` keeps only the `Instant Quote` badge above the working UI
-- top-of-page step chrome is a non-interactive three-step rail for `Enter address`, `Map your lawn`, and `Review quote`
+- top-of-page step chrome is a compact-on-mobile non-interactive three-step rail for `Enter address`, `Map your lawn`, and `Review quote`
 - rail states show `Current step`, `Complete`, and `Up next` instead of button-like cards
-- map step uses a thin low-contrast address pill instead of a larger step header/instruction card
+- address step stacks the input and continue button on mobile, and the map step uses a thin low-contrast address pill instead of a larger step header/instruction card
 - after a fresh successful address-to-map transition, the map step reveals a centered guide modal shell 1 second after the map finishes loading
 - guide step 1 now plays a looping miniature of the real draw-lawn workspace, including the live toolbar styling, no mini address pill, the polished popup-house SVG as the live background, and a visible cursor
 - the tutorial now traces the front down lawn zone inside the same framed viewport treatment used by step 2, first as one loose curvy freehand outline and then with a shared 1.6-second camera transform while cursor movement and vertex dragging stay at normal guide speed, before drawing the top-left lawn so both left-side zones are complete
@@ -375,14 +378,14 @@ Implementation:
   - `/dashboard/account/*`
   - `/dashboard/quotes/:quoteId`
   - `/dashboard/quotes/:quoteId/payment`
-- `/dashboard` selects one primary quote by urgency (`awaiting payment/payment issue` -> `in review` -> `draft/contact pending` -> `paid/active`) and keeps quote history secondary so the page always leads with the next customer action
+- `/dashboard` selects one primary quote by urgency (`awaiting payment/payment issue` -> `in review` -> `draft/contact pending` -> `paid/active`) and keeps quote history secondary so the page always leads with the next customer action, especially on mobile where amount/status/CTA sit before secondary details
 - the top dashboard panel uses a dark account shell with state-driven copy for `Get instant quote`, `Quote is in review`, `Waiting for payment`, `All done`, plus a draft recovery state for unfinished submissions
-- the active property card keeps the address prominent, quote ID subdued, and price conditional on `contact_pending=false`
+- the active property card keeps the address prominent, quote ID subdued, price conditional on `contact_pending=false`, and action buttons full-width on mobile
 - incomplete quotes show a simple lifecycle timeline, May-September schedule note, and help panel; complete quotes swap the timeline for plan summary details
 - saved-card management is intentionally delegated to Stripe Customer Portal instead of a custom card editor, and the `Card on file` panel is hidden when Stripe has no reusable default payment method
-- public `/pay/:token` page uses the approved quote/payment visual language, shows the tokenized preview image when available, summarizes the exact approved payment terms, and sends the client to Stripe Checkout without a sign-in gate
+- public `/pay/:token` page uses the approved quote/payment visual language, shows the tokenized preview image when available, summarizes the exact approved payment terms in a task-first mobile layout, and sends the client to Stripe Checkout without a sign-in gate
 - seasonal payments present one final upfront amount; per-session payments present weekly billing terms, May 1/start-at-checkout timing, the approved visit cap, and the September 30 outer stop
-- `/dashboard/quotes/:quoteId/payment` uses the same approved payment visual language as an authenticated checkout surface for signed-in customers
+- `/dashboard/quotes/:quoteId/payment` uses the same approved payment visual language as an authenticated checkout surface for signed-in customers, with the amount/status/checkout action prioritized on mobile
 
 ## 22) Warm-Light Premium Public Refresh
 
@@ -394,6 +397,7 @@ Implementation:
 
 - semantic token families in `tailwind.config.ts` + `client/src/index.css` (`canvas`, `surface`, `copy`, `line`, `brand`)
 - public navbar and footer render the horizontal Autoscape PNG brand mark from `client/public/images/brand/autoscape-horizontal-brand.png`
+- service-area map, home hero media, and pricing formula surfaces use shorter/mobile-readable layouts so key CTAs are visible without long scrolling
 - larger default reading scale, higher text contrast, and clearer spacing rhythm for older homeowners
 - standardized focus-visible treatment and form primitives (`form-label`, `form-input`, `status-*`)
 - service-area map remains privacy-hardened but now uses light-compatible controls/popup treatment

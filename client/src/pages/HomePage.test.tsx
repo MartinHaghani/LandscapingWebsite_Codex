@@ -15,6 +15,8 @@ describe('HomePage hero', () => {
     const markup = renderHomePage();
 
     expect(markup).toContain('Autonomous Landscaping Service');
+    expect(markup).toContain('Precise Cuts, Lower Costs');
+    expect(markup).not.toContain('Percise Cuts, Lower Costs');
     expect(markup).toContain('Talk to the Team');
     expect(markup).toContain('No sign-up required.');
     expect(markup).toContain('aria-hidden="true"');
@@ -25,6 +27,8 @@ describe('HomePage hero', () => {
     expect(markup).toContain('w-full justify-center');
     expect(markup).toContain('invisible shrink-0 whitespace-nowrap');
     expect(markup).toContain('md:-translate-y-8');
+    expect(markup).toContain('h-[300px]');
+    expect(markup).toContain('min-[375px]:flex-row');
     expect(markup).toContain('data-status-motion="tickerFlip"');
     expect(markup).not.toContain('data-motion-preview="true"');
     expect(markup).not.toContain('Quote Time');

@@ -76,6 +76,7 @@ describe('DashboardQuotePaymentPage', () => {
     expect(markup).toContain('Seasonal Payment');
     expect(markup).toContain('Waiting for payment');
     expect(markup).toContain('Pay seasonal total');
+    expect(markup).toContain('w-full sm:w-auto');
     expect(markup).toContain('Area legend');
     expect(markup).toContain('Approved service area');
     expect(markup).toContain('Added by admin review');

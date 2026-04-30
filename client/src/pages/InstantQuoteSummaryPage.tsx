@@ -8,6 +8,7 @@ import { api, ApiError, createIdempotencyKey } from '../lib/api';
 import { getAttributionSnapshot } from '../lib/attribution';
 import { cn } from '../lib/cn';
 import { toFt, toFt2 } from '../lib/geometry';
+import { trackSubmitLeadConversion } from '../lib/googleAds';
 import { computeMultiPolygonMetrics } from '../lib/multiPolygonMetrics';
 import { canSubmitQuoteDraft } from '../lib/quoteFlow';
 import {
@@ -341,7 +342,7 @@ export const InstantQuoteSummaryContent = ({
 
           <Button
             type="button"
-            className="min-h-[56px] w-full text-base"
+            className="min-h-[56px] w-full text-base shadow-[0_18px_36px_-28px_rgba(50,159,91,0.95)]"
             onClick={onContinue}
             disabled={!canContinue}
           >
@@ -414,8 +415,8 @@ export const InstantQuoteSummaryPage = () => {
 
   const areaValue =
     unitMode === 'metric'
-      ? `${formatWholeNumber(metrics.areaM2)} m2`
-      : `${formatWholeNumber(toFt2(metrics.areaM2))} ft2`;
+      ? `${formatWholeNumber(metrics.areaM2)} m²`
+      : `${formatWholeNumber(toFt2(metrics.areaM2))} ft²`;
   const perimeterValue =
     unitMode === 'metric'
       ? `${formatWholeNumber(metrics.perimeterM)} m`
@@ -482,6 +483,7 @@ export const InstantQuoteSummaryPage = () => {
         clearQuoteDraftState(window.localStorage);
       }
 
+      await trackSubmitLeadConversion(response.quoteId);
       navigate(response.nextStepUrl ?? `/quote-confirmation/${response.quoteId}`);
     } catch (error) {
       setStatusMessage({

@@ -1,6 +1,7 @@
 import { renderToStaticMarkup } from 'react-dom/server';
 import { StaticRouter } from 'react-router-dom/server';
 import { describe, expect, it } from 'vitest';
+import { ServiceAreaMap } from '../components/service/ServiceAreaMap';
 import { ServicesPage } from './ServicesPage';
 
 const renderServicesPage = () =>
@@ -28,5 +29,18 @@ describe('ServicesPage service gallery', () => {
 
     expect(markup).not.toContain('Multi-Zone Scheduling');
     expect(markup).not.toContain('<img');
+  });
+});
+
+describe('ServiceAreaMap mobile sizing', () => {
+  it('uses a shorter mobile-first map height before expanding at larger breakpoints', () => {
+    const markup = renderToStaticMarkup(
+      <ServiceAreaMap token="test-token" serviceArea={null} showOverlay />
+    );
+
+    expect(markup).toContain('h-[300px]');
+    expect(markup).toContain('sm:h-[340px]');
+    expect(markup).toContain('md:h-[360px]');
+    expect(markup).not.toContain('h-[440px]');
   });
 });

@@ -89,7 +89,7 @@ export const ServiceAreaSection = () => {
           {MAPBOX_TOKEN && !loadingError ? (
             <Suspense
               fallback={
-                <div className="flex h-[440px] items-center justify-center rounded-2xl border border-stroke bg-surface-muted text-sm text-copy-muted md:h-[360px]">
+                <div className="flex h-[300px] items-center justify-center rounded-2xl border border-stroke bg-surface-muted px-6 text-center text-sm text-copy-muted sm:h-[340px] md:h-[360px]">
                   Loading service area map...
                 </div>
               }
@@ -97,7 +97,7 @@ export const ServiceAreaSection = () => {
               <LazyServiceAreaMap token={MAPBOX_TOKEN} serviceArea={serviceArea} showOverlay={true} />
             </Suspense>
           ) : (
-            <div className="flex h-[220px] items-center justify-center rounded-2xl border border-stroke bg-surface-muted text-sm text-copy-muted">
+            <div className="flex h-[220px] items-center justify-center rounded-2xl border border-stroke bg-surface-muted px-6 text-center text-sm text-copy-muted">
               Interactive map unavailable. Use Instant Quote for service-area confirmation.
             </div>
           )}

@@ -10,19 +10,34 @@ export const HowRateCalculatedPage = () => (
       description="Autoscape pricing uses a deterministic metric formula with obstacle subtraction."
     />
 
-    <Card className="mt-10 space-y-6">
+    <Card className="mt-10 space-y-7">
       <div>
         <h2 className="text-xl font-semibold text-ink">Formula</h2>
-        <p className="mt-3 text-sm text-copy-muted">
-          <code className="rounded bg-surface-muted px-2 py-1 text-xs text-ink">
+        <div className="mt-4 grid gap-3 text-sm text-copy-muted sm:grid-cols-2">
+          <div className="rounded-lg border border-stroke bg-surface-raised px-4 py-3">
+            <p className="text-xs font-semibold uppercase tracking-[0.12em] text-copy-soft">
+              Per visit
+            </p>
+            <p className="mt-2 font-semibold text-ink">
+              Base + lawn area + perimeter + station distance
+            </p>
+            <p className="mt-1">Minimum charge: $45.00</p>
+          </div>
+          <div className="rounded-lg border border-stroke bg-surface-raised px-4 py-3">
+            <p className="text-xs font-semibold uppercase tracking-[0.12em] text-copy-soft">
+              Season
+            </p>
+            <p className="mt-2 font-semibold text-ink">20 weekly visits from May to September</p>
+            <p className="mt-1">Seasonal plan applies the default 20% discount.</p>
+          </div>
+        </div>
+        <div className="mt-4 overflow-x-auto rounded-lg border border-stroke bg-surface-muted p-3">
+          <code className="block min-w-[32rem] whitespace-nowrap text-xs leading-6 text-ink">
             perVisit = max(20 + 0.05*A + 0.10*P + 1.0*D, 45)
-          </code>
-        </p>
-        <p className="mt-2 text-sm text-copy-muted">
-          <code className="rounded bg-surface-muted px-2 py-1 text-xs text-ink">
+            <br />
             fullSeason = perVisit * visits, seasonalDiscounted = fullSeason * (1 - discountRate)
           </code>
-        </p>
+        </div>
       </div>
 
       <div className="space-y-2 text-sm text-copy-muted">
@@ -30,7 +45,7 @@ export const HowRateCalculatedPage = () => (
           <span className="font-semibold text-ink">Base fee:</span> ${quotePricing.baseFee.toFixed(2)}
         </p>
         <p>
-          <span className="font-semibold text-ink">Area rate:</span> ${quotePricing.areaRate.toFixed(3)} per m2
+          <span className="font-semibold text-ink">Area rate:</span> ${quotePricing.areaRate.toFixed(3)} per m²
         </p>
         <p>
           <span className="font-semibold text-ink">Perimeter rate:</span> $

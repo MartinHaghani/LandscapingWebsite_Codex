@@ -91,13 +91,13 @@ export const PublicQuotePaymentContent = ({
   }, [returnStatus]);
 
   return (
-    <div className="mx-auto w-full max-w-6xl px-4 py-14 md:px-8 md:py-20">
+    <div className="mx-auto w-full max-w-6xl px-4 py-10 md:px-8 md:py-20">
       <section className="space-y-8">
-        <div className="bg-[#111813] px-6 py-8 text-white md:px-10 md:py-10">
+        <div className="rounded-[1.75rem] bg-[#111813] px-5 py-7 text-white shadow-soft md:rounded-none md:px-10 md:py-10">
           <p className="text-xs font-semibold uppercase text-[#9fd8b0]">Approved Quote Payment</p>
           <div className="mt-4 flex flex-wrap items-start justify-between gap-4">
             <div className="max-w-3xl">
-              <h1 className="font-display text-4xl font-bold leading-tight md:text-5xl">
+              <h1 className="font-display text-3xl font-bold leading-tight md:text-5xl">
                 Complete payment for your approved quote.
               </h1>
               <p className="mt-4 max-w-2xl text-sm leading-7 text-white/78 md:text-base">
@@ -105,8 +105,10 @@ export const PublicQuotePaymentContent = ({
               </p>
             </div>
 
-            <Link to="/">
-              <Button variant="secondary">Back to Autoscape</Button>
+            <Link to="/" className="w-full sm:w-auto">
+              <Button variant="secondary" className="w-full sm:w-auto">
+                Back to Autoscape
+              </Button>
             </Link>
           </div>
         </div>
@@ -172,11 +174,13 @@ export const PublicQuotePaymentContent = ({
                       : 'Stripe will collect the approved discounted seasonal total once. The amount shown here is the final approved quote total for payment.'}
                   </p>
                   <div className="mt-5 flex flex-wrap gap-3">
-                    <Button onClick={onCheckout} disabled={ctaDisabled}>
+                    <Button onClick={onCheckout} disabled={ctaDisabled} className="w-full sm:w-auto">
                       {checkoutLoading ? 'Opening Stripe...' : ctaLabel}
                     </Button>
-                    <a href="mailto:contact@autoscape.ca">
-                      <Button variant="secondary">Contact Autoscape</Button>
+                    <a href="mailto:contact@autoscape.ca" className="w-full sm:w-auto">
+                      <Button variant="secondary" className="w-full sm:w-auto">
+                        Contact Autoscape
+                      </Button>
                     </a>
                   </div>
                   {checkoutError ? <p className="mt-4 text-sm font-medium text-red-700">{checkoutError}</p> : null}

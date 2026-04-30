@@ -6,6 +6,8 @@ Autoscape is a multi-app monorepo for:
 - API + quote operations backend (`server/`)
 - admin operations console (`admin/`)
 - public shell branding uses the horizontal Autoscape PNG mark at `client/public/images/brand/autoscape-horizontal-brand.png`
+- public shell loads the Google Ads tag `AW-17991079326` from `client/index.html`
+- successful public `Submit Quote` draft saves fire the Google Ads `Submit lead form` conversion `AW-17991079326/FqIMCOHXqYIcEJ6r6IJD`
 
 ## Documentation Map
 
@@ -121,17 +123,17 @@ Current live status: `autoscape-staging` is active in Toronto with `autoscape-st
 
 ## Public Flow Highlights
 
-- `/services` starts with the Service Area map card.
+- `/services` starts with the Service Area map card, using a shorter mobile map height so the address CTA and services remain visible sooner.
 - Coverage overlay now uses a light basemap + green `#329F5B` polygon treatment and remains privacy-hardened.
 - Service-area endpoints use configured server-side base stations, with the default Vaughan station loaded whenever no base-station env is provided so production does not silently become empty coverage.
 - Services page uses CTA-only handoff to `/instant-quote`.
 - Services page now presents five inline premium-vector service illustrations for Autonomous Mowing, Smart Edging, Cleanup & Debris, Seasonal Maintenance, and Performance Reporting.
-- Marketing pages now use launch-ready production copy (no placeholder content), warm-light visual tokens, and readability-first spacing/contrast across the home, services, and contact surfaces, with mobile navigation, a cleaner signed-out header divider, footer quick links, and a contact page that promotes direct phone/email actions in rounded panels beside the message form.
-- Home hero now uses a balanced desktop split: left-side headline and CTA group with `No sign-up required.`, right-side animated transparent lawn parcel with a looping three-state sequence: perimeter `learning your lawn...`, 2-second `Generating path`, then `Mowing...` along an 11-pass rounded boustrophedon infill path with denser direction arrows, direct mowing spawn on the first scanline, and a ticker-flip status capsule sized to the active label and centered under the full lawn graphic.
+- Marketing pages now use launch-ready production copy (no placeholder content), warm-light visual tokens, and readability-first spacing/contrast across the home, services, and contact surfaces, with mobile navigation, a cleaner signed-out header divider, route-aware full/compact footer variants, footer quick links, and a contact page that promotes compact direct phone/email actions beside the message form.
+- Home hero now uses a balanced desktop split: left-side headline and CTA group with `No sign-up required.`, a mobile-stacked CTA row on narrow screens, and a right-side animated transparent lawn parcel with a looping three-state sequence: perimeter `learning your lawn...`, 2-second `Generating path`, then `Mowing...` along an 11-pass rounded boustrophedon infill path with denser direction arrows, direct mowing spawn on the first scanline, and a ticker-flip status capsule sized to the active label and centered under the full lawn graphic.
 - Home page now keeps a tighter top-of-page flow: hero, pricing comparison, mower technology section, three-card services overview with Autonomous Mowing, Edging, and Cleanup & Debris, FAQ, and final quote CTA, with flatter post-hero sections, an unboxed larger sample lawn price check with extra intro spacing, a narrower row-label column, a seasonal `20% off` corner badge, icon-led mower specs, larger FAQ answers with bolded key phrases, and the older Why Electric, How It Works, Why Autoscape, and Testimonials sections removed.
 - Instant Quote flow is now draft-first:
-  - intro chrome uses a badge-only heading and a three-step progress rail instead of marketing helper copy
-  - map step uses a thin address pill instead of a large step header card
+  - intro chrome uses a badge-only heading and a compact-on-mobile three-step progress rail instead of marketing helper copy
+  - address entry stacks the address input and continue button on mobile, and the map step uses a thin address pill instead of a large step header card
   - geometry capture is persistent freehand drawing, not point-by-point vertex placement
     - `Draw lawn` and `Draw obstacle` toggle into `Stop drawing`
     - completed strokes automatically exit draw mode instead of staying latched on
@@ -187,10 +189,10 @@ Current live status: `autoscape-staging` is active in Toronto with `autoscape-st
   8. Confirmation page `/quote-confirmation/:quoteId`
 - Customer dashboard:
   - `/complete-profile/*` captures required phone number for any auth method
-  - `/dashboard` is now an action-first customer home with a primary quote state, lifecycle timeline, May-September schedule note, support panel, conditional quote history, and conditional card-on-file panel
-  - `/dashboard/account/*` renders Clerk profile/security/password management inside the dashboard area
-  - `/dashboard/quotes/:quoteId` for owned quote detail
-  - `/dashboard/quotes/:quoteId/payment` is the authenticated approved-quote payment surface and can start Stripe Checkout for owned quotes
+  - `/dashboard` is now an action-first customer home with mobile-first CTA placement, a primary quote state, lifecycle timeline, May-September schedule note, support panel, conditional quote history, and conditional card-on-file panel
+  - `/dashboard/account/*` renders Clerk profile/security/password management with the shared Autoscape Clerk appearance inside the dashboard area
+  - `/dashboard/quotes/:quoteId` for owned quote detail with grouped mobile-readable quote summaries
+  - `/dashboard/quotes/:quoteId/payment` is the authenticated approved-quote payment surface with task-first mobile CTAs and can start Stripe Checkout for owned quotes
 - Public payment:
   - approved quote emails now use a simplified Autoscape-styled transactional layout with one `/pay/:token` CTA, the actual selected payment amount/mode, quote details, Stripe reassurance, and the unchanged approved map preview
   - public payment tokens are long random secrets stored only as SHA-256 hashes server-side

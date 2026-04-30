@@ -27,9 +27,12 @@ describe('InstantQuotePage progress header', () => {
     expect(markup).toContain('data-quote-progress="true"');
     expect(markup).toContain('data-step-state="current"');
     expect(markup).toContain('data-step-state="upcoming"');
+    expect(markup).toContain('Step 1 of 3');
     expect(markup).toContain('Review quote');
     expect(markup).toContain('Current step');
     expect(markup).toContain('Up next');
+    expect(markup).toContain('flex flex-col gap-3 sm:flex-row sm:items-start');
+    expect(markup).toContain('w-full shrink-0 whitespace-nowrap px-5 py-3 sm:w-auto');
     expect(markup).not.toContain('Select a property address to lock the map center.');
     expect(markup).not.toContain('Draw service polygons and obstacles, then request your quote.');
     expect(markup).not.toContain('Map your property and generate a quote instantly');

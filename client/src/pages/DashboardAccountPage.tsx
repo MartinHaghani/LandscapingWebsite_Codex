@@ -3,6 +3,7 @@ import { Link, Navigate, useLocation } from 'react-router-dom';
 import { Button } from '../components/ui/Button';
 import { Card } from '../components/ui/Card';
 import { hasRequiredPhone } from '../lib/accountProfile';
+import { autoscapeClerkAppearance } from '../lib/clerkAppearance';
 
 export const DashboardAccountPage = () => {
   const location = useLocation();
@@ -38,13 +39,19 @@ export const DashboardAccountPage = () => {
             Manage your password, profile details, and security settings through your Autoscape account.
           </p>
         </div>
-        <Link to="/dashboard">
-          <Button variant="secondary">Back to Dashboard</Button>
+        <Link to="/dashboard" className="w-full sm:w-auto">
+          <Button variant="secondary" className="w-full sm:w-auto">
+            Back to Dashboard
+          </Button>
         </Link>
       </div>
 
-      <div className="flex justify-center">
-        <UserProfile path="/dashboard/account" routing="path" />
+      <div className="mx-auto flex w-full max-w-4xl justify-center">
+        <UserProfile
+          appearance={autoscapeClerkAppearance}
+          path="/dashboard/account"
+          routing="path"
+        />
       </div>
     </div>
   );

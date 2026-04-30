@@ -4,11 +4,13 @@
 
 1. User sees the horizontal Autoscape PNG brand mark in the navbar on entry and again in the footer.
 2. Navbar keeps desktop nav links, quote CTA, signed-out auth links with the slim divider, signed-in dashboard link, and mobile menu behavior.
+3. Public page loads include the Google Ads tag `AW-17991079326` from the Vite HTML shell.
+4. Quote, auth, confirmation, payment, and dashboard-payment funnel routes render a compact footer; general marketing routes keep the full footer.
 
 ## Services: Coverage-First Entry
 
 1. User opens `/services`.
-2. Page loads `GET /api/service-area` and renders approximate coverage overlay on a light basemap.
+2. Page loads `GET /api/service-area` and renders approximate coverage overlay on a light basemap, with a shorter visible map on mobile.
    - The API builds coverage from server-side base-station config and falls back to the default Vaughan station when no base-station env is provided.
 3. Page presents five illustrated service cards: Autonomous Mowing, Smart Edging, Cleanup & Debris, Seasonal Maintenance, and Performance Reporting.
 4. User clicks `Check my address` CTA to start Instant Quote.
@@ -16,7 +18,7 @@
 ## Home: Transparent Hero Graphic
 
 1. User opens `/`.
-2. Hero opens as a balanced desktop split: left side for headline, subhead, CTA buttons, and `No sign-up required.` helper copy; right side for the oversized lawn graphic.
+2. Hero opens as a balanced desktop split: left side for headline, subhead, CTA buttons, and `No sign-up required.` helper copy; right side for the oversized lawn graphic. On narrow mobile screens, CTA buttons stack before returning to a row once there is enough width.
 3. Hero media renders a transparent lawn parcel directly over the existing page background and occupies most of the right half.
 4. The parcel silhouette follows one fixed curated path made from four straight runs and four circular corner arcs at a locked hero-only scale.
 5. Hero animation phases loop in order:
@@ -79,9 +81,10 @@
 
 1. User enters/selects address (Canada/US suggestions only).
 2. Suggestion list supports keyboard controls (`ArrowUp/ArrowDown/Enter/Escape`) and click selection.
-3. Client resolves selection to `lat/lng`.
-4. Client calls `POST /api/service-area/check`.
-5. Gate outcomes:
+3. Address input and continue action stack on mobile so neither control squeezes the other.
+4. Client resolves selection to `lat/lng`.
+5. Client calls `POST /api/service-area/check`.
+6. Gate outcomes:
 
 - in area: proceed to map step
 - out of area: redirect `/service-unavailable`
@@ -112,9 +115,9 @@
 21. On the third slide, the right-side nav control changes from `Next` to a green `Done` button that slowly fades the popup back into the quote tool without dismissing the current guide session.
 22. The caption strip is now step-aware: step 1 uses `Draw loosely around your lawn.` and `Move the points to match your lawn.`, step 2 uses `Draw each separate lawn area on its own.`, `Add extra points`, and `Delete extra points`, and step 3 uses `Use Draw obstacle for gardens, pools, and other no-mow areas.`
 23. Dismissing the guide keeps it closed for the current mapped-address session; changing address and loading a new map session re-arms it. Restored local drafts do not auto-open the guide.
-22. Builder page is full-width and uses a floating top-right action cluster with a manual `Guide` help button beside the primary `Done` action instead of the old embedded summary sidebar.
-23. Client auto-saves draft state in browser local storage (address + step + geometry + billing mode + unit mode) under `autoscape.quoteDraft.v2`; restore hydration completes before auto-save writes back, so map-step drafts reopen directly on the Mapbox builder, and legacy local `serviceFrequency` fields are stripped.
-24. Client computes effective geometry and pricing with:
+24. Builder page is full-width and uses a floating top-right action cluster with a manual `Guide` help button beside the primary `Done` action instead of the old embedded summary sidebar.
+25. Client auto-saves draft state in browser local storage (address + step + geometry + billing mode + unit mode) under `autoscape.quoteDraft.v2`; restore hydration completes before auto-save writes back, so map-step drafts reopen directly on the Mapbox builder, and legacy local `serviceFrequency` fields are stripped.
+26. Client computes effective geometry and pricing with:
 
 - `perVisit = max(20 + 0.05*A + 0.10*P + 1.0*D, 45)`
 - `D` from `POST /api/service-area/check` (`distanceToNearestStationKm`)
@@ -135,9 +138,10 @@
 - payload includes `polygonSource.schemaVersion = 2` with `activePolygonId`, `polygons[].ringPoints`, and nullable `polygons[].rawStrokePoints`
 
 6. Server validates geometry, derives canonical quote geometry from `ringPoints`, and stores draft quote + version 1 history row.
-7. If request is authenticated, server records draft address to Clerk account metadata (`addressHistory`, latest as `defaultAddress`).
-8. Client clears local draft snapshot and routes to `/quote-confirmation/:quoteId`.
-9. If the API is unreachable instead, client keeps the local draft and shows a direct API reachability error so the user can retry after the backend is available.
+7. After the successful draft response, the client fires the Google Ads `Submit lead form` conversion `AW-17991079326/FqIMCOHXqYIcEJ6r6IJD` with the quote ID as the transaction ID.
+8. If request is authenticated, server records draft address to Clerk account metadata (`addressHistory`, latest as `defaultAddress`).
+9. Client clears local draft snapshot and routes to `/quote-confirmation/:quoteId`.
+10. If the API is unreachable instead, client keeps the local draft and shows a direct API reachability error so the user can retry after the backend is available.
 
 ### Contact Finalize (Required)
 
@@ -181,9 +185,10 @@
 - conditional quote history only when multiple quotes exist and the primary quote is still in progress
 - conditional Stripe `Card on file` panel only when Stripe returns a reusable saved/default payment method
 - account summary card with link to `/dashboard/account/*` for Clerk-managed password, profile, and security tasks
-- secondary quote detail screen (`/dashboard/quotes/:quoteId`)
-- authenticated approved-quote payment screen (`/dashboard/quotes/:quoteId/payment`) that can start Stripe Checkout for the owned quote
-6. If a saved Stripe billing method exists, `POST /api/account/quotes/:quoteId/billing-portal` creates a Stripe Customer Portal session so the customer can update the card on file from the dashboard without a custom card form.
+- secondary quote detail screen (`/dashboard/quotes/:quoteId`) with grouped mobile-readable quote details
+- authenticated approved-quote payment screen (`/dashboard/quotes/:quoteId/payment`) that can start Stripe Checkout for the owned quote with full-width mobile actions
+6. On mobile, the dashboard and payment surfaces keep the amount/status/next CTA before secondary summaries and supporting account details.
+7. If a saved Stripe billing method exists, `POST /api/account/quotes/:quoteId/billing-portal` creates a Stripe Customer Portal session so the customer can update the card on file from the dashboard without a custom card form.
 
 ### Public Approved Quote Payment
 
@@ -216,7 +221,7 @@
 
 ## Contact Form
 
-1. User opens `/contact` under the `Talk to the Autoscape Team` heading and sees prominent direct phone and email links in rounded panels beside the message form.
+1. User opens `/contact` under the `Talk to the Autoscape Team` heading and sees compact direct phone and email actions beside the message form.
 2. User can call/email directly or submit the contact form (name/email/phone/message required, address optional).
 3. Client sends idempotent `POST /api/contact`.
 4. Server writes/updates lead + contact event.

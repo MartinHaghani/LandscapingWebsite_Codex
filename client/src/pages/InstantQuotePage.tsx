@@ -763,8 +763,8 @@ export const InstantQuotePage = () => {
 
   const areaValue =
     unitMode === 'metric'
-      ? `${formatNumber(metrics.areaM2)} m2`
-      : `${formatNumber(toFt2(metrics.areaM2))} ft2`;
+      ? `${formatNumber(metrics.areaM2)} m²`
+      : `${formatNumber(toFt2(metrics.areaM2))} ft²`;
   const perimeterValue =
     unitMode === 'metric'
       ? `${formatNumber(metrics.perimeterM)} m`
@@ -779,7 +779,7 @@ export const InstantQuotePage = () => {
         <h1 className="sr-only">Instant Quote</h1>
       </div>
 
-      <QuoteProgressRail currentStep={currentStep} />
+      <QuoteProgressRail currentStep={currentStep} compactOnMobile />
 
       {currentStep === 'address' ? (
         <div className="relative isolate z-50 mt-8 grid gap-6">
@@ -788,7 +788,7 @@ export const InstantQuotePage = () => {
               <label htmlFor="address" className="form-label">
                 Enter your address
               </label>
-              <div className="flex items-start gap-3">
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-start">
                 <div className="relative z-30 flex-1">
                   <input
                     id="address"
@@ -840,7 +840,7 @@ export const InstantQuotePage = () => {
                 <Button
                   type="submit"
                   disabled={!canContinueToMap}
-                  className="shrink-0 whitespace-nowrap px-5 py-3"
+                  className="w-full shrink-0 whitespace-nowrap px-5 py-3 sm:w-auto"
                 >
                   Continue to Map
                 </Button>
@@ -878,13 +878,13 @@ export const InstantQuotePage = () => {
         </div>
       ) : (
         <div ref={mapStepRef} className="mt-8 grid gap-6">
-          <div className="flex items-center justify-between gap-3 rounded-full border border-stroke/80 bg-surface/70 px-4 py-2 text-sm shadow-soft">
+          <div className="flex flex-col gap-2 rounded-2xl border border-stroke/80 bg-surface/70 px-4 py-3 text-sm shadow-soft sm:flex-row sm:items-center sm:justify-between sm:rounded-full sm:py-2">
             <p className="min-w-0 truncate text-copy-muted">{selectedAddress}</p>
             <Button
               type="button"
               variant="ghost"
               onClick={goToAddressStep}
-              className="min-h-0 shrink-0 px-3 py-1.5 text-xs uppercase tracking-[0.14em]"
+              className="min-h-0 w-full shrink-0 px-3 py-1.5 text-xs uppercase tracking-[0.14em] sm:w-auto"
             >
               Change Address
             </Button>
@@ -918,7 +918,7 @@ export const InstantQuotePage = () => {
                   selection={selection}
                   polygons={polygons}
                   activePolygonId={activePolygonId}
-                  className="h-[68vh] min-h-[460px] md:h-[74vh] md:min-h-[620px]"
+                  className="h-[68vh] min-h-[430px] md:h-[74vh] md:min-h-[620px]"
                   onPolygonDrawn={(kind, shape) => {
                     createDrawnPolygon(kind, shape.ringPoints, shape.rawStrokePoints);
                   }}

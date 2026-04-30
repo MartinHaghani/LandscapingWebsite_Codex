@@ -275,7 +275,7 @@ export const ServiceAreaMap = ({
   }, [highlightedLocation, highlightedLabel]);
 
   return (
-    <div className="relative h-[440px] w-full overflow-hidden rounded-2xl border border-stroke shadow-soft md:h-[360px]">
+    <div className="relative h-[300px] w-full overflow-hidden rounded-2xl border border-stroke shadow-soft sm:h-[340px] md:h-[360px]">
       <div
         ref={containerRef}
         className="h-full w-full"

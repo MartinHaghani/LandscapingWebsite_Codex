@@ -19,7 +19,11 @@ const userState = {
 };
 
 vi.mock('@clerk/clerk-react', () => ({
-  UserProfile: (props: { path?: string }) => <div>Mock Clerk UserProfile {props.path}</div>,
+  UserProfile: (props: { appearance?: unknown; path?: string }) => (
+    <div>
+      Mock Clerk UserProfile {props.path} {props.appearance ? 'with appearance' : ''}
+    </div>
+  ),
   useAuth: () => authState,
   useUser: () => userState
 }));
@@ -46,6 +50,7 @@ describe('DashboardAccountPage', () => {
 
     expect(markup).toContain('Profile and security');
     expect(markup).toContain('Mock Clerk UserProfile /dashboard/account');
+    expect(markup).toContain('with appearance');
     expect(markup).toContain('Back to Dashboard');
   });
 });

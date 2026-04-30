@@ -19,7 +19,7 @@ const renderSummaryContent = () =>
           rawStrokePoints: null
         }
       ]}
-      areaValue="450 m2"
+      areaValue="450 m²"
       perimeterValue="92 m"
       billingMode="seasonal"
       onBillingModeChange={() => {}}
@@ -60,7 +60,7 @@ describe('InstantQuoteSummaryContent', () => {
     expect(markup).toContain('Weekly visits');
     expect(markup).toContain('May to September');
     expect(markup).not.toContain('May 1 to September 30');
-    expect(markup).toContain('450 m2');
+    expect(markup).toContain('450 m²');
     expect(markup).toContain('92 m');
     expect(markup.match(/Area:/g) ?? []).toHaveLength(1);
     expect(markup.match(/Perimeter:/g) ?? []).toHaveLength(1);

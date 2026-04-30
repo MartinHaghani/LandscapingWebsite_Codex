@@ -101,8 +101,8 @@ export const CompleteProfilePage = () => {
   };
 
   return (
-    <div className="mx-auto w-full max-w-4xl px-4 py-14 md:px-8 md:py-20">
-      <Card className="space-y-6 bg-surface p-7 md:p-10">
+    <div className="mx-auto w-full max-w-4xl px-4 py-10 md:px-8 md:py-20">
+      <Card className="space-y-6 bg-surface p-5 md:p-10">
         <div>
           <p className="text-xs uppercase tracking-[0.15em] text-brand">Complete Profile</p>
           <h1 className="mt-3 text-3xl font-semibold text-ink md:text-4xl">Add your phone number to continue</h1>
@@ -129,7 +129,7 @@ export const CompleteProfilePage = () => {
 
           {error ? <p className="text-sm text-red-700">{error}</p> : null}
 
-          <Button type="submit" disabled={saving}>
+          <Button type="submit" disabled={saving} className="w-full sm:w-auto">
             {saving ? 'Saving...' : 'Save and Continue'}
           </Button>
         </form>

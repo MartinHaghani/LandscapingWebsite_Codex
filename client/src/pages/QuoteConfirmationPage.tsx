@@ -62,13 +62,13 @@ export const QuoteConfirmationContent = ({
         aria-hidden="true"
         className="pointer-events-none absolute inset-x-0 top-0 -z-10 h-[28rem] bg-[radial-gradient(circle_at_top_left,rgba(50,159,91,0.12),transparent_34%),linear-gradient(180deg,rgba(255,255,255,0.92),rgba(247,244,238,0.45))]"
       />
-      <div className="mx-auto flex min-h-[calc(100vh-8rem)] w-full max-w-5xl items-center px-4 py-12 md:px-8 md:py-16">
-        <section className="w-full rounded-[2.25rem] border border-stroke bg-surface px-7 py-8 shadow-soft md:px-10 md:py-10 lg:px-12">
+      <div className="mx-auto flex min-h-[calc(100vh-8rem)] w-full max-w-5xl items-center px-4 py-10 md:px-8 md:py-16">
+        <section className="w-full rounded-[1.75rem] border border-stroke bg-surface px-5 py-7 shadow-soft md:rounded-[2.25rem] md:px-10 md:py-10 lg:px-12">
           <div className="grid gap-10 lg:grid-cols-[minmax(0,1.05fr)_minmax(300px,0.95fr)] lg:gap-12">
             <div className="max-w-2xl">
               <p className="text-xs font-semibold uppercase tracking-[0.15em] text-brand">Instant Quote Confirmation</p>
 
-              <h1 className="mt-5 max-w-3xl font-display text-4xl font-bold leading-tight text-ink md:text-6xl">
+              <h1 className="mt-5 max-w-3xl font-display text-3xl font-bold leading-tight text-ink md:text-6xl">
                 Your quote is in review.
               </h1>
 

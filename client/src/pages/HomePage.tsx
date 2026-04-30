@@ -77,24 +77,26 @@ const faqs = [
 export const HomePage = () => (
   <div>
     <section className="relative overflow-hidden border-b border-stroke bg-mesh md:h-[calc(100svh-73px)]">
-      <div className="mx-auto flex w-full max-w-7xl flex-col px-4 py-6 md:h-full md:px-8 md:py-3">
-        <div className="grid gap-4 md:min-h-0 md:flex-1 md:grid-cols-2 md:items-center md:gap-6">
+      <div className="mx-auto flex w-full max-w-7xl flex-col px-4 py-8 md:h-full md:px-8 md:py-3">
+        <div className="grid gap-6 md:min-h-0 md:flex-1 md:grid-cols-2 md:items-center md:gap-6">
           <div className="fade-up flex items-center justify-center md:h-full">
             <div className="w-full max-w-[24rem]">
               <h1 className="font-display text-4xl font-bold leading-tight text-ink md:text-6xl">
                 Autonomous Landscaping Service
               </h1>
               <p className="mt-6 max-w-xl text-base text-copy-muted md:text-lg">
-                Percise Cuts, Lower Costs
+                Precise Cuts, Lower Costs
               </p>
-              <div className="mt-7 flex flex-wrap items-center gap-3">
-                <div>
+              <div className="mt-7 flex flex-col gap-3 min-[375px]:flex-row min-[375px]:flex-wrap min-[375px]:items-center">
+                <div className="w-full min-[375px]:w-auto">
                   <Link to="/instant-quote">
-                    <Button>Get Instant Quote</Button>
+                    <Button className="w-full min-[375px]:w-auto">Get Instant Quote</Button>
                   </Link>
                 </div>
-                <Link to="/contact">
-                  <Button variant="secondary">Talk to the Team</Button>
+                <Link to="/contact" className="w-full min-[375px]:w-auto">
+                  <Button variant="secondary" className="w-full min-[375px]:w-auto">
+                    Talk to the Team
+                  </Button>
                 </Link>
               </div>
               <p className="mt-3 text-sm font-medium text-copy-soft">No sign-up required.</p>
@@ -102,7 +104,7 @@ export const HomePage = () => (
           </div>
 
           <div className="fade-up flex min-h-0 items-center justify-center md:h-full [animation-delay:120ms]">
-            <HomeHeroLawnGraphic className="h-[360px] w-full md:h-full md:-translate-y-8 lg:-translate-y-10" />
+            <HomeHeroLawnGraphic className="h-[300px] w-full sm:h-[340px] md:h-full md:-translate-y-8 lg:-translate-y-10" />
           </div>
         </div>
       </div>

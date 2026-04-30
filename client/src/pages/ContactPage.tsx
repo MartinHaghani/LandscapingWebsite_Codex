@@ -18,12 +18,14 @@ const emptyForm = {
 
 const contactMethods = [
   {
+    label: 'Call Autoscape',
     value: '+1 (416) 848-2841',
     href: 'tel:+14168482841',
     helper: 'Best for quote help, scheduling, and urgent service questions.',
     icon: 'phone'
   },
   {
+    label: 'Email the team',
     value: 'contact@autoscape.ca',
     href: 'mailto:contact@autoscape.ca',
     helper: 'Best for property details, documents, and follow-up questions.',
@@ -134,13 +136,16 @@ export const ContactPage = () => {
                 <a
                   key={method.href}
                   href={method.href}
-                  className="grid grid-cols-[2.75rem_minmax(0,1fr)] gap-4 py-5 transition-colors hover:text-brand"
+                  className="grid grid-cols-[2.75rem_minmax(0,1fr)] gap-4 py-5 transition-colors hover:text-brand sm:grid-cols-[3rem_minmax(0,1fr)]"
                 >
                   <span className="flex h-11 w-11 items-center justify-center rounded-lg border border-brand/25 bg-brand/10 text-brand">
                     <ContactIcon icon={method.icon} />
                   </span>
                   <span>
-                    <span className="block break-words font-display text-2xl font-bold leading-tight text-ink md:text-3xl">
+                    <span className="block text-xs font-semibold uppercase tracking-[0.14em] text-brand">
+                      {method.label}
+                    </span>
+                    <span className="mt-1 block break-words text-base font-semibold leading-snug text-ink sm:text-lg">
                       {method.value}
                     </span>
                     <span className="mt-2 block text-sm leading-6 text-copy-muted">

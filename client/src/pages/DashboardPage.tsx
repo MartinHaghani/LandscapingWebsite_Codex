@@ -113,8 +113,10 @@ const ActionLinkButton = ({
   label: string;
   secondary?: boolean;
 }) => (
-  <Link to={href}>
-    <Button variant={secondary ? 'secondary' : 'primary'}>{label}</Button>
+  <Link to={href} className="w-full sm:w-auto">
+    <Button variant={secondary ? 'secondary' : 'primary'} className="w-full sm:w-auto">
+      {label}
+    </Button>
   </Link>
 );
 
@@ -144,19 +146,19 @@ export const DashboardPageContent = ({
   const cardOnFile = primaryQuoteDetail?.billing.cardOnFile ?? null;
 
   return (
-    <div className="mx-auto w-full max-w-7xl px-4 py-14 md:px-8 md:py-20">
-      <section className="bg-[#111813] px-6 py-8 text-white md:px-10 md:py-10">
+    <div className="mx-auto w-full max-w-7xl px-4 py-10 md:px-8 md:py-20">
+      <section className="rounded-[1.75rem] bg-[#111813] px-5 py-7 text-white shadow-soft md:rounded-none md:px-10 md:py-10">
         <p className="text-xs font-semibold uppercase tracking-[0.14em] text-[#9fd8b0]">Customer dashboard</p>
-        <div className="mt-4 flex flex-wrap items-start justify-between gap-5">
-          <div className="max-w-3xl">
-            <h1 className="font-display text-4xl font-bold leading-tight md:text-5xl">{action.title}</h1>
+        <div className="mt-4 flex flex-col items-start gap-5 sm:flex-row sm:flex-wrap sm:justify-between">
+          <div className="w-full min-w-0 max-w-3xl sm:flex-1">
+            <h1 className="font-display text-3xl font-bold leading-tight md:text-5xl">{action.title}</h1>
             <p className="mt-4 max-w-2xl text-sm leading-7 text-white/78 md:text-base">{action.body}</p>
-            <p className="mt-4 text-xs uppercase tracking-[0.14em] text-white/45">
+            <p className="mt-4 break-words text-xs uppercase tracking-[0.14em] text-white/45">
               {customerName} · {customerEmail}
             </p>
           </div>
 
-          <div className="flex flex-wrap gap-3">
+          <div className="flex w-full flex-col gap-3 sm:w-auto sm:flex-row sm:flex-wrap">
             <ActionLinkButton href={action.ctaHref} label={action.ctaLabel} />
             <ActionLinkButton href="/dashboard/account" label="Manage account" secondary />
           </div>
@@ -170,11 +172,11 @@ export const DashboardPageContent = ({
         <div className="space-y-6">
           <div className="mt-6 grid gap-6 lg:grid-cols-[minmax(0,1.2fr)_minmax(300px,0.8fr)]">
             {activeQuote ? (
-              <Card className="bg-surface p-7">
+              <Card className="bg-surface p-5 md:p-7">
                 <div className="flex flex-wrap items-start justify-between gap-4">
                   <div>
                     <p className="text-xs font-semibold uppercase tracking-[0.15em] text-copy-soft">Active property</p>
-                    <h2 className="mt-3 text-2xl font-semibold text-ink md:text-3xl">{activeQuote.address}</h2>
+                    <h2 className="mt-3 text-xl font-semibold leading-snug text-ink md:text-3xl">{activeQuote.address}</h2>
                     <p className="mt-3 text-[11px] uppercase tracking-[0.16em] text-copy-soft">
                       Quote ID: {activeQuote.id}
                     </p>
@@ -233,7 +235,7 @@ export const DashboardPageContent = ({
                 ) : null}
               </Card>
             ) : (
-              <Card className="bg-surface p-7">
+              <Card className="bg-surface p-5 md:p-7">
                 <p className="text-xs font-semibold uppercase tracking-[0.15em] text-copy-soft">Dashboard</p>
                 <h2 className="mt-3 text-2xl font-semibold text-ink">No active property yet</h2>
                 <p className="mt-3 text-sm leading-7 text-copy-muted">
@@ -245,7 +247,7 @@ export const DashboardPageContent = ({
               </Card>
             )}
 
-            <Card className="bg-surface p-7">
+            <Card className="bg-surface p-5 md:p-7">
               <p className="text-xs font-semibold uppercase tracking-[0.15em] text-copy-soft">Account</p>
               <h2 className="mt-3 text-2xl font-semibold text-ink">Profile and security</h2>
               <p className="mt-3 text-sm leading-7 text-copy-muted">
@@ -263,14 +265,14 @@ export const DashboardPageContent = ({
 
           {primaryQuote && primaryQuoteState !== 'complete' ? (
             <section className="grid gap-6 lg:grid-cols-[minmax(0,1.2fr)_minmax(300px,0.8fr)]">
-              <Card className="bg-surface p-7">
+              <Card className="bg-surface p-5 md:p-7">
                 <div className="flex items-center justify-between gap-3">
                   <div>
                     <p className="text-xs font-semibold uppercase tracking-[0.14em] text-copy-soft">Lifecycle</p>
                     <h2 className="mt-2 text-2xl font-semibold text-ink">Where your quote stands</h2>
                   </div>
                 </div>
-                <div className="mt-6 grid gap-4 md:grid-cols-4">
+                <div className="mt-6 grid gap-4 sm:grid-cols-2 md:grid-cols-4">
                   {lifecycleSteps.map((step, index) => {
                     const isComplete = index < lifecycleStepIndex;
                     const isCurrent = index === lifecycleStepIndex;
@@ -297,13 +299,13 @@ export const DashboardPageContent = ({
               </Card>
 
               <div className="grid gap-6">
-                <Card className="bg-surface p-7">
+                <Card className="bg-surface p-5 md:p-7">
                   <p className="text-xs font-semibold uppercase tracking-[0.14em] text-copy-soft">Season schedule</p>
                   <h2 className="mt-3 text-xl font-semibold text-ink">May through September</h2>
                   <p className="mt-3 text-sm leading-7 text-copy-muted">{getSeasonReadinessCopy(primaryQuote, now)}</p>
                 </Card>
 
-                <Card className="bg-surface p-7">
+                <Card className="bg-surface p-5 md:p-7">
                   <p className="text-xs font-semibold uppercase tracking-[0.14em] text-copy-soft">Need help?</p>
                   <h2 className="mt-3 text-xl font-semibold text-ink">Reach Autoscape directly</h2>
                   <div className="mt-4 space-y-2 text-sm text-copy-muted">
@@ -325,7 +327,7 @@ export const DashboardPageContent = ({
 
           {primaryQuoteState === 'complete' ? (
             <section className="mt-6 grid gap-6 md:grid-cols-2 xl:grid-cols-3">
-              <Card className="bg-surface p-7">
+              <Card className="bg-surface p-5 md:p-7">
                 <p className="text-xs font-semibold uppercase tracking-[0.14em] text-copy-soft">Plan summary</p>
                 <h2 className="mt-3 text-xl font-semibold text-ink">
                   {primaryQuote?.billingMode === 'per_session' ? 'Per visit plan' : 'Seasonal plan'}
@@ -338,7 +340,7 @@ export const DashboardPageContent = ({
                 ) : null}
               </Card>
 
-              <Card className="bg-surface p-7">
+              <Card className="bg-surface p-5 md:p-7">
                 <p className="text-xs font-semibold uppercase tracking-[0.14em] text-copy-soft">Need help?</p>
                 <h2 className="mt-3 text-xl font-semibold text-ink">Reach Autoscape directly</h2>
                 <div className="mt-4 space-y-2 text-sm text-copy-muted">
@@ -356,7 +358,7 @@ export const DashboardPageContent = ({
               </Card>
 
               {cardOnFile ? (
-                <Card className="bg-surface p-7">
+                <Card className="bg-surface p-5 md:p-7">
                   <p className="text-xs font-semibold uppercase tracking-[0.14em] text-copy-soft">Card on file</p>
                   <h2 className="mt-3 text-xl font-semibold text-ink">
                     {cardOnFile.brand.charAt(0).toUpperCase() + cardOnFile.brand.slice(1)} ending in {cardOnFile.last4}
@@ -379,7 +381,7 @@ export const DashboardPageContent = ({
           {primaryQuoteError ? <p className="text-sm text-copy-muted">{primaryQuoteError}</p> : null}
 
           {quoteHistory.length > 0 ? (
-            <Card className="bg-surface p-7">
+            <Card className="bg-surface p-5 md:p-7">
               <div className="flex flex-wrap items-center justify-between gap-3">
                 <div>
                   <p className="text-xs font-semibold uppercase tracking-[0.14em] text-copy-soft">Quote history</p>
@@ -388,7 +390,7 @@ export const DashboardPageContent = ({
                 <ActionLinkButton href="/instant-quote" label="Create new quote" secondary />
               </div>
 
-              <div className="mt-6 space-y-3">
+              <div className="mt-6 grid gap-3">
                 {quoteHistory.map((quote) => {
                   const quoteState = getQuoteDashboardState(quote);
                   return (

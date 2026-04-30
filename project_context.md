@@ -16,19 +16,20 @@ Autoscape provides:
 - Service map uses a light basemap with green `#329F5B` overlay for coverage clarity.
 - Coverage is explicitly approximate and privacy-hardened.
 - Service-area coverage uses server-side base-station config and falls back to the default Vaughan station when no base-station env is provided.
-- Services marketing grid now uses five shared-style inline SVG illustrations: Autonomous Mowing, Smart Edging, Cleanup & Debris, Seasonal Maintenance, and Performance Reporting.
+- Services page keeps the coverage map prominent but shortens the visible map height on mobile before the five shared-style inline SVG illustrations: Autonomous Mowing, Smart Edging, Cleanup & Debris, Seasonal Maintenance, and Performance Reporting.
 - Navigation includes the horizontal Autoscape PNG brand mark, mobile menu support, quote CTA, signed-out auth links separated by a slim divider, and a signed-in dashboard link styled with the standard site font/color treatment.
-- Footer repeats the horizontal Autoscape PNG brand mark and includes production contact details and internal quick links.
-- Marketing pages (home/services/contact) use non-placeholder production copy and a warm-light readability-first design system; the contact page makes phone and email primary actions in rounded panels beside the message form.
-- Home hero uses a symmetric desktop split with copy/CTAs on the left, `No sign-up required.` helper text under the CTA row, and a responsive animated lawn parcel on the right with a perimeter-learning wall trace, an 11-pass rounded horizontal infill raster with denser direction arrows, direct mowing spawn on the first scanline, mowing follow-through, visible CAD dimensions, a restrained under-shadow, and a dynamically sized ticker-flip status capsule centered under the full lawn graphic.
+- Public shell loads the Google Ads tag `AW-17991079326` from `client/index.html`; the admin shell is not tagged.
+- Footer repeats the horizontal Autoscape PNG brand mark and includes production contact details and internal quick links; quote, auth, payment, confirmation, and dashboard-payment funnel routes use a compact footer variant.
+- Marketing pages (home/services/contact) use non-placeholder production copy and a warm-light readability-first design system; the contact page makes phone and email compact direct actions beside the message form.
+- Home hero uses a symmetric desktop split with copy/CTAs on the left, `No sign-up required.` helper text under the CTA row, a stacked CTA layout on narrow mobile screens, and a responsive animated lawn parcel on the right with a perimeter-learning wall trace, an 11-pass rounded horizontal infill raster with denser direction arrows, direct mowing spawn on the first scanline, mowing follow-through, visible CAD dimensions, a restrained under-shadow, and a dynamically sized ticker-flip status capsule centered under the full lawn graphic.
 - Home page places a tighter pricing comparison section directly below the hero, using an unboxed sample-lawn context with a larger portrait lawn SVG and a muted two-column size/schedule row on the left, plus a flatter shared comparison panel on the right with a narrower row-label column and a top-right seasonal discount badge in the Autoscape season cell, so Autoscape and local competitors stay visually adjacent on mobile, the sample lawn avoids rounded bubble wrappers, and the same asymmetrical lawn-only mask, no interior decorative strokes, downward-facing driveway cutout, and brand-green fill treatment remain intact.
 - Home page adds a `Meet our lawnmowers` section below pricing, pairing four icon-led unnumbered selling points on the left with a cleaned transparent mower asset on the right; the sensor copy uses sensor fusion language.
 - Home page is streamlined to hero, pricing comparison, mower technology, a three-card services overview with Autonomous Mowing, Edging, and Cleanup & Debris, an FAQ covering cadence, service area, access, safety, weather, and pricing, and the closing instant-quote CTA, with the post-hero sections using a flatter warm-light rhythm that matches the landing area.
 
 ### Instant Quote Flow
 
-0. Page opens with a badge-only header and a three-step progress rail (`Enter address` -> `Map your lawn` -> `Review quote`) instead of CTA-style step cards.
-1. Step 1 address selection (Canada/US suggestion scope).
+0. Page opens with a badge-only header and a compact-on-mobile three-step progress rail (`Enter address` -> `Map your lawn` -> `Review quote`) instead of CTA-style step cards.
+1. Step 1 address selection (Canada/US suggestion scope), with the address input and continue action stacked on mobile.
    - Keyboard suggestion controls supported (`ArrowUp/ArrowDown/Enter/Escape`).
 2. Coverage gate (`POST /api/service-area/check`) before entering map step.
 3. Step 2 geometry drawing uses persistent freehand capture with service + obstacle polygons.
@@ -72,6 +73,7 @@ Autoscape provides:
    - `polygonSource` now requires `schemaVersion: 2` with `activePolygonId`, `polygons[]`, `ringPoints`, and nullable `rawStrokePoints`.
    - Server derives/stores canonical quote geometry from `ringPoints`; legacy source payloads are rejected.
    - If the API is unreachable, the review page keeps the local draft intact and shows a direct API reachability error instead of a generic submit failure.
+   - After a successful draft response, the public client fires the Google Ads `Submit lead form` conversion `AW-17991079326/FqIMCOHXqYIcEJ6r6IJD` with the quote ID as the transaction ID.
 7. Confirmation handoff at `/quote-confirmation/:quoteId` (legacy `/quote-contact/:quoteId` redirects here).
 8. Signed-in draft creation records quote address in Clerk account metadata (`addressHistory` + `defaultAddress`).
 9. Authenticated user claim step (`POST /api/quote/:quoteId/claim`) links quote ownership.
@@ -85,15 +87,15 @@ Autoscape provides:
 
 ### Customer Accounts
 
-- Clerk handles customer sign-up/sign-in, Google auth, and password reset.
+- Clerk handles customer sign-up/sign-in, Google auth, and password reset with a shared Autoscape-branded appearance in public auth and account profile screens.
 - Required phone is enforced in-app via `/complete-profile/*` for all auth methods.
 - Phone is stored on account metadata (`unsafeMetadata.autoscapeProfile.phone`).
 - Users without phone are gated before dashboard and quote confirmation routes.
 - Protected dashboard routes:
-  - `/dashboard` (action-first account home with primary quote state, lifecycle timeline, support/schedule panels, conditional quote history, and conditional Stripe card-on-file panel)
+  - `/dashboard` (action-first account home with mobile-first CTA placement, primary quote state, lifecycle timeline, support/schedule panels, conditional quote history, and conditional Stripe card-on-file panel)
   - `/dashboard/account/*` (Clerk-managed profile, password, and security settings)
-  - `/dashboard/quotes/:quoteId` (owned quote detail)
-  - `/dashboard/quotes/:quoteId/payment` (authenticated approved-quote payment surface that can start Stripe Checkout)
+  - `/dashboard/quotes/:quoteId` (owned quote detail with grouped mobile-readable summary data)
+  - `/dashboard/quotes/:quoteId/payment` (authenticated approved-quote payment surface with task-first mobile CTAs that can start Stripe Checkout)
 - Approved quote emails link to public `/pay/:token` pages. Tokens are long random secrets stored only as SHA-256 hashes and are regenerated on approval/resend.
 - Public/authenticated payment APIs are `GET /api/payment-links/:token`, `POST /api/payment-links/:token/checkout`, `POST /api/account/quotes/:quoteId/payment/checkout`, `POST /api/account/quotes/:quoteId/billing-portal`, and `POST /api/stripe/webhook`.
 - Seasonal quotes create one-time Stripe Checkout Sessions for the approved discounted seasonal total. Per-session quotes create weekly Stripe subscription Checkout Sessions, use a May 1 billing-cycle anchor before season or charge immediately during season, cap paid invoices at `sessionsMax`, and stop no later than September 30.
@@ -109,7 +111,7 @@ Autoscape provides:
 
 ### Contact Flow
 
-- Contact page presents prominent direct phone/email links for fast outreach.
+- Contact page presents compact direct phone/email actions for fast outreach.
 - Contact form captures name/email/phone/message (required) + address (optional).
 - Contact submission is idempotent (`POST /api/contact`).
 

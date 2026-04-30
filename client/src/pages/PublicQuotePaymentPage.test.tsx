@@ -64,6 +64,7 @@ describe('PublicQuotePaymentPage', () => {
     expect(markup).toContain('Seasonal Payment');
     expect(markup).toContain('$1,160.00');
     expect(markup).toContain('Pay seasonal total');
+    expect(markup).toContain('w-full sm:w-auto');
     expect(markup).toContain('Q-APPROVED1');
     expect(markup).toContain('/api/approved-quote-preview/token-123');
     expect(markup).not.toContain('Sign in');

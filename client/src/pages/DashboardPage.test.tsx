@@ -103,6 +103,8 @@ describe('DashboardPage', () => {
     const markup = renderDashboard();
 
     expect(markup).toContain('Get instant quote');
+    expect(markup).toContain('rounded-[1.75rem] bg-[#111813]');
+    expect(markup).toContain('w-full min-w-0 max-w-3xl');
     expect(markup).toContain('No quotes yet.');
     expect(markup).not.toContain('Card on file');
     expect(markup).not.toContain('Where your quote stands');
@@ -158,6 +160,7 @@ describe('DashboardPage', () => {
 
     expect(markup).toContain('Waiting for payment');
     expect(markup).toContain('Open payment link');
+    expect(markup).toContain('flex w-full flex-col gap-3');
     expect(markup).toContain('Other quotes on this account');
     expect(markup).toContain('Q-OLD1');
   });
