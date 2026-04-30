@@ -20,6 +20,8 @@ describe('Navbar', () => {
 
     expect(markup).toContain('Sign In');
     expect(markup).toContain('Sign Up');
+    expect(markup).toContain('/images/brand/autoscape-horizontal-brand.png');
+    expect(markup).toContain('aria-label="Autoscape home"');
     expect(markup).toContain('h-4 w-px bg-stroke');
     expect(markup).not.toContain('text-copy-soft">,</span>');
   });

@@ -11,7 +11,11 @@ export const Footer = () => (
   <footer className="mt-16 border-t border-stroke bg-surface-muted/70">
     <div className="mx-auto grid w-full max-w-7xl gap-8 px-4 py-10 md:grid-cols-3 md:px-8">
       <div>
-        <p className="font-display text-lg font-semibold text-ink">Autoscape</p>
+        <img
+          src="/images/brand/autoscape-horizontal-brand.png"
+          alt="Autoscape"
+          className="h-8 w-auto max-w-[10.5rem]"
+        />
         <p className="mt-2 max-w-md text-sm text-copy-muted">
           Autonomous lawn care with deterministic quote measurement, route precision, and dependable
           recurring service.

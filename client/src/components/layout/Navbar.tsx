@@ -55,8 +55,12 @@ export const Navbar = () => {
   return (
     <header className="sticky top-0 z-40 border-b border-stroke/90 bg-surface/95 backdrop-blur-lg">
       <div className="mx-auto flex w-full max-w-7xl items-center justify-between px-4 py-4 md:px-8">
-        <Link to="/" className="flex items-center">
-          <span className="font-display text-xl font-bold tracking-wide text-ink">AUTOSCAPE</span>
+        <Link to="/" className="flex items-center" aria-label="Autoscape home">
+          <img
+            src="/images/brand/autoscape-horizontal-brand.png"
+            alt="Autoscape"
+            className="h-8 w-auto max-w-[9.75rem] sm:h-9 sm:max-w-[11.25rem]"
+          />
         </Link>
 
         <nav className="hidden items-center gap-6 md:flex">

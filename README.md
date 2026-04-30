@@ -5,6 +5,7 @@ Autoscape is a multi-app monorepo for:
 - public marketing + instant quote flow (`client/`)
 - API + quote operations backend (`server/`)
 - admin operations console (`admin/`)
+- public shell branding uses the horizontal Autoscape PNG mark at `client/public/images/brand/autoscape-horizontal-brand.png`
 
 ## Documentation Map
 

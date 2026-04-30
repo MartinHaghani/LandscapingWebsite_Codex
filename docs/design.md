@@ -393,6 +393,7 @@ Decision:
 Implementation:
 
 - semantic token families in `tailwind.config.ts` + `client/src/index.css` (`canvas`, `surface`, `copy`, `line`, `brand`)
+- public navbar and footer render the horizontal Autoscape PNG brand mark from `client/public/images/brand/autoscape-horizontal-brand.png`
 - larger default reading scale, higher text contrast, and clearer spacing rhythm for older homeowners
 - standardized focus-visible treatment and form primitives (`form-label`, `form-input`, `status-*`)
 - service-area map remains privacy-hardened but now uses light-compatible controls/popup treatment

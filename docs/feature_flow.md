@@ -1,5 +1,10 @@
 # Feature Flow
 
+## Public Shell
+
+1. User sees the horizontal Autoscape PNG brand mark in the navbar on entry and again in the footer.
+2. Navbar keeps desktop nav links, quote CTA, signed-out auth links with the slim divider, signed-in dashboard link, and mobile menu behavior.
+
 ## Services: Coverage-First Entry
 
 1. User opens `/services`.
