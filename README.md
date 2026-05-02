@@ -121,7 +121,7 @@ Production-like hosting uses DigitalOcean App Platform with two isolated apps:
 
 Each environment has `public-web` (`client/` static site), `admin-web` (`admin/` static site), `api` (`server/` Node service), a pre-deploy Prisma migration job, and its own DigitalOcean Managed PostgreSQL database with PostGIS enabled. App spec templates live in `.do/app.staging.yaml` and `.do/app.production.yaml`; fill secrets only in DigitalOcean or in ignored private spec copies. DigitalOcean's Node buildpack reads the committed `engines.node=20.x` package pins for runtime selection. See [`docs/deployment.md`](./docs/deployment.md) for setup, env vars, DNS, smoke tests, and rollback.
 
-Current live status: `autoscape-staging` is active in Toronto with `autoscape-staging-db` on PostgreSQL 16 and migrations applied. Staging uses self-managed GoDaddy CNAME records pointing at the DigitalOcean default ingress, and the custom domains are active. Authenticated customer/admin smoke tests passed on staging, including quote finalization, admin verification, and persistence after redeploy. The deployed API now exposes the approved-quote preview route and admin approval-email resend route. The staging API has both Stripe secrets configured; Stripe checkout smoke testing still needs to pass. Production has not been created because the end-to-end approval email/resend smoke, Stripe staging checkout smoke, and launch confirmation still need to happen.
+Current live status: `autoscape-staging` is active in Toronto with `autoscape-staging-db` on PostgreSQL 16 and migrations applied. Staging uses self-managed GoDaddy CNAME records pointing at the DigitalOcean default ingress, and the custom domains are active. Authenticated customer/admin smoke tests passed on staging, including quote finalization, admin verification, approval-email resend, persistence after redeploy, and Stripe sandbox Checkout/webhook payment confirmation for quote `Q-XFIZFLJX`. Production has not been created because production environment values and launch confirmation still need to happen.
 
 ## Public Flow Highlights
 
@@ -243,6 +243,7 @@ Admin endpoints under `/api/admin/*` include:
 - approved quote delivery:
   - selected version submit sets `status=verified` / `customer_status=awaiting_payment`, creates a fresh secure payment token, attempts a one-button payment-focused Resend transactional email, and records `approval_email_sent` or `approval_email_failed` without rolling back approval
   - manual resend is available at `POST /api/admin/quotes/:id/approval-email/resend`
+  - superseded `/pay/:token` URLs from earlier approval/resend emails resolve to the current payment link so customers are not blocked by an older email while Checkout stays tied to one current payment state
   - public preview images are served from `GET /api/approved-quote-preview/:token`, which proxies a Mapbox satellite static image with approved, added, and removed service-area overlays
 - Stripe payment APIs:
   - `GET /api/payment-links/:token`

@@ -100,7 +100,7 @@ Autoscape provides:
   - `/dashboard/account/*` (Clerk-managed profile, password, and security settings)
   - `/dashboard/quotes/:quoteId` (owned quote detail with grouped mobile-readable summary data)
   - `/dashboard/quotes/:quoteId/payment` (authenticated approved-quote payment surface with task-first mobile CTAs that can start Stripe Checkout)
-- Approved quote emails link to public `/pay/:token` pages. Tokens are long random secrets stored only as SHA-256 hashes and are regenerated on approval/resend.
+- Approved quote emails link to public `/pay/:token` pages. Tokens are long random secrets stored only as SHA-256 hashes and are regenerated on approval/resend; superseded email tokens resolve to the current payment link instead of dead-ending while the quote is still payable.
 - Public/authenticated payment APIs are `GET /api/payment-links/:token`, `POST /api/payment-links/:token/checkout`, `POST /api/account/quotes/:quoteId/payment/checkout`, `POST /api/account/quotes/:quoteId/billing-portal`, and `POST /api/stripe/webhook`.
 - Seasonal quotes create one-time Stripe Checkout Sessions for the approved discounted seasonal total. Per-session quotes create weekly Stripe subscription Checkout Sessions, use a May 1 billing-cycle anchor before season or charge immediately during season, cap paid invoices at `sessionsMax`, and stop no later than September 30.
 - Account quote detail responses now include conditional billing metadata so the dashboard can show the current card-on-file summary when Stripe has a reusable saved method.
@@ -144,7 +144,7 @@ Admin app (separate Vite frontend) supports:
   - selected version submit sets `status=verified`, `customer_status=awaiting_payment`
   - verified approval creates a fresh secure payment token, attempts a simplified payment-focused approved-quote email through Resend, and records delivery state without rolling back approval on failure
   - the approved-quote payment email uses one secure `/pay/:token` CTA, shows only the actual selected Stripe payment amount/mode, includes the quote address/ID/schedule, and keeps the existing tokenized map preview with a minimal conditional legend
-  - manual approval email resend is available for verified quotes, rotates the public payment token, and the public preview endpoint serves the tokenized Mapbox satellite delta image used by the email/payment page
+  - manual approval email resend is available for verified quotes, rotates the public payment token, keeps older emailed `/pay/:token` URLs pointed at the current payment state, and the public preview endpoint serves the tokenized Mapbox satellite delta image used by the email/payment page
 - quote mutation endpoints are restricted to `OWNER`, `ADMIN`, and `REVIEWER` roles
 - quote notes
 - `Area requests` queue with heatmap + cluster map module and hotspot list
@@ -164,7 +164,7 @@ Admin app (separate Vite frontend) supports:
   - Production uses the `main` branch, deploys manually to `autoscape.ca`, `www.autoscape.ca`, `api.autoscape.ca`, and `admin.autoscape.ca`.
   - Each environment has `public-web` (`client/`), `admin-web` (`admin/`), `api` (`server/`), a Prisma pre-deploy migration job, and its own managed Postgres/PostGIS database.
   - Node runtime selection is pinned by committed `engines.node=20.x` package manifests for the root, `server/`, `client/`, and `admin/` apps.
-  - Live status on 2026-04-21: staging app `autoscape-staging` is active in `tor`, `autoscape-staging-db` is PostgreSQL 16 in `tor1`, and migrations have run. Staging custom domains use self-managed GoDaddy CNAME records and are active. Authenticated staging smoke tests passed for customer quote finalization, admin review/verification, and persistence after redeploy; approved-quote preview/resend routes are deployed, and both Stripe API secrets are configured, but real approval email/resend smoke and Stripe checkout smoke still need to pass before production is created.
+  - Live status on 2026-05-02 UTC: staging app `autoscape-staging` is active in `tor`, `autoscape-staging-db` is PostgreSQL 16 in `tor1`, and migrations have run. Staging custom domains use self-managed GoDaddy CNAME records and are active. Authenticated staging smoke tests passed for customer quote finalization, admin review/verification, persistence after redeploy, approval-email resend, and Stripe sandbox Checkout/webhook payment confirmation for quote `Q-XFIZFLJX`; production remains uncreated until production environment values and launch confirmation are ready.
 - Persistence: Prisma + Postgres + PostGIS (`server/prisma/schema.prisma`)
 - Approved quote verification creates tokenized Stripe payment links, attempts Resend delivery, records sent/failed delivery rows and audit events, and keeps approval successful if email or preview preflight fails. Tokenized preview images use server-proxied Mapbox satellite static imagery with approved, added, and removed area overlays.
 - Migrations:
@@ -193,7 +193,7 @@ Admin app (separate Vite frontend) supports:
 - Customer address history/default persisted in Clerk private metadata (`autoscapeProfile`).
 - Email marketing opt-in is optional, unchecked by default, and persisted on leads as `consentMarketing`; no SMS marketing consent or SMS sending provider is active at launch.
 - Stripe Checkout handles card/payment collection; Autoscape stores Stripe object IDs, payment state, and paid invoice IDs, not card details.
-- Public payment-link tokens are stored hashed, scoped to approved quote payment, and revoked when a newer approved email/resend token is issued.
+- Public payment-link tokens are stored hashed and scoped to approved quote payment; when a newer approved email/resend token supersedes an older token, the older emailed URL resolves to the latest payment link rather than creating a separate checkout state.
 - Admin RBAC roles: `OWNER`, `ADMIN`, `REVIEWER`, `MARKETING`.
 - Admin role mapping source: Clerk org roles `owner/admin/reviewer/marketing`.
 - MARKETING role gets masked PII for lists and exports.

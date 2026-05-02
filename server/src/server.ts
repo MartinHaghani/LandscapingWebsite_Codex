@@ -874,7 +874,7 @@ export const createServer = (options: CreateServerOptions = {}) => {
   };
 
   const resolvePaymentLink = async (req: http.IncomingMessage, token: string) =>
-    dataStore.getPaymentLinkByTokenHash({
+    dataStore.getCurrentPaymentLinkForTokenHash({
       tokenHash: hashPaymentToken(token),
       previewImageBaseUrl: buildPreviewImageBaseUrl(req)
     });

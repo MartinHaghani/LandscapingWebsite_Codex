@@ -95,7 +95,7 @@ Implementation:
 - Node is pinned to `20.x` through the committed package `engines` fields so DigitalOcean builds do not drift to the platform default.
 - Prisma migrations run as a pre-deploy job so schema changes block rollout if they fail.
 - Secrets live in DigitalOcean environment variables, not committed app specs or `.env` files.
-- Live status on 2026-04-21 keeps this separation intact: staging is active with PostgreSQL 16/PostGIS and self-managed GoDaddy CNAMEs, authenticated quote/admin smoke tests pass through admin verification plus redeploy persistence, and the approved-quote preview/resend routes are deployed. The API has both Stripe secrets configured and still needs checkout smoke testing. Production is intentionally uncreated until real approval email/resend smoke testing, Stripe checkout smoke testing, and launch confirmation pass.
+- Live status on 2026-05-02 UTC keeps this separation intact: staging is active with PostgreSQL 16/PostGIS and self-managed GoDaddy CNAMEs, authenticated quote/admin smoke tests pass through admin verification, redeploy persistence, approval-email resend, and Stripe sandbox Checkout/webhook payment confirmation. Production is intentionally uncreated until production environment values and launch confirmation are ready.
 
 ## 8) Immutable Revision History
 
@@ -125,7 +125,7 @@ Transitions:
 - selected version submit sets `status=verified`, `customer_status=awaiting_payment`
 - verified submit creates a fresh secure payment token, attempts a simplified payment-focused Resend email with one payment CTA and only the selected Stripe amount/mode, records sent/failed delivery state for auditability, keeps approval successful on delivery failure, and exposes manual resend for verified quotes awaiting payment
 - approved quote map previews are tokenized public image URLs backed by server-proxied Mapbox satellite static imagery; they show approved service area, added-by-admin area, and removed-by-admin area using the quote-tool color family, while email legends only include added/removed keys when those deltas exist
-- approved quote payment links are tokenized public URLs (`/pay/:token`) stored as hashes server-side; resend rotates the payment token and revokes older active links
+- approved quote payment links are tokenized public URLs (`/pay/:token`) stored as hashes server-side; resend rotates the payment token, and superseded emailed URLs resolve to the current payment link without creating separate checkout state
 
 ## 10) Event-Oriented Audit Logging
 

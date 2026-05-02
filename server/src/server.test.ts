@@ -1620,7 +1620,7 @@ describe('admin quote editor workflow', () => {
     assert.equal(sentEmails.length, 0);
   });
 
-  it('creates a secure public seasonal checkout link and revokes older resend tokens', async () => {
+  it('creates a secure public seasonal checkout link and keeps older email tokens on the current payment link', async () => {
     const sentEmails: Array<{ to: string; subject: string; html: string; text: string }> = [];
     const sessions: CreateStripeCheckoutSessionInput[] = [];
     const { baseUrl } = await startServer({
@@ -1680,10 +1680,17 @@ describe('admin quote editor workflow', () => {
     const secondToken = extractPaymentToken(sentEmails[1]?.html ?? '');
     assert.notEqual(secondToken, firstToken);
 
-    const revokedResponse = await fetch(`${baseUrl}/api/payment-links/${firstToken}`);
-    assert.equal(revokedResponse.status, 410);
+    const supersededResponse = await fetch(`${baseUrl}/api/payment-links/${firstToken}`);
+    assert.equal(supersededResponse.status, 200);
+    const supersededBody = (await supersededResponse.json()) as {
+      quote: { id: string };
+      payment: { status: string; amountCents: number };
+    };
+    assert.equal(supersededBody.quote.id, scenario.quoteId);
+    assert.equal(supersededBody.payment.status, 'awaiting_payment');
+    assert.equal(supersededBody.payment.amountCents, 319984);
 
-    const checkoutResponse = await fetch(`${baseUrl}/api/payment-links/${secondToken}/checkout`, {
+    const checkoutResponse = await fetch(`${baseUrl}/api/payment-links/${firstToken}/checkout`, {
       method: 'POST'
     });
     assert.equal(checkoutResponse.status, 200);

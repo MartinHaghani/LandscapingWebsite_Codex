@@ -2,7 +2,7 @@
 
 Autoscape deploys to DigitalOcean App Platform as two isolated apps: staging first, production after staging passes smoke tests. Each app has three components and its own managed PostgreSQL database.
 
-## Current Live Status (2026-04-21)
+## Current Live Status (2026-05-02 UTC)
 
 Staging is created and active in DigitalOcean:
 
@@ -14,9 +14,9 @@ Staging is created and active in DigitalOcean:
 - Database/user names: `autoscape_staging`
 - Migration status: the `migrate` pre-deploy job applied all committed Prisma migrations successfully; redeploy `9d5878fa-20e7-4f60-a33d-d876f456cdd4` completed `ACTIVE` with no pending migrations.
 - Runtime status: the root, `server/`, `client/`, and `admin/` package manifests pin `engines.node` to `20.x`; DigitalOcean App Platform's Node buildpack reads this package setting for Node version selection.
-- Stripe status: the API has both staging Stripe secrets set as secret runtime env vars after deployment `3fd59849-4f83-4964-b09b-e1535fcdbe58`; staging Checkout still needs an end-to-end smoke test.
-- Smoke-test status: authenticated staging smoke mostly passes. Custom domains, API health, public/admin SPA routes, CORS, service-area check, draft quote creation, customer Clerk claim/finalize/dashboard, admin Clerk health/list/editor/version submit, verified quote page, CSV export, audit logging, and persistence after redeploy passed for quote `Q-D6S4ZMR2`. The deployed API now exposes the public approved-quote preview route and admin approval-email resend route; the remaining email gate is an authenticated end-to-end approval/resend smoke against a real verified quote.
-- Production status: not created. Do not create or route production until the approval email delivery/resend smoke passes on staging, production Clerk/Mapbox/Resend values are confirmed, and Martin confirms launch.
+- Stripe status: the Autoscape sandbox webhook destination `we_1TSTjbFOk9B0ar2ot9otfd2x` sends the seven API-handled event types to `https://api-staging.autoscape.ca/api/stripe/webhook`; `STRIPE_WEBHOOK_SECRET` was rotated on the `api` service and deployed in `5ef1fdfd-a64f-4274-a628-225d45dfccbd`.
+- Smoke-test status: authenticated staging smoke passes for custom domains, API health, public/admin SPA routes, CORS, service-area check, draft quote creation, customer Clerk claim/finalize/dashboard, admin Clerk health/list/editor/version submit, verified quote page, CSV export, audit logging, persistence after redeploy, approval-email resend, and Stripe sandbox Checkout/webhook payment confirmation for quote `Q-XFIZFLJX`.
+- Production status: not created. Do not create or route production until production Clerk/Mapbox/Resend/Stripe values are confirmed and Martin confirms launch.
 
 Staging custom domains use self-managed DNS at GoDaddy:
 
@@ -42,13 +42,14 @@ Passed staging checks:
 - admin quote inbox, quote editor, version creation, version submit, audit log, and CSV export
 - verified quote confirmation page and admin editor page
 - quote persistence after App Platform redeploy `9d5878fa-20e7-4f60-a33d-d876f456cdd4`
+- approved-quote email resend on quote `Q-XFIZFLJX`
+- Stripe sandbox Checkout payment on quote `Q-XFIZFLJX`; Stripe Workbench showed webhook deliveries `Total 1` and `Failed 0`, and the admin editor showed `Status: paid`
 - bundle scan for accidental `localhost`/loopback API origins
 
 Remaining staging validation before production:
 
-- `GET /api/approved-quote-preview/:token` is deployed. A fake token should return `{"error":"Approved quote preview not found."}` from the real route, while a valid delivery token should proxy a Mapbox static satellite image.
-- `POST /api/admin/quotes/:id/approval-email/resend` is deployed. Unauthenticated calls should return `401`; authenticated admin resend still needs to be smoke-tested against a verified quote.
 - `POST /api/admin/quotes/:id/versions/:versionNumber/submit` should record an approved-quote email delivery attempt and keep the quote verified if Resend, Mapbox, or public URL configuration fails.
+- Confirm production Clerk, Mapbox, Resend, and Stripe live values before creating or routing production.
 
 Staging environment variable audit, names only:
 
@@ -227,7 +228,7 @@ Stripe:
 
 - Use the Autoscape sandbox/test account for staging.
 - Set `STRIPE_SECRET_KEY` on the `api` service from the Stripe Dashboard API keys page. Use a test secret key for staging and a live secret key only for production.
-- Set `STRIPE_WEBHOOK_SECRET` on the `api` service from the Stripe webhook endpoint signing secret. Both staging Stripe secrets have been applied in DigitalOcean.
+- Set `STRIPE_WEBHOOK_SECRET` on the `api` service from the Stripe webhook endpoint signing secret. Staging uses webhook destination `we_1TSTjbFOk9B0ar2ot9otfd2x`, and both staging Stripe secrets have been applied in DigitalOcean.
 - The webhook endpoint URL should be `https://api-staging.autoscape.ca/api/stripe/webhook` for staging and `https://api.autoscape.ca/api/stripe/webhook` for production.
 - The code uses hosted Checkout with inline prices, so no Stripe Product or Price records are required for v1.
 - Keep payment methods, receipts, retry/dunning behavior, branding, and live-account activation configured in Stripe Dashboard before launch.

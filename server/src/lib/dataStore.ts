@@ -6660,6 +6660,28 @@ export class DataStore {
     });
   }
 
+  async getCurrentPaymentLinkForTokenHash(input: PaymentLinkLookupInput): Promise<QuotePaymentLinkContext | null> {
+    const paymentLink = await this.getPaymentLinkByTokenHash(input);
+    if (!paymentLink?.tokenRevokedAt) {
+      return paymentLink;
+    }
+
+    const latestPaymentLink = await this.getPaymentLinkByQuotePublicId({
+      quotePublicId: paymentLink.publicQuoteId,
+      access: {
+        // Possession of a previous public payment token is enough to reach the current payment state.
+        isAdmin: true
+      },
+      previewImageBaseUrl: input.previewImageBaseUrl
+    });
+
+    if (!latestPaymentLink || latestPaymentLink.tokenRevokedAt) {
+      return paymentLink;
+    }
+
+    return latestPaymentLink;
+  }
+
   async recordPaymentCheckoutSession(
     input: PaymentCheckoutSessionInput
   ): Promise<QuotePaymentLinkUpdateResult | null> {

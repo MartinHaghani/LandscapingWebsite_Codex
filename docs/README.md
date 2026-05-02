@@ -10,4 +10,4 @@
 - [`changelog.md`](./changelog.md): commit history snapshot generated from git log.
 - [`troubleshooting.md`](./troubleshooting.md): runbook for local port drift, stale frontend servers, and verification steps.
 
-Current deployment note: staging is active and authenticated quote/admin smoke tests pass through redeploy persistence, but production remains blocked until the approval-email resend and approved-quote preview API gap is resolved or removed from launch scope.
+Current deployment note: staging is active and authenticated quote/admin smoke tests pass through redeploy persistence, approval-email resend, and Stripe sandbox Checkout/webhook payment confirmation. Production remains blocked until production environment values and launch confirmation are ready.
