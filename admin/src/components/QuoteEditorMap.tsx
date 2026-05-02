@@ -16,6 +16,7 @@ import {
   quotePolygonOutlineColorExpression,
   quotePolygonOutlineWidthExpression
 } from '../lib/polygonPresentation';
+import { addAdminMapContextLayers, ADMIN_MAP_STYLE } from '../lib/adminMapContextLayers';
 import 'mapbox-gl/dist/mapbox-gl.css';
 
 interface QuoteEditorMapProps {
@@ -37,7 +38,6 @@ const PATH_SOURCE_ID = 'quote-active-path-source';
 const POLYGON_FILL_LAYER_ID = 'quote-polygons-fill';
 const POLYGON_OUTLINE_LAYER_ID = 'quote-polygons-outline';
 const PATH_LAYER_ID = 'quote-active-path-line';
-const MAP_STYLE = 'mapbox://styles/mapbox/satellite-v9';
 
 const getSelectedPolygonId = (selection: SelectionTarget) => {
   if (selection.kind === 'none') {
@@ -245,7 +245,7 @@ export const QuoteEditorMap = ({
     mapboxgl.accessToken = token;
     const map = new mapboxgl.Map({
       container: containerRef.current,
-      style: MAP_STYLE,
+      style: ADMIN_MAP_STYLE,
       center,
       zoom: 16,
       pitch: 0,
@@ -489,6 +489,8 @@ export const QuoteEditorMap = ({
     canvas.addEventListener('mouseleave', clearHoveredInsertHit);
 
     map.on('load', () => {
+      addAdminMapContextLayers(map);
+
       const polygonFeatureCollection: FeatureCollection<Polygon> = {
         type: 'FeatureCollection',
         features: []

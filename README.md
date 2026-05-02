@@ -194,10 +194,10 @@ Current live status: `autoscape-staging` is active in Toronto with `autoscape-st
   7. `POST /api/quote/:quoteId/contact` finalizes contact + sets status `in_review` (`customer_status=pending`)
   8. Confirmation page `/quote-confirmation/:quoteId`
 - Admin-created quote claim flow:
-  - admins can open `/quotes/new`, reserve a real `Q-...` ID before save, draw lawn/obstacle geometry on the same satellite quote map, and save an anonymous payable quote directly as `status=verified`, `customer_status=awaiting_payment`, `contact_pending=false`
+  - admins can open `/quotes/new`, reserve a real six-character easy Quote ID before save, draw lawn/obstacle geometry on the Mapbox Satellite Streets quote map with building/house-number context where available, and save an anonymous payable quote directly as `status=verified`, `customer_status=awaiting_payment`, `contact_pending=false`
   - admin-created quotes stay in the existing `quotes` table with `auth_user_id=null` until the customer claims them; version 1 is stored in `quote_versions` with `actor_type=admin`
-  - `/claim-quote` accepts manual Quote ID entry, and `/claim-quote?quoteId=Q-...` preloads the preview; customers can see quote stats/pricing before signing up
-  - claiming now requires an authenticated account with completed phone, then attaches `quotes.auth_user_id`, records a `quote_claim` contact event when contact data is available, lets the customer choose `seasonal` or `per_session`, and sends them to `/dashboard/quotes/:quoteId/payment`
+  - `/claim-quote` accepts a six-character SMS-style Quote ID entry grouped as `ABC 123`, and `/claim-quote?quoteId=ABC123` preloads the preview; legacy `Q-...` links continue to resolve
+  - claiming now requires an authenticated account with completed phone, then attaches `quotes.auth_user_id`, records a `quote_claim` contact event when contact data is available, lets the customer choose `seasonal` or `per_session`, and opens Stripe Checkout directly from the claim flow
 - Customer dashboard:
   - `/complete-profile/*` captures required phone number for any auth method
     - it also stores optional email marketing opt-in at `unsafeMetadata.autoscapeProfile.emailMarketingConsent`, which the API propagates to lead records during quote claim/finalize
@@ -227,9 +227,9 @@ Current live status: `autoscape-staging` is active in Toronto with `autoscape-st
 Admin endpoints under `/api/admin/*` include:
 
 - quotes inbox (`/quotes`) with cursor pagination
-- new polished admin quote creator (`/quotes/new`) with reserved Quote ID, copyable generic/direct claim links, Mapbox address search, warning-only service-area check, live area/perimeter/lawn/obstacle/vertex stats, global + seasonal discounts, and admin price override mode
+- new polished admin quote creator (`/quotes/new`) with reserved six-character Quote ID, copyable generic/direct claim links, Mapbox address search, Satellite Streets property context, warning-only service-area check, live area/perimeter/lawn/obstacle/vertex stats, global + seasonal discounts, and admin price override mode
 - quote editor (`/quotes/:quoteId/edit`) with full polygon tools, calculated vs actual quote panel, and version history
-  - Mapbox satellite basemap in editor for property verification context
+  - Mapbox Satellite Streets basemap in editor for property verification context, with building outlines and house-number labels where available
   - persisted quote polygons hydrate immediately when editor opens
   - editor now mirrors the public quote map styling and uses the same freehand `Draw lawn` / `Draw obstacle` workflow, vertex dragging, outline-click vertex insertion, delete/clear actions, and shared draw-end simplifier as the public quote tool
   - approved quotes show latest Stripe payment state and related Stripe object IDs for admin support

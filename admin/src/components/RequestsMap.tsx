@@ -1,12 +1,8 @@
 import { useEffect, useMemo, useRef } from 'react';
-import maplibregl, {
-  type GeoJSONSource,
-  type LngLatBoundsLike,
-  type Map,
-  type StyleSpecification
-} from 'maplibre-gl';
-import 'maplibre-gl/dist/maplibre-gl.css';
+import mapboxgl, { type GeoJSONSource, type LngLatBoundsLike, type Map } from 'mapbox-gl';
+import 'mapbox-gl/dist/mapbox-gl.css';
 import type { AdminRequestMapPoint } from '../lib/api';
+import { addAdminMapContextLayers, ADMIN_MAP_STYLE } from '../lib/adminMapContextLayers';
 
 interface RequestsMapProps {
   points: AdminRequestMapPoint[];
@@ -14,33 +10,7 @@ interface RequestsMapProps {
   showClusters: boolean;
 }
 
-const styleSpec: StyleSpecification = {
-  version: 8,
-  glyphs: 'https://demotiles.maplibre.org/font/{fontstack}/{range}.pbf',
-  sources: {
-    base_tiles: {
-      type: 'raster',
-      tiles: [
-        'https://a.basemaps.cartocdn.com/light_all/{z}/{x}/{y}.png',
-        'https://b.basemaps.cartocdn.com/light_all/{z}/{x}/{y}.png',
-        'https://c.basemaps.cartocdn.com/light_all/{z}/{x}/{y}.png',
-        'https://d.basemaps.cartocdn.com/light_all/{z}/{x}/{y}.png'
-      ],
-      tileSize: 256,
-      attribution:
-        '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; CARTO'
-    }
-  },
-  layers: [
-    {
-      id: 'base_tiles',
-      type: 'raster',
-      source: 'base_tiles',
-      minzoom: 0,
-      maxzoom: 22
-    }
-  ]
-};
+const MAPBOX_TOKEN = import.meta.env.VITE_MAPBOX_TOKEN;
 
 const emptyCollection: GeoJSON.FeatureCollection<GeoJSON.Point> = {
   type: 'FeatureCollection',
@@ -78,23 +48,30 @@ export const RequestsMap = ({ points, showHeatmap, showClusters }: RequestsMapPr
   }, [sourceData]);
 
   useEffect(() => {
-    if (!containerRef.current || mapRef.current) {
+    if (!MAPBOX_TOKEN || !containerRef.current || mapRef.current) {
       return;
     }
 
-    const map = new maplibregl.Map({
+    mapboxgl.accessToken = MAPBOX_TOKEN;
+    const map = new mapboxgl.Map({
       container: containerRef.current,
-      style: styleSpec,
+      style: ADMIN_MAP_STYLE,
       center: [-79.51962, 43.844147],
       zoom: 9,
-      maxZoom: 16,
+      maxZoom: 19,
       minZoom: 3,
-      attributionControl: false
+      pitch: 0,
+      bearing: 0,
+      maxPitch: 0
     });
 
-    map.addControl(new maplibregl.NavigationControl({ showCompass: false }), 'top-right');
+    map.dragRotate.disable();
+    map.touchZoomRotate.disableRotation();
+    map.addControl(new mapboxgl.NavigationControl({ showCompass: false }), 'top-right');
 
     map.on('load', () => {
+      addAdminMapContextLayers(map);
+
       map.addSource('requests', {
         type: 'geojson',
         data: sourceDataRef.current ?? emptyCollection,
@@ -172,7 +149,7 @@ export const RequestsMap = ({ points, showHeatmap, showClusters }: RequestsMapPr
         minzoom: 6,
         layout: {
           'text-field': ['get', 'point_count_abbreviated'],
-          'text-font': ['Open Sans Bold'],
+          'text-font': ['Open Sans Bold', 'Arial Unicode MS Bold'],
           'text-size': 12
         },
         paint: {
@@ -208,19 +185,16 @@ export const RequestsMap = ({ points, showHeatmap, showClusters }: RequestsMapPr
           return;
         }
 
-        void source
-          .getClusterExpansionZoom(clusterId)
-          .then((zoom) => {
-            if (!feature.geometry || feature.geometry.type !== 'Point') {
-              return;
-            }
+        source.getClusterExpansionZoom(clusterId, (error, zoom) => {
+          if (error || typeof zoom !== 'number' || !feature.geometry || feature.geometry.type !== 'Point') {
+            return;
+          }
 
-            map.easeTo({
-              center: feature.geometry.coordinates as [number, number],
-              zoom
-            });
-          })
-          .catch(() => undefined);
+          map.easeTo({
+            center: feature.geometry.coordinates as [number, number],
+            zoom
+          });
+        });
       });
 
       map.on('click', 'requests-points', (event) => {
@@ -245,7 +219,7 @@ export const RequestsMap = ({ points, showHeatmap, showClusters }: RequestsMapPr
           </div>
         `;
 
-        new maplibregl.Popup({ closeButton: false, closeOnMove: true })
+        new mapboxgl.Popup({ closeButton: false, closeOnMove: true })
           .setLngLat(feature.geometry.coordinates as [number, number])
           .setHTML(html)
           .addTo(map);
@@ -295,7 +269,7 @@ export const RequestsMap = ({ points, showHeatmap, showClusters }: RequestsMapPr
 
     if (sourceData.features.length === 1) {
       const [lng, lat] = sourceData.features[0].geometry.coordinates;
-      map.easeTo({ center: [lng, lat], zoom: Math.max(map.getZoom(), 12) });
+      map.easeTo({ center: [lng, lat], zoom: Math.max(map.getZoom(), 16.5) });
       return;
     }
 
@@ -304,13 +278,13 @@ export const RequestsMap = ({ points, showHeatmap, showClusters }: RequestsMapPr
         accumulator.extend(feature.geometry.coordinates as [number, number]);
         return accumulator;
       },
-      new maplibregl.LngLatBounds(
+      new mapboxgl.LngLatBounds(
         sourceData.features[0].geometry.coordinates as [number, number],
         sourceData.features[0].geometry.coordinates as [number, number]
       )
     );
 
-    map.fitBounds(bounds as LngLatBoundsLike, { padding: 52, duration: 600, maxZoom: 13.5 });
+    map.fitBounds(bounds as LngLatBoundsLike, { padding: 52, duration: 600, maxZoom: 16.5 });
   }, [sourceData]);
 
   useEffect(() => {
@@ -332,6 +306,16 @@ export const RequestsMap = ({ points, showHeatmap, showClusters }: RequestsMapPr
       map.setLayoutProperty('requests-points', 'visibility', showClusters ? 'visible' : 'none');
     }
   }, [showClusters, showHeatmap]);
+
+  if (!MAPBOX_TOKEN) {
+    return (
+      <div className="requests-map" aria-label="Service area request map">
+        <div className="requests-map-fallback">
+          Add VITE_MAPBOX_TOKEN to enable the satellite request map.
+        </div>
+      </div>
+    );
+  }
 
   return <div ref={containerRef} className="requests-map" aria-label="Service area request map" />;
 };

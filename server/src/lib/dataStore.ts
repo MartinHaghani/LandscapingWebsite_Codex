@@ -1,4 +1,4 @@
-import { nanoid } from 'nanoid';
+import { customAlphabet, nanoid } from 'nanoid';
 import type { QuoteStatus } from '@prisma/client';
 import { Prisma } from '@prisma/client';
 import difference from '@turf/difference';
@@ -999,7 +999,9 @@ const computeCalculatedPerSessionTotal = (
   distanceToNearestStationKm: number
 ) => computePerSessionTotal(areaM2, perimeterM, distanceToNearestStationKm);
 
-const createPublicQuoteId = () => `Q-${nanoid(8).toUpperCase()}`;
+const EASY_QUOTE_ID_ALPHABET = '23456789ABCDEFGHJKMNPRSTUVWXYZ';
+const createEasyQuoteId = customAlphabet(EASY_QUOTE_ID_ALPHABET, 6);
+const createPublicQuoteId = () => createEasyQuoteId();
 
 const closePolygonRing = (points: [number, number][]) => {
   if (points.length < 3) {

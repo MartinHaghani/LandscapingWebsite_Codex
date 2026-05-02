@@ -1084,6 +1084,16 @@ small {
   background: var(--surface-muted);
 }
 
+.requests-map-fallback {
+  display: grid;
+  min-height: 420px;
+  place-items: center;
+  padding: 1rem;
+  text-align: center;
+  color: var(--text-muted);
+  font-size: 0.9rem;
+}
+
 .hotspot-list {
   border: 1px solid var(--border);
   border-radius: 8px;

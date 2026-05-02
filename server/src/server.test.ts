@@ -1082,7 +1082,8 @@ describe('admin quote editor workflow', () => {
     });
     assert.equal(reservationResponse.status, 201);
     const reservationBody = (await reservationResponse.json()) as { quoteId: string; expiresAt: string };
-    assert.match(reservationBody.quoteId, /^Q-/);
+    assert.match(reservationBody.quoteId, /^[23456789ABCDEFGHJKMNPRSTUVWXYZ]{6}$/);
+    assert.doesNotMatch(reservationBody.quoteId, /[01ILOQ]/);
     assert.ok(reservationBody.expiresAt);
 
     const adminRing: Array<[number, number]> = [
@@ -1766,7 +1767,7 @@ describe('admin quote editor workflow', () => {
     assert.equal(checkoutBody.checkoutSessionId, 'cs_test_1');
     assert.equal(checkoutBody.reused, false);
     assert.equal(sessions.length, 1);
-    assert.match(sessions[0]?.successUrl ?? '', /\/dashboard\/quotes\/Q-/);
+    assert.match(sessions[0]?.successUrl ?? '', /\/dashboard\/quotes\/[23456789ABCDEFGHJKMNPRSTUVWXYZ]{6}/);
 
     const accountQuoteResponse = await fetch(`${baseUrl}/api/account/quotes/${scenario.quoteId}`, {
       headers: {

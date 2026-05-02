@@ -105,7 +105,7 @@ Autoscape provides:
 - Seasonal quotes create one-time Stripe Checkout Sessions for the approved discounted seasonal total. Per-session quotes create weekly Stripe subscription Checkout Sessions, use a May 1 billing-cycle anchor before season or charge immediately during season, cap paid invoices at `sessionsMax`, and stop no later than September 30.
 - Account quote detail responses now include conditional billing metadata so the dashboard can show the current card-on-file summary when Stripe has a reusable saved method.
 - Quote lookup APIs are owner-only unless caller is admin.
-- Admin-created quotes use `/claim-quote`: Quote ID-only public preview is allowed before sign-up, sign-up/sign-in returns through `/complete-profile`, the customer claims the quote by ID, chooses `seasonal` or `per_session`, and continues to `/dashboard/quotes/:quoteId/payment`.
+- Admin-created quotes use `/claim-quote`: Quote ID-only public preview is allowed before sign-up, sign-up/sign-in returns through `/complete-profile`, the customer claims the quote by ID, chooses `seasonal` or `per_session`, and continues directly to Stripe Checkout.
 
 ### Out-of-Area Flow
 
@@ -128,14 +128,14 @@ Admin app (separate Vite frontend) supports:
 - fixed Autoscape light theme with a sticky sidebar + top utility bar layout
 - quote inbox with pending semantics (`in_review + pending`) and verified-awaiting-payment label
 - polished route-based quote creator (`/quotes/new`) for anonymous admin-created quotes:
-  - reserves and displays the real `Q-...` ID before save
+  - reserves and displays the real six-character easy Quote ID before save
   - provides `Copy ID`, generic `/claim-quote`, and direct `/claim-quote?quoteId=...` actions
-  - uses the same satellite draw/edit controls, geodesic metric helpers, and server remeasurement contract as quote review
+  - uses the same Satellite Streets draw/edit controls, building/house-number map context, geodesic metric helpers, and server remeasurement contract as quote review
   - saves directly to `quotes` as `status=verified`, `customer_status=awaiting_payment`, `contact_pending=false`, with `auth_user_id=null` until customer claim
   - version 1 is stored in `quote_versions` with `actor_type=admin`
   - global discount defaults to 0%, seasonal discount defaults to 20%, both clamp to 0-50%, and override mode stores the edited base per-visit amount plus optional reason
 - route-based quote editor (`/quotes/:quoteId/edit`) with full polygon tools and editable quote controls
-  - Mapbox satellite basemap for property-context editing
+  - Mapbox Satellite Streets basemap for property-context editing, including building outlines and house-number labels where Mapbox has coverage
   - stored customer polygons render immediately on editor load
   - editor mirrors the public quote map styling and controls, including the same freehand draw workflow, vertex dragging, outline-click vertex insertion, delete/clear behavior, shared draw-end simplifier, and v2 polygon-source contract as the public quote tool
 - append-only version flow:

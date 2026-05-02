@@ -1,5 +1,15 @@
 import { z } from 'zod';
 
+const easyQuoteIdPattern = /^[23456789ABCDEFGHJKMNPRSTUVWXYZ]{6}$/;
+const legacyQuoteIdPattern = /^Q-[A-Z0-9_-]{4,30}$/;
+
+const publicQuoteIdSchema = z
+  .string()
+  .trim()
+  .refine((value) => easyQuoteIdPattern.test(value) || legacyQuoteIdPattern.test(value), {
+    message: 'Quote ID must be a six-character code or legacy Q-prefixed ID'
+  });
+
 const coordinateSchema = z
   .tuple([
     z.number().min(-180).max(180),
@@ -149,7 +159,7 @@ export const adminQuoteVersionCreateSchema = z.object({
 });
 
 export const adminQuoteCreateSchema = z.object({
-  quoteId: z.string().trim().regex(/^Q-[A-Z0-9_-]{4,30}$/).optional(),
+  quoteId: publicQuoteIdSchema.optional(),
   address: z.string().trim().min(3).max(300),
   location: z.object({
     lat: z.number().min(-90).max(90),

@@ -218,11 +218,11 @@ Decision:
 
 Implementation:
 
-- `/quotes/new` is a standalone admin workbench with a black/white/light-neutral base, Autoscape green primary actions, a large satellite map workspace, a sticky stats/pricing panel, and a compact top bar centered on the reserved `Q-...` ID.
+- `/quotes/new` is a standalone admin workbench with a black/white/light-neutral base, Autoscape green primary actions, a large Satellite Streets map workspace with building/house-number context where Mapbox has coverage, a sticky stats/pricing panel, and a compact top bar centered on the reserved six-character Quote ID.
 - The creator reserves Quote IDs before save, exposes `Copy ID`, generic `/claim-quote`, and direct `/claim-quote?quoteId=...` actions, and saves directly to `status=verified` / `customer_status=awaiting_payment` with `auth_user_id=null`.
 - Stats are grouped into geometry, pricing, validation, override, and customer-handoff sections so admin users can scan area, perimeter, per-visit price, full season, seasonal discount, discounted seasonal total, service-area warnings, and blocking geometry errors quickly.
 - Service-area results warn but do not block admin quote creation; self-intersection, empty geometry, and missing valid lawn geometry block save.
-- `/claim-quote` intentionally allows Quote ID-only preview before sign-up. Claiming and payment require Clerk auth plus completed phone, then billing mode selection before Stripe Checkout.
+- `/claim-quote` intentionally allows Quote ID-only preview before sign-up. The generic entry uses six large SMS-code style boxes grouped 3+3; the loaded page shows only quote summary, a small map preview, the two billing cards, and one `Continue` button before direct Stripe Checkout.
 - Visual style uses restrained borders/shadows, 8px-radius operational surfaces, red only for blocking geometry errors, amber for out-of-area/admin warnings, and green for primary/save/valid states.
 
 ## 16) Launch-Ready Public Content

@@ -860,7 +860,7 @@ export const QuoteCreatorPage = ({ getToken, onBack, onOpenQuote }: QuoteCreator
 
           <section className="quote-creator-stat-group quote-creator-id-card">
             <p className="metric-label">Customer handoff</p>
-            <p className="quote-creator-big-id">{quoteId ?? 'Q-...'}</p>
+            <p className="quote-creator-big-id">{quoteId ?? 'ABC123'}</p>
             <p className="hint">Give the customer the Quote ID or direct claim link. The quote is anonymous until they claim it.</p>
             <div className="quote-creator-copy-grid">
               <button type="button" className="button" disabled={!quoteId} onClick={() => quoteId && copyText('Quote ID', quoteId)}>
