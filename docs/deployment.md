@@ -27,7 +27,7 @@ Production is created and active in DigitalOcean:
 - Database cluster: `autoscape-production-db` (`f9149079-98cf-4e49-9277-e771a237d659`), PostgreSQL 16, size `db-s-1vcpu-1gb`
 - Database/user names: `autoscape_production`
 - Migration status: the `migrate` pre-deploy job ran against the empty production database and reports all 10 committed Prisma migrations applied with no pending migrations.
-- Runtime status: active deployment `615b1a2c-12de-4f06-86b0-0a6595f2db87` is `ACTIVE`; API health returns `{"ok":true,"service":"autoscape-server","mode":"admin-platform-v1"}`.
+- Runtime status: the current active deployment is healthy; API health returns `{"ok":true,"service":"autoscape-server","mode":"admin-platform-v1"}`.
 - Stripe status: live webhook endpoint `we_1TSkCpJuc7sM2vW49NWyXozU` is enabled, `livemode=true`, and sends the seven API-handled event types to `https://api.autoscape.ca/api/stripe/webhook`. Live Stripe secrets are set only in DigitalOcean environment variables.
 - Smoke-test status: production HTTPS checks pass for API health, public/admin SPA loads, public/admin CORS preflight, service-area output, and Clerk JWKS at `https://clerk.autoscape.ca/.well-known/jwks.json`.
 
