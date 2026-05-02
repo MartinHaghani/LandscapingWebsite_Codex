@@ -13,7 +13,7 @@ vi.mock('@clerk/clerk-react', () => ({
 describe('SiteLayout footer variants', () => {
   it('uses the compact footer on quote/auth/payment funnel routes', () => {
     const markup = renderToStaticMarkup(
-      <StaticRouter location="/instant-quote">
+      <StaticRouter location="/payment-complete">
         <SiteLayout />
       </StaticRouter>
     );

@@ -101,6 +101,7 @@ Autoscape provides:
   - `/dashboard/quotes/:quoteId` (owned quote detail with grouped mobile-readable summary data)
   - `/dashboard/quotes/:quoteId/payment` (authenticated approved-quote payment surface with task-first mobile CTAs that can start Stripe Checkout)
 - Approved quote emails link to public `/pay/:token` pages. Tokens are long random secrets stored only as SHA-256 hashes and are regenerated on approval/resend; superseded email tokens resolve to the current payment link instead of dead-ending while the quote is still payable.
+- Successful Stripe Checkout for both public payment links and authenticated dashboard checkout redirects to `/payment-complete`, which thanks the customer and confirms same-week mowing start. Canceled Checkout returns to the originating payment page for retry.
 - Public/authenticated payment APIs are `GET /api/payment-links/:token`, `POST /api/payment-links/:token/checkout`, `POST /api/account/quotes/:quoteId/payment/checkout`, `POST /api/account/quotes/:quoteId/billing-portal`, and `POST /api/stripe/webhook`.
 - Seasonal quotes create one-time Stripe Checkout Sessions for the approved discounted seasonal total. Per-session quotes create weekly Stripe subscription Checkout Sessions, use a May 1 billing-cycle anchor before season or charge immediately during season, cap paid invoices at `sessionsMax`, and stop no later than September 30.
 - Account quote detail responses now include conditional billing metadata so the dashboard can show the current card-on-file summary when Stripe has a reusable saved method.

@@ -517,6 +517,9 @@ const getRequestOrigin = (req: http.IncomingMessage) => {
 const getFirstConfiguredClientOrigin = (rawOrigins: string[]) =>
   rawOrigins.map((value) => normalizeBaseUrl(value)).find((value): value is string => Boolean(value)) ?? null;
 
+const appendQueryParam = (targetUrl: string, queryParam: string) =>
+  `${targetUrl}${targetUrl.includes('?') ? '&' : '?'}${queryParam}`;
+
 const isLoopbackOrigin = (origin: string) => {
   try {
     const url = new URL(origin);
@@ -591,6 +594,10 @@ export const createServer = (options: CreateServerOptions = {}) => {
 
   const buildPaymentPageUrl = (req: http.IncomingMessage, quoteId: string) => {
     return buildAppUrl(req, `/dashboard/quotes/${encodeURIComponent(quoteId)}/payment`);
+  };
+
+  const buildPaymentCompletePageUrl = (req: http.IncomingMessage, quoteId: string) => {
+    return buildAppUrl(req, `/payment-complete?quoteId=${encodeURIComponent(quoteId)}`);
   };
 
   const buildPublicPaymentPageUrl = (req: http.IncomingMessage, paymentToken: string) => {
@@ -908,7 +915,10 @@ export const createServer = (options: CreateServerOptions = {}) => {
 
   const createCheckoutForPaymentLink = async (
     paymentLink: NonNullable<Awaited<ReturnType<typeof dataStore.getPaymentLinkByTokenHash>>>,
-    paymentPageUrl: string
+    checkoutReturnUrls: {
+      successUrl: string;
+      cancelUrl: string;
+    }
   ) => {
     if (isReusableCheckout(paymentLink)) {
       return {
@@ -919,8 +929,8 @@ export const createServer = (options: CreateServerOptions = {}) => {
     }
 
     const timing = getCheckoutTiming(paymentLink);
-    const successUrl = `${paymentPageUrl}?status=success&session_id={CHECKOUT_SESSION_ID}`;
-    const cancelUrl = `${paymentPageUrl}?status=canceled`;
+    const successUrl = appendQueryParam(checkoutReturnUrls.successUrl, 'session_id={CHECKOUT_SESSION_ID}');
+    const cancelUrl = appendQueryParam(checkoutReturnUrls.cancelUrl, 'status=canceled');
     const session = await stripeProvider.createCheckoutSession({
       paymentLinkId: paymentLink.id,
       quoteId: paymentLink.publicQuoteId,
@@ -1247,12 +1257,20 @@ export const createServer = (options: CreateServerOptions = {}) => {
         }
 
         const publicPaymentPageUrl = buildPublicPaymentPageUrl(req, paymentLinkCheckoutToken);
-        if (!publicPaymentPageUrl) {
+        const paymentCompletePageUrl = buildPaymentCompletePageUrl(req, paymentLink.publicQuoteId);
+        if (!publicPaymentPageUrl || !paymentCompletePageUrl) {
           json(res, 500, { error: 'Public application URL is not configured for payments.' });
           return;
         }
 
-        json(res, 200, await createCheckoutForPaymentLink(paymentLink, publicPaymentPageUrl));
+        json(
+          res,
+          200,
+          await createCheckoutForPaymentLink(paymentLink, {
+            successUrl: paymentCompletePageUrl,
+            cancelUrl: publicPaymentPageUrl
+          })
+        );
         return;
       } catch (error) {
         if (error instanceof StripePaymentConfigurationError) {
@@ -1708,12 +1726,20 @@ export const createServer = (options: CreateServerOptions = {}) => {
         }
 
         const dashboardPaymentPageUrl = buildPaymentPageUrl(req, accountQuotePaymentCheckoutId);
-        if (!dashboardPaymentPageUrl) {
+        const paymentCompletePageUrl = buildPaymentCompletePageUrl(req, paymentLink.publicQuoteId);
+        if (!dashboardPaymentPageUrl || !paymentCompletePageUrl) {
           json(res, 500, { error: 'Public application URL is not configured for payments.' });
           return;
         }
 
-        json(res, 200, await createCheckoutForPaymentLink(paymentLink, dashboardPaymentPageUrl));
+        json(
+          res,
+          200,
+          await createCheckoutForPaymentLink(paymentLink, {
+            successUrl: paymentCompletePageUrl,
+            cancelUrl: dashboardPaymentPageUrl
+          })
+        );
         return;
       } catch (error) {
         if (error instanceof StripePaymentConfigurationError) {

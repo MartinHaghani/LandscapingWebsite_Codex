@@ -5,7 +5,7 @@
 1. User sees the horizontal Autoscape PNG brand mark in the navbar on entry and again in the footer.
 2. Navbar keeps desktop nav links, quote CTA, signed-out auth links with the slim divider, signed-in dashboard link, and mobile menu behavior.
 3. Public page loads include the Google Ads tag `AW-17991079326` from the Vite HTML shell.
-4. Quote, auth, confirmation, payment, and dashboard-payment funnel routes render a compact footer; general marketing routes keep the full footer.
+4. Quote, auth, confirmation, payment, payment-complete, and dashboard-payment funnel routes render a compact footer; general marketing routes keep the full footer.
 5. Footer variants link to core legal pages, and `/legal` lists the Markdown legal documents rendered from `client/src/content/legal/`.
 
 ## Services: Coverage-First Entry
@@ -221,8 +221,9 @@
 4. Seasonal quotes use one-time Checkout for the approved discounted seasonal total.
 5. Per-session quotes use weekly subscription Checkout; if paid before May 1, the subscription uses a May 1 billing-cycle anchor with no proration, otherwise the first charge starts at checkout.
 6. Per-session billing is capped at the approved `sessionsMax` count and no later than September 30.
-7. Stripe webhooks, not success redirects, update payment state. Duplicate webhook events are ignored idempotently, and duplicate paid invoice IDs do not advance the visit counter twice.
-8. Staging Checkout has the required API Stripe env configured and still needs to be smoke-tested end to end.
+7. Successful Stripe Checkout redirects to `/payment-complete`, which says `Thank you for choosing Autoscape! We start mowing the same week.` Public-link and dashboard checkout share that destination; canceled Checkout returns to the originating payment page.
+8. Stripe webhooks, not success redirects, update payment state. Duplicate webhook events are ignored idempotently, and duplicate paid invoice IDs do not advance the visit counter twice.
+9. Staging Checkout has the required API Stripe env configured and still needs to be smoke-tested end to end.
 
 ## Out-of-Area Expansion Capture
 

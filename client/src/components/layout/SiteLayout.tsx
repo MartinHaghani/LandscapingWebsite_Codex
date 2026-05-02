@@ -10,6 +10,7 @@ const compactFooterRoutePatterns = [
   /^\/sign-up(?:\/|$)/,
   /^\/complete-profile(?:\/|$)/,
   /^\/pay(?:\/|$)/,
+  /^\/payment-complete\/?$/,
   /^\/dashboard\/quotes\/[^/]+\/payment\/?$/
 ];
 

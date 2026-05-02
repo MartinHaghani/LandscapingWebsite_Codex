@@ -46,6 +46,9 @@ const DashboardAccountPage = lazy(() =>
 const PublicQuotePaymentPage = lazy(() =>
   import('./pages/PublicQuotePaymentPage').then((module) => ({ default: module.PublicQuotePaymentPage }))
 );
+const PaymentCompletePage = lazy(() =>
+  import('./pages/PaymentCompletePage').then((module) => ({ default: module.PaymentCompletePage }))
+);
 const CompleteProfilePage = lazy(() =>
   import('./pages/CompleteProfilePage').then((module) => ({ default: module.CompleteProfilePage }))
 );
@@ -89,6 +92,7 @@ const App = () => (
         <Route path="/legal" element={<LegalPage />} />
         <Route path="/legal/:slug" element={<LegalPage />} />
         <Route path="/pay/:token" element={<PublicQuotePaymentPage />} />
+        <Route path="/payment-complete" element={<PaymentCompletePage />} />
         <Route path="/dashboard" element={<DashboardPage />} />
         <Route path="/dashboard/account/*" element={<DashboardAccountPage />} />
         <Route path="/dashboard/quotes/:quoteId" element={<DashboardQuoteDetailPage />} />

@@ -211,6 +211,7 @@ Current live status: `autoscape-staging` is active in Toronto with `autoscape-st
   - `GET /api/payment-links/:token` returns sanitized quote/payment details without requiring Clerk sign-in
   - `POST /api/payment-links/:token/checkout` creates or reuses a Stripe Checkout Session
   - signed-in customers can also use `POST /api/account/quotes/:quoteId/payment/checkout` from the dashboard
+  - successful Stripe Checkout redirects both public payment-link and dashboard checkout customers to `/payment-complete`, which thanks them and confirms same-week mowing start; canceled Checkout returns to the originating payment page
   - customers can switch billing before payment starts with `POST /api/account/quotes/:quoteId/billing-mode`
   - `POST /api/account/quotes/:quoteId/billing-portal` opens Stripe-hosted card management for owners when Stripe has customer billing context, and account quote detail now includes conditional card-on-file metadata
 - Out-of-area page auto-captures expansion demand via `POST /api/service-area/request`.
@@ -252,6 +253,7 @@ Admin endpoints under `/api/admin/*` include:
   - `POST /api/stripe/webhook`
   - seasonal quotes use one-time Checkout for the approved discounted seasonal total
   - per-visit quotes use weekly subscription Checkout, use a May 1 billing-cycle anchor before season or charge at checkout during season, cap billing at `sessionsMax`, and stop no later than September 30
+  - Checkout success URLs send customers to `/payment-complete`; cancellation URLs return to `/pay/:token` or `/dashboard/quotes/:quoteId/payment`
   - paid Stripe invoice IDs are stored so duplicate invoice events cannot advance the visit counter twice
 - quote notes and legacy revision endpoint (`/api/admin/quotes/:id/revise`)
 - service-area requests, leads, contacts, audit logs

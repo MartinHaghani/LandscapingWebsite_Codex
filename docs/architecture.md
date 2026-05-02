@@ -24,6 +24,7 @@ Primary domains:
 - Live hosted status on 2026-05-02 UTC: `autoscape-staging` is active in `tor` with `public-web`, `admin-web`, `api`, and `migrate`; its custom domains use self-managed GoDaddy CNAME records and are active. Authenticated staging smoke tests pass through customer quote finalization, admin verification, persistence after redeploy, approval-email resend, and Stripe sandbox Checkout/webhook payment confirmation. Production has not been created because production environment values and launch confirmation are still pending.
 - Local dev connectivity: public/admin frontends default to `VITE_API_BASE_URL=http://localhost:4000`; admin also uses `VITE_PUBLIC_APP_BASE_URL=http://localhost:5173` to generate customer claim links. The API reflects loopback origins (`localhost`, `127.0.0.1`, `[::1]`) across arbitrary local ports to avoid Vite port drift breaking quote writes.
 - Public app routes: `client/src/App.tsx`
+- Payment completion route: `/payment-complete` renders the shared post-Stripe thank-you page for both public payment-link Checkout and authenticated dashboard Checkout success redirects.
 - Public legal routes: `/legal` and `/legal/:slug` render Markdown drafts from `client/src/content/legal/` through `client/src/pages/LegalPage.tsx`; footer/form/payment links are wired to these routes.
 - Public HTML shell: `client/index.html` includes the Google Ads tag `AW-17991079326`; `admin/index.html` is intentionally separate and untagged.
 - Google Ads conversion helper: `client/src/lib/googleAds.ts` sends the `Submit lead form` conversion `AW-17991079326/FqIMCOHXqYIcEJ6r6IJD` only after successful public quote draft creation.
@@ -94,6 +95,7 @@ Spatial storage:
 - `POST /api/payment-links/:token/checkout` (creates/reuses Stripe Checkout)
 - `POST /api/account/quotes/:quoteId/payment/checkout` (authenticated owner checkout for dashboard payment page)
 - `POST /api/stripe/webhook` (Stripe signature verification + idempotent webhook processing)
+- Stripe Checkout success URLs route to `/payment-complete?quoteId=...&session_id=...`; cancel URLs return to the originating public or dashboard payment page with `status=canceled`.
 - client request wrapper converts network-level failures into a direct API reachability message so quote/contact flows do not fall back to a generic submit error
 
 ### Account

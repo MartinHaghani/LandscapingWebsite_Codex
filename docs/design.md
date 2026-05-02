@@ -126,6 +126,7 @@ Transitions:
 - verified submit creates a fresh secure payment token, attempts a simplified payment-focused Resend email with one payment CTA and only the selected Stripe amount/mode, records sent/failed delivery state for auditability, keeps approval successful on delivery failure, and exposes manual resend for verified quotes awaiting payment
 - approved quote map previews are tokenized public image URLs backed by server-proxied Mapbox satellite static imagery; they show approved service area, added-by-admin area, and removed-by-admin area using the quote-tool color family, while email legends only include added/removed keys when those deltas exist
 - approved quote payment links are tokenized public URLs (`/pay/:token`) stored as hashes server-side; resend rotates the payment token, and superseded emailed URLs resolve to the current payment link without creating separate checkout state
+- public payment-link Checkout and authenticated dashboard Checkout share one post-payment completion page at `/payment-complete`, while cancellation returns customers to the originating payment page so retry remains clear
 
 ## 10) Event-Oriented Audit Logging
 
@@ -240,6 +241,7 @@ Implementation:
 - footer uses real contact links (`tel:` + `mailto:`), quick navigation links, and a compact variant for quote/auth/payment funnel routes
 - footer variants now expose core legal links and `/legal` indexes all launch legal documents rendered from Markdown source
 - contact, quote submit, complete-profile, claim-quote, and payment checkout surfaces include nearby legal links matched to the action
+- the post-Checkout success surface is a compact thank-you page that says `Thank you for choosing Autoscape! We start mowing the same week.` for both instant-quote and admin-generated quote payments
 - mobile navigation includes in-header menu with quote CTA
 - metadata updates in `client/index.html` improve social preview and launch polish
 - `client/index.html` also loads the public Google Ads tag `AW-17991079326`; the admin shell stays separate from public advertising measurement

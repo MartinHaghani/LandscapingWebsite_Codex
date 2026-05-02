@@ -1705,6 +1705,11 @@ describe('admin quote editor workflow', () => {
     assert.equal(sessions.length, 1);
     assert.equal(sessions[0]?.mode, 'seasonal_payment');
     assert.equal(sessions[0]?.amountCents, 319984);
+    assert.equal(
+      sessions[0]?.successUrl,
+      `https://client.autoscape.test/payment-complete?quoteId=${scenario.quoteId}&session_id={CHECKOUT_SESSION_ID}`
+    );
+    assert.equal(sessions[0]?.cancelUrl, `https://client.autoscape.test/pay/${firstToken}?status=canceled`);
 
     const replayCheckoutResponse = await fetch(`${baseUrl}/api/payment-links/${secondToken}/checkout`, {
       method: 'POST'
@@ -1774,7 +1779,14 @@ describe('admin quote editor workflow', () => {
     assert.equal(checkoutBody.checkoutSessionId, 'cs_test_1');
     assert.equal(checkoutBody.reused, false);
     assert.equal(sessions.length, 1);
-    assert.match(sessions[0]?.successUrl ?? '', /\/dashboard\/quotes\/[23456789ABCDEFGHJKMNPRSTUVWXYZ]{6}/);
+    assert.equal(
+      sessions[0]?.successUrl,
+      `https://client.autoscape.test/payment-complete?quoteId=${scenario.quoteId}&session_id={CHECKOUT_SESSION_ID}`
+    );
+    assert.equal(
+      sessions[0]?.cancelUrl,
+      `https://client.autoscape.test/dashboard/quotes/${scenario.quoteId}/payment?status=canceled`
+    );
 
     const accountQuoteResponse = await fetch(`${baseUrl}/api/account/quotes/${scenario.quoteId}`, {
       headers: {
