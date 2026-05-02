@@ -1,5 +1,6 @@
 import { api, createIdempotencyKey } from './api';
 import { getAttributionSnapshot } from './attribution';
+import { legalAcceptancePayload } from './legalAcceptance';
 import type { QuoteLookupResponse } from '../types';
 
 const finalizeIdempotencyKeysByQuoteId = new Map<string, string>();
@@ -105,7 +106,9 @@ export const loadQuoteConfirmation = async ({
 }: LoadQuoteConfirmationInput): Promise<LoadQuoteConfirmationResult> => {
   const resolvedDeps = { ...defaultDeps, ...deps };
 
-  await resolvedDeps.claimQuote(quoteId, authToken);
+  await resolvedDeps.claimQuote(quoteId, authToken, {
+    legalAcceptance: legalAcceptancePayload
+  });
 
   let quote = await resolvedDeps.getQuote(quoteId, authToken);
   let finalizedDuringLoad = false;

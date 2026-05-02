@@ -1,7 +1,27 @@
 import { renderToStaticMarkup } from 'react-dom/server';
+import { Route, Routes } from 'react-router-dom';
 import { StaticRouter } from 'react-router-dom/server';
-import { describe, expect, it } from 'vitest';
-import { QuoteConfirmationContent } from './QuoteConfirmationPage';
+import { describe, expect, it, vi } from 'vitest';
+import { QuoteConfirmationContent, QuoteConfirmationPage } from './QuoteConfirmationPage';
+
+vi.mock('@clerk/clerk-react', () => ({
+  useAuth: () => ({
+    isLoaded: true,
+    isSignedIn: true,
+    getToken: vi.fn()
+  }),
+  useUser: () => ({
+    user: {
+      primaryEmailAddress: {
+        emailAddress: 'client@example.com'
+      },
+      primaryPhoneNumber: {
+        phoneNumber: '+1 416 555 0100'
+      },
+      unsafeMetadata: {}
+    }
+  })
+}));
 
 const renderQuoteConfirmationPage = () =>
   renderToStaticMarkup(
@@ -69,5 +89,21 @@ describe('QuoteConfirmationPage', () => {
     expect(markup).not.toContain('Submitted:');
     expect(markup).not.toContain('Email sent');
     expect(markup).not.toContain('Payment ready');
+  });
+
+  it('requires quote claim terms before finalizing the signed-in quote', () => {
+    const markup = renderToStaticMarkup(
+      <StaticRouter location="/quote-confirmation/Q-ABC12345">
+        <Routes>
+          <Route path="/quote-confirmation/:quoteId" element={<QuoteConfirmationPage />} />
+        </Routes>
+      </StaticRouter>
+    );
+
+    expect(markup).toContain('Review the quote terms to continue');
+    expect(markup).toContain('id="quote-claim-legal-acceptance"');
+    expect(markup).toContain('href="/legal/refund-cancellation-payment-policy"');
+    expect(markup).toContain('Claim Quote');
+    expect(markup).toContain('disabled=""');
   });
 });

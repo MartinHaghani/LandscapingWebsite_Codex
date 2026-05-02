@@ -23,6 +23,8 @@ const stations: BaseStationConfig[] = [
   }
 ];
 
+const legalAcceptance = { accepted: true } as const;
+
 const startedServers: Array<ReturnType<typeof createServer>['server']> = [];
 
 const parseToken = (req: http.IncomingMessage) => {
@@ -42,7 +44,8 @@ const customerIdentityFromToken = (token: string): CustomerIdentity | null => {
       userId,
       email: `${userId}@example.com`,
       name: userId.replace('customer-', 'Customer '),
-      phone: token.includes('no-phone') ? null : '+1 416 555 0100'
+      phone: token.includes('no-phone') ? null : '+1 416 555 0100',
+      emailMarketingConsent: token.includes('email-consent')
     };
   }
 
@@ -51,7 +54,8 @@ const customerIdentityFromToken = (token: string): CustomerIdentity | null => {
       userId: token,
       email: `${token}@example.com`,
       name: token,
-      phone: '+1 416 555 0109'
+      phone: '+1 416 555 0109',
+      emailMarketingConsent: false
     };
   }
 
@@ -257,6 +261,24 @@ const extractPaymentToken = (html: string) => {
   return match[1];
 };
 
+const getLegalAuditActions = async (baseUrl: string) => {
+  const response = await fetch(`${baseUrl}/api/admin/audit-logs?entityType=legal_acceptance&limit=100`, {
+    headers: {
+      Authorization: 'Bearer admin-admin'
+    }
+  });
+  assert.equal(response.status, 200);
+  const body = (await response.json()) as {
+    items: Array<{
+      action: string;
+      entityType: string;
+      afterRedacted?: { action?: string; documentSlugs?: string[] };
+    }>;
+  };
+
+  return body.items.map((item) => item.afterRedacted?.action ?? item.action);
+};
+
 const createReviewQuoteVersion = async (
   baseUrl: string,
   idPrefix: string,
@@ -295,7 +317,8 @@ const createReviewQuoteVersion = async (
       baseTotal: 49,
       pricingVersion: 'v1',
       currency: 'CAD',
-      ...draftOverrides
+      ...draftOverrides,
+      legalAcceptance
     })
   });
   assert.equal(draftResponse.status, 201);
@@ -449,7 +472,110 @@ describe('CORS policy', () => {
   });
 });
 
+describe('legal acceptance enforcement', () => {
+  it('requires and records contact privacy acknowledgement', async () => {
+    const { baseUrl } = await startServer();
+    const payload = {
+      name: 'Jane Customer',
+      email: 'jane.customer@example.com',
+      phone: '+1 416 555 0100',
+      message: 'Please contact me about lawn service.',
+      marketingConsent: true
+    };
+
+    const missing = await fetch(`${baseUrl}/api/contact`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Idempotency-Key': 'contact-legal-missing'
+      },
+      body: JSON.stringify(payload)
+    });
+    assert.equal(missing.status, 400);
+
+    const accepted = await fetch(`${baseUrl}/api/contact`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Idempotency-Key': 'contact-legal-accepted'
+      },
+      body: JSON.stringify({
+        ...payload,
+        legalAcceptance
+      })
+    });
+    assert.equal(accepted.status, 201);
+
+    const actions = await getLegalAuditActions(baseUrl);
+    assert.ok(actions.includes('contact_privacy_ack'));
+  });
+
+  it('records complete-profile terms acceptance for authenticated accounts', async () => {
+    const { baseUrl } = await startServer();
+
+    const missing = await fetch(`${baseUrl}/api/account/legal-acceptance`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: 'Bearer customer-profile'
+      },
+      body: JSON.stringify({})
+    });
+    assert.equal(missing.status, 400);
+
+    const accepted = await fetch(`${baseUrl}/api/account/legal-acceptance`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: 'Bearer customer-profile'
+      },
+      body: JSON.stringify({
+        legalAcceptance
+      })
+    });
+    assert.equal(accepted.status, 200);
+
+    const actions = await getLegalAuditActions(baseUrl);
+    assert.ok(actions.includes('complete_profile_terms'));
+  });
+});
+
 describe('quote draft + contact finalize flow', () => {
+  it('rejects quote draft submission without legal acceptance', async () => {
+    const { baseUrl } = await startServer();
+    const ring: Array<[number, number]> = [
+      [-79.5204, 43.8436],
+      [-79.5191, 43.8436],
+      [-79.5191, 43.8447],
+      [-79.5204, 43.8447]
+    ];
+
+    const draft = await fetch(`${baseUrl}/api/quote/draft`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Idempotency-Key': 'quote-draft-missing-legal'
+      },
+      body: JSON.stringify({
+        address: '123 Missing Legal Lane, Vaughan, ON',
+        location: {
+          lat: 43.844147,
+          lng: -79.51962
+        },
+        polygon: createPolygonGeometry(ring),
+        polygonSource: createPolygonSource('service-1', ring),
+        plan: 'Premium Weekly',
+        quoteTotal: 245.55,
+        serviceFrequency: 'weekly',
+        baseTotal: 120,
+        pricingVersion: 'v1',
+        currency: 'CAD'
+      })
+    });
+
+    assert.equal(draft.status, 400);
+  });
+
   it('creates draft quote with idempotent replay and finalizes contact', async () => {
     const { baseUrl } = await startServer();
     const draftRing: Array<[number, number]> = [
@@ -472,7 +598,8 @@ describe('quote draft + contact finalize flow', () => {
       serviceFrequency: 'weekly',
       baseTotal: 120,
       pricingVersion: 'v1',
-      currency: 'CAD'
+      currency: 'CAD',
+      legalAcceptance
     };
 
     const firstDraft = await fetch(`${baseUrl}/api/quote/draft`, {
@@ -530,8 +657,12 @@ describe('quote draft + contact finalize flow', () => {
     const claimResponse = await fetch(`${baseUrl}/api/quote/${firstDraftBody.quoteId}/claim`, {
       method: 'POST',
       headers: {
+        'Content-Type': 'application/json',
         Authorization: 'Bearer customer-martin'
-      }
+      },
+      body: JSON.stringify({
+        legalAcceptance
+      })
     });
     assert.equal(claimResponse.status, 200);
 
@@ -616,6 +747,10 @@ describe('quote draft + contact finalize flow', () => {
     assert.ok(quoteContact);
     assert.equal(quoteContact.phone, '+1 416 555 0100');
     assert.equal(quoteContact.addressText, draftPayload.address);
+
+    const legalActions = await getLegalAuditActions(baseUrl);
+    assert.ok(legalActions.includes('quote_submit_terms'));
+    assert.ok(legalActions.includes('quote_claim_terms'));
   });
 
   it('enforces quote ownership for claim, contact finalize, and lookup', async () => {
@@ -647,7 +782,8 @@ describe('quote draft + contact finalize flow', () => {
         ]),
         plan: 'Starter',
         quoteTotal: 180,
-        serviceFrequency: 'weekly'
+        serviceFrequency: 'weekly',
+        legalAcceptance
       })
     });
     assert.equal(draft.status, 201);
@@ -663,19 +799,37 @@ describe('quote draft + contact finalize flow', () => {
     });
     assert.equal(unauthFinalize.status, 401);
 
+    const missingClaimLegal = await fetch(`${baseUrl}/api/quote/${draftBody.quoteId}/claim`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: 'Bearer customer-owner'
+      },
+      body: JSON.stringify({})
+    });
+    assert.equal(missingClaimLegal.status, 400);
+
     const firstClaim = await fetch(`${baseUrl}/api/quote/${draftBody.quoteId}/claim`, {
       method: 'POST',
       headers: {
+        'Content-Type': 'application/json',
         Authorization: 'Bearer customer-owner'
-      }
+      },
+      body: JSON.stringify({
+        legalAcceptance
+      })
     });
     assert.equal(firstClaim.status, 200);
 
     const secondUserClaim = await fetch(`${baseUrl}/api/quote/${draftBody.quoteId}/claim`, {
       method: 'POST',
       headers: {
+        'Content-Type': 'application/json',
         Authorization: 'Bearer customer-other'
-      }
+      },
+      body: JSON.stringify({
+        legalAcceptance
+      })
     });
     assert.equal(secondUserClaim.status, 409);
 
@@ -748,7 +902,8 @@ describe('quote draft + contact finalize flow', () => {
         ]),
         plan: 'Starter',
         quoteTotal: 180,
-        serviceFrequency: 'weekly'
+        serviceFrequency: 'weekly',
+        legalAcceptance
       })
     });
     assert.equal(draft.status, 201);
@@ -757,8 +912,12 @@ describe('quote draft + contact finalize flow', () => {
     const claim = await fetch(`${baseUrl}/api/quote/${draftBody.quoteId}/claim`, {
       method: 'POST',
       headers: {
+        'Content-Type': 'application/json',
         Authorization: 'Bearer customer-no-phone'
-      }
+      },
+      body: JSON.stringify({
+        legalAcceptance
+      })
     });
     assert.equal(claim.status, 200);
 
@@ -819,7 +978,8 @@ describe('quote draft + contact finalize flow', () => {
         ]),
         plan: 'Starter',
         quoteTotal: 180,
-        serviceFrequency: 'weekly'
+        serviceFrequency: 'weekly',
+        legalAcceptance
       })
     });
     assert.equal(draft.status, 201);
@@ -877,7 +1037,8 @@ describe('admin quote editor workflow', () => {
         serviceFrequency: 'weekly',
         baseTotal: 49,
         pricingVersion: 'v1',
-        currency: 'CAD'
+        currency: 'CAD',
+        legalAcceptance
       })
     });
     assert.equal(draftResponse.status, 400);
@@ -917,7 +1078,8 @@ describe('admin quote editor workflow', () => {
         serviceFrequency: 'weekly',
         baseTotal: 49,
         pricingVersion: 'v1',
-        currency: 'CAD'
+        currency: 'CAD',
+        legalAcceptance
       })
     });
     assert.equal(draftResponse.status, 400);
@@ -957,7 +1119,8 @@ describe('admin quote editor workflow', () => {
         serviceFrequency: 'weekly',
         baseTotal: 49,
         pricingVersion: 'v1',
-        currency: 'CAD'
+        currency: 'CAD',
+        legalAcceptance
       })
     });
     assert.equal(draftResponse.status, 400);
@@ -987,7 +1150,8 @@ describe('admin quote editor workflow', () => {
       serviceFrequency: 'weekly',
       baseTotal: 49,
       pricingVersion: 'v1',
-      currency: 'CAD'
+      currency: 'CAD',
+      legalAcceptance
     };
 
     const draftResponse = await fetch(`${baseUrl}/api/quote/draft`, {
@@ -1151,7 +1315,8 @@ describe('admin quote editor workflow', () => {
         serviceFrequency: 'weekly',
         baseTotal: 49,
         pricingVersion: 'v1',
-        currency: 'CAD'
+        currency: 'CAD',
+        legalAcceptance
       })
     });
     assert.equal(draftResponse.status, 201);
@@ -1417,8 +1582,23 @@ describe('admin quote editor workflow', () => {
     const revokedResponse = await fetch(`${baseUrl}/api/payment-links/${firstToken}`);
     assert.equal(revokedResponse.status, 410);
 
+    const missingLegalCheckoutResponse = await fetch(`${baseUrl}/api/payment-links/${secondToken}/checkout`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({})
+    });
+    assert.equal(missingLegalCheckoutResponse.status, 400);
+
     const checkoutResponse = await fetch(`${baseUrl}/api/payment-links/${secondToken}/checkout`, {
-      method: 'POST'
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        legalAcceptance
+      })
     });
     assert.equal(checkoutResponse.status, 200);
     const checkoutBody = (await checkoutResponse.json()) as {
@@ -1432,9 +1612,16 @@ describe('admin quote editor workflow', () => {
     assert.equal(sessions.length, 1);
     assert.equal(sessions[0]?.mode, 'seasonal_payment');
     assert.equal(sessions[0]?.amountCents, 319984);
+    assert.ok((await getLegalAuditActions(baseUrl)).includes('payment_checkout_terms'));
 
     const replayCheckoutResponse = await fetch(`${baseUrl}/api/payment-links/${secondToken}/checkout`, {
-      method: 'POST'
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        legalAcceptance
+      })
     });
     assert.equal(replayCheckoutResponse.status, 200);
     const replayCheckoutBody = (await replayCheckoutResponse.json()) as { reused: boolean };
@@ -1482,13 +1669,30 @@ describe('admin quote editor workflow', () => {
     assert.equal(submitResponse.status, 200);
     assert.equal(sentEmails.length, 1);
 
+    const missingLegalCheckout = await fetch(
+      `${baseUrl}/api/account/quotes/${scenario.quoteId}/payment/checkout`,
+      {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: 'Bearer customer-reviewer'
+        },
+        body: JSON.stringify({})
+      }
+    );
+    assert.equal(missingLegalCheckout.status, 400);
+
     const checkoutResponse = await fetch(
       `${baseUrl}/api/account/quotes/${scenario.quoteId}/payment/checkout`,
       {
         method: 'POST',
         headers: {
+          'Content-Type': 'application/json',
           Authorization: 'Bearer customer-reviewer'
-        }
+        },
+        body: JSON.stringify({
+          legalAcceptance
+        })
       }
     );
     assert.equal(checkoutResponse.status, 200);
@@ -1636,8 +1840,12 @@ describe('admin quote editor workflow', () => {
       {
         method: 'POST',
         headers: {
+          'Content-Type': 'application/json',
           Authorization: 'Bearer customer-reviewer'
-        }
+        },
+        body: JSON.stringify({
+          legalAcceptance
+        })
       }
     );
     assert.equal(checkoutResponse.status, 200);
@@ -1778,7 +1986,13 @@ describe('admin quote editor workflow', () => {
     const token = extractPaymentToken(sentEmails[0]?.html ?? '');
 
     const checkoutResponse = await fetch(`${baseUrl}/api/payment-links/${token}/checkout`, {
-      method: 'POST'
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        legalAcceptance
+      })
     });
     assert.equal(checkoutResponse.status, 200);
     assert.equal(sessions.length, 1);
@@ -1842,7 +2056,8 @@ describe('admin quote editor workflow', () => {
         billingMode: 'per_session',
         baseTotal: 49,
         pricingVersion: 'v1',
-        currency: 'CAD'
+        currency: 'CAD',
+        legalAcceptance
       })
     });
     assert.equal(draftResponse.status, 201);
@@ -1893,7 +2108,13 @@ describe('admin quote editor workflow', () => {
     const token = extractPaymentToken(sentEmails[0]?.html ?? '');
 
     const checkoutResponse = await fetch(`${baseUrl}/api/payment-links/${token}/checkout`, {
-      method: 'POST'
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        legalAcceptance
+      })
     });
     assert.equal(checkoutResponse.status, 200);
     assert.equal(sessions.length, 1);
@@ -2057,7 +2278,8 @@ describe('admin quote editor workflow', () => {
         serviceFrequency: 'weekly',
         baseTotal: 49,
         pricingVersion: 'v1',
-        currency: 'CAD'
+        currency: 'CAD',
+        legalAcceptance
       })
     });
     assert.equal(draftResponse.status, 201);
@@ -2175,7 +2397,8 @@ describe('admin quote editor workflow', () => {
         serviceFrequency: 'weekly',
         baseTotal: 49,
         pricingVersion: 'v1',
-        currency: 'CAD'
+        currency: 'CAD',
+        legalAcceptance
       })
     });
     assert.equal(draftResponse.status, 201);

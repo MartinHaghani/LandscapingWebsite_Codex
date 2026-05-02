@@ -19,6 +19,10 @@ export const polygonSourceSchema = z.object({
   activePolygonId: z.string().trim().max(120).nullable().optional()
 });
 
+export const legalAcceptanceSchema = z.object({
+  accepted: z.literal(true)
+});
+
 export const quotePayloadSchema = z.object({
   address: z.string().trim().min(3).max(300),
   location: z.object({
@@ -42,7 +46,8 @@ export const quotePayloadSchema = z.object({
   plan: z.string().trim().min(3).max(120),
   quoteTotal: z.number().nonnegative(),
   serviceFrequency: z.enum(['weekly']).optional(),
-  billingMode: z.enum(['seasonal', 'per_session']).optional()
+  billingMode: z.enum(['seasonal', 'per_session']).optional(),
+  legalAcceptance: legalAcceptanceSchema
 });
 
 export const attributionSchema = z
@@ -87,7 +92,8 @@ export const quoteDraftPayloadSchema = z.object({
   pricingVersion: z.string().trim().min(1).max(40).optional(),
   currency: z.string().trim().min(1).max(8).optional(),
   polygonSource: polygonSourceSchema,
-  attribution: attributionSchema
+  attribution: attributionSchema,
+  legalAcceptance: legalAcceptanceSchema
 });
 
 export const quoteContactPayloadSchema = z.object({
@@ -101,7 +107,21 @@ export const contactPayloadSchema = z.object({
   phone: z.string().trim().min(7).max(40).optional(),
   addressText: z.string().trim().max(300).optional(),
   message: z.string().trim().min(8).max(5000),
-  attribution: attributionSchema
+  marketingConsent: z.boolean().optional(),
+  attribution: attributionSchema,
+  legalAcceptance: legalAcceptanceSchema
+});
+
+export const quoteClaimPayloadSchema = z.object({
+  legalAcceptance: legalAcceptanceSchema
+});
+
+export const paymentCheckoutPayloadSchema = z.object({
+  legalAcceptance: legalAcceptanceSchema
+});
+
+export const accountLegalAcceptancePayloadSchema = z.object({
+  legalAcceptance: legalAcceptanceSchema
 });
 
 export const serviceAreaCheckSchema = z.object({

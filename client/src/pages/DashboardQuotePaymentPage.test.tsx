@@ -59,7 +59,9 @@ const renderPaymentPage = () =>
         error={null}
         checkoutError={null}
         checkoutLoading={false}
+        legalAccepted={false}
         returnStatus={null}
+        onLegalAcceptedChange={vi.fn()}
         onCheckout={vi.fn()}
       />
     </StaticRouter>
@@ -76,6 +78,9 @@ describe('DashboardQuotePaymentPage', () => {
     expect(markup).toContain('Seasonal Payment');
     expect(markup).toContain('Waiting for payment');
     expect(markup).toContain('Pay seasonal total');
+    expect(markup).toContain('id="dashboard-payment-legal-acceptance"');
+    expect(markup).toContain('href="/legal/estimate-booking-terms"');
+    expect(markup).toContain('disabled=""');
     expect(markup).toContain('w-full sm:w-auto');
     expect(markup).toContain('Area legend');
     expect(markup).toContain('Approved service area');

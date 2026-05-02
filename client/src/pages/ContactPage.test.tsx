@@ -1,10 +1,15 @@
 import { renderToStaticMarkup } from 'react-dom/server';
+import { StaticRouter } from 'react-router-dom/server';
 import { describe, expect, it } from 'vitest';
 import { ContactPage } from './ContactPage';
 
 describe('ContactPage', () => {
   it('promotes direct phone and email contact while keeping the message form', () => {
-    const markup = renderToStaticMarkup(<ContactPage />);
+    const markup = renderToStaticMarkup(
+      <StaticRouter location="/contact">
+        <ContactPage />
+      </StaticRouter>
+    );
 
     expect(markup).toContain('Talk to the Autoscape Team');
     expect(markup).toContain('Reach the team directly');
@@ -20,5 +25,10 @@ describe('ContactPage', () => {
     expect(markup).not.toContain('Talk to Autoscape</h2>');
     expect(markup).toContain('Send a message');
     expect(markup).toContain('Name, email, phone, and message are required.');
+    expect(markup).toContain('Email me Autoscape updates and offers');
+    expect(markup).toContain('id="contact-privacy-acknowledgement"');
+    expect(markup).toContain('href="/legal/privacy-policy"');
+    expect(markup).toContain('Send message');
+    expect(markup).toContain('disabled=""');
   });
 });

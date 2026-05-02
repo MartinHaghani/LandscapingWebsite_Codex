@@ -70,6 +70,7 @@ export interface QuotePayload {
   currency?: string;
   polygonSource?: QuotePolygonSource;
   attribution?: AttributionPayload;
+  legalAcceptance: LegalAcceptancePayload;
 }
 
 export interface QuoteResponse {
@@ -118,7 +119,9 @@ export interface ContactPayload {
   phone?: string;
   addressText?: string;
   message: string;
+  marketingConsent?: boolean;
   attribution?: AttributionPayload;
+  legalAcceptance: LegalAcceptancePayload;
 }
 
 export interface ContactResponse {
@@ -130,6 +133,22 @@ export interface ContactResponse {
 export interface QuoteContactPayload {
   message?: string;
   attribution?: AttributionPayload;
+}
+
+export interface LegalAcceptancePayload {
+  accepted: true;
+}
+
+export interface QuoteClaimPayload {
+  legalAcceptance: LegalAcceptancePayload;
+}
+
+export interface PaymentCheckoutPayload {
+  legalAcceptance: LegalAcceptancePayload;
+}
+
+export interface AccountLegalAcceptancePayload {
+  legalAcceptance: LegalAcceptancePayload;
 }
 
 export interface QuoteContactResponse {

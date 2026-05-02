@@ -8,6 +8,7 @@ Autoscape is a multi-app monorepo for:
 - public shell branding uses the horizontal Autoscape PNG mark at `client/public/images/brand/autoscape-horizontal-brand.png`
 - public shell loads the Google Ads tag `AW-17991079326` from `client/index.html`
 - successful public `Submit Quote` draft saves fire the Google Ads `Submit lead form` conversion `AW-17991079326/FqIMCOHXqYIcEJ6r6IJD`
+- public legal documents live at `/legal` and `/legal/:slug`; they are linked only beside actions that require acknowledgement, not in the footer.
 
 ## Documentation Map
 
@@ -18,6 +19,7 @@ Autoscape is a multi-app monorepo for:
 - Feature flow: [`docs/feature_flow.md`](./docs/feature_flow.md)
 - Design decisions: [`docs/design.md`](./docs/design.md)
 - Deployment: [`docs/deployment.md`](./docs/deployment.md)
+- Legal evidence report: [`docs/legal_evidence_report.md`](./docs/legal_evidence_report.md)
 
 ## Stack
 
@@ -169,6 +171,7 @@ Current live status: `autoscape-staging` is active in Toronto with `autoscape-st
     - dismissing the guide keeps it closed for the current mapped address session and it reappears only after the next successful address load
     - restored local drafts do not auto-open the guide
   - `/instant-quote/summary` now removes the step progress rail and uses a two-section quote-ready review layout: a top `Back to Map` action, a desktop top row with address-first quote details on the left and a fitted map preview plus quiet whole-number area/perimeter metadata on the right, then a full-width lower payment-plan section with accessible radio plan cards under `Choose how to pay`
+  - quote submit requires a recorded legal acceptance for Terms, Privacy, Estimate/Booking Terms, Service Disclaimer, AI/Automation Disclaimer, and Service Area Disclaimer
   - address suggestions support keyboard navigation (`ArrowUp/ArrowDown/Enter/Escape`)
   - browser-local draft persistence auto-saves address, step state, polygons, units, and billing mode
     - local draft storage key/version is `autoscape.quoteDraft.v2`
@@ -184,11 +187,11 @@ Current live status: `autoscape-staging` is active in Toronto with `autoscape-st
   3. Draft handoff continues to `/quote-confirmation/:quoteId` (legacy `/quote-contact/:quoteId` links redirect here)
   4. Signed-in draft saves quote address to Clerk account metadata (`addressHistory`, latest as `defaultAddress`)
   5. `POST /api/quote/:quoteId/claim` links quote to authenticated account
-  6. `/quote-confirmation/:quoteId` handles sign-in and required phone gating before review handoff
+  6. `/quote-confirmation/:quoteId` handles sign-in, required phone gating, and required claim/payment-policy acknowledgement before review handoff
   7. `POST /api/quote/:quoteId/contact` finalizes contact + sets status `in_review` (`customer_status=pending`)
   8. Confirmation page `/quote-confirmation/:quoteId`
 - Customer dashboard:
-  - `/complete-profile/*` captures required phone number for any auth method
+  - `/complete-profile/*` captures required phone number, optional email-marketing opt-in, and required Terms/Privacy acknowledgement for any auth method
   - `/dashboard` is now an action-first customer home with mobile-first CTA placement, a primary quote state, lifecycle timeline, May-September schedule note, support panel, conditional quote history, and conditional card-on-file panel
   - `/dashboard/account/*` renders Clerk profile/security/password management with the shared Autoscape Clerk appearance inside the dashboard area
   - `/dashboard/quotes/:quoteId` for owned quote detail with grouped mobile-readable quote summaries
@@ -199,6 +202,7 @@ Current live status: `autoscape-staging` is active in Toronto with `autoscape-st
   - `GET /api/payment-links/:token` returns sanitized quote/payment details without requiring Clerk sign-in
   - `POST /api/payment-links/:token/checkout` creates or reuses a Stripe Checkout Session
   - signed-in customers can also use `POST /api/account/quotes/:quoteId/payment/checkout` from the dashboard
+  - public and dashboard checkout endpoints require recorded acceptance of Terms, Payment Policy, and Estimate/Booking Terms before opening Stripe Checkout
   - `POST /api/account/quotes/:quoteId/billing-portal` opens Stripe-hosted card management for owners when Stripe has customer billing context, and account quote detail now includes conditional card-on-file metadata
 - Out-of-area page auto-captures expansion demand via `POST /api/service-area/request`.
 

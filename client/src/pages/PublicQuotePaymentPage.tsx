@@ -1,9 +1,11 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Link, useParams, useSearchParams } from 'react-router-dom';
+import { LegalAgreementCheckbox, LegalDocumentLinks } from '../components/legal/LegalAgreementCheckbox';
 import { Button } from '../components/ui/Button';
 import { Card } from '../components/ui/Card';
 import { api, ApiError } from '../lib/api';
 import { formatNumber } from '../lib/geometry';
+import { legalAcceptancePayload, legalDocumentSlugs } from '../lib/legalAcceptance';
 import type { PaymentLinkResponse, QuotePaymentStatus } from '../types';
 
 interface PublicQuotePaymentContentProps {
@@ -12,7 +14,9 @@ interface PublicQuotePaymentContentProps {
   error: string | null;
   checkoutError: string | null;
   checkoutLoading: boolean;
+  legalAccepted: boolean;
   returnStatus: string | null;
+  onLegalAcceptedChange: (accepted: boolean) => void;
   onCheckout: () => void;
 }
 
@@ -68,7 +72,9 @@ export const PublicQuotePaymentContent = ({
   error,
   checkoutError,
   checkoutLoading,
+  legalAccepted,
   returnStatus,
+  onLegalAcceptedChange,
   onCheckout
 }: PublicQuotePaymentContentProps) => {
   const paymentStatus = paymentLink?.payment.status ?? 'awaiting_payment';
@@ -76,7 +82,12 @@ export const PublicQuotePaymentContent = ({
   const isPerVisit = paymentLink?.payment.mode === 'per_session_subscription';
   const paymentAmount = paymentLink ? paymentLink.payment.amount : 0;
   const ctaLabel = isPerVisit ? 'Start weekly payments' : 'Pay seasonal total';
-  const ctaDisabled = !paymentLink || checkoutLoading || isTerminalPaidStatus(paymentStatus) || paymentStatus === 'canceled';
+  const ctaDisabled =
+    !paymentLink ||
+    checkoutLoading ||
+    !legalAccepted ||
+    isTerminalPaidStatus(paymentStatus) ||
+    paymentStatus === 'canceled';
 
   const returnMessage = useMemo(() => {
     if (returnStatus === 'success') {
@@ -173,6 +184,16 @@ export const PublicQuotePaymentContent = ({
                       ? 'Stripe will set up weekly per-visit billing. If you pay before May 1, the first charge starts on May 1. If you pay after May 1, the first charge starts at checkout. Billing stops after the approved visit count and no later than September 30.'
                       : 'Stripe will collect the approved discounted seasonal total once. The amount shown here is the final approved quote total for payment.'}
                   </p>
+                  <div className="mt-5">
+                    <LegalAgreementCheckbox
+                      id="public-payment-legal-acceptance"
+                      checked={legalAccepted}
+                      onChange={onLegalAcceptedChange}
+                      documentSlugs={legalDocumentSlugs.paymentCheckout}
+                    >
+                      I have read and agree to the <LegalDocumentLinks documentSlugs={legalDocumentSlugs.paymentCheckout} />.
+                    </LegalAgreementCheckbox>
+                  </div>
                   <div className="mt-5 flex flex-wrap gap-3">
                     <Button onClick={onCheckout} disabled={ctaDisabled} className="w-full sm:w-auto">
                       {checkoutLoading ? 'Opening Stripe...' : ctaLabel}
@@ -230,6 +251,7 @@ export const PublicQuotePaymentPage = () => {
   const [error, setError] = useState<string | null>(null);
   const [checkoutLoading, setCheckoutLoading] = useState(false);
   const [checkoutError, setCheckoutError] = useState<string | null>(null);
+  const [legalAccepted, setLegalAccepted] = useState(false);
 
   useEffect(() => {
     let mounted = true;
@@ -274,7 +296,9 @@ export const PublicQuotePaymentPage = () => {
     setCheckoutLoading(true);
     setCheckoutError(null);
     try {
-      const result = await api.createPaymentCheckout(token);
+      const result = await api.createPaymentCheckout(token, {
+        legalAcceptance: legalAcceptancePayload
+      });
       window.location.assign(result.checkoutUrl);
     } catch (err) {
       setCheckoutError(err instanceof ApiError ? err.message : 'Unable to open Stripe Checkout.');
@@ -290,7 +314,9 @@ export const PublicQuotePaymentPage = () => {
       error={error}
       checkoutError={checkoutError}
       checkoutLoading={checkoutLoading}
+      legalAccepted={legalAccepted}
       returnStatus={searchParams.get('status')}
+      onLegalAcceptedChange={setLegalAccepted}
       onCheckout={startCheckout}
     />
   );

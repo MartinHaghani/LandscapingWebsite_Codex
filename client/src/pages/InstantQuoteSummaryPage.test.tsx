@@ -1,45 +1,50 @@
 import { renderToStaticMarkup } from 'react-dom/server';
+import { StaticRouter } from 'react-router-dom/server';
 import { describe, expect, it } from 'vitest';
 import { InstantQuoteSummaryContent } from './InstantQuoteSummaryPage';
 
 const renderSummaryContent = () =>
   renderToStaticMarkup(
-    <InstantQuoteSummaryContent
-      selectedAddress="123 Greenway Blvd, Vaughan, ON"
-      previewCenter={[-79.52, 43.84]}
-      previewPolygons={[
-        {
-          id: 'polygon-1',
-          kind: 'service',
-          ringPoints: [
-            [-79.52, 43.84],
-            [-79.521, 43.84],
-            [-79.521, 43.841]
-          ],
-          rawStrokePoints: null
-        }
-      ]}
-      areaValue="450 m²"
-      perimeterValue="92 m"
-      billingMode="seasonal"
-      onBillingModeChange={() => {}}
-      quoteTotal={74.25}
-      seasonalPricing={{
-        sessionsMin: 20,
-        sessionsMax: 20,
-        fullSeasonTotal: 1485,
-        seasonalDiscountRate: 0.2,
-        seasonalDiscountedTotal: 1188,
-        seasonalSavingsTotal: 297,
-        seasonalTotalMin: 1485,
-        seasonalTotalMax: 1485
-      }}
-      statusMessage={null}
-      onBack={() => {}}
-      onContinue={() => {}}
-      canContinue
-      submitting={false}
-    />
+    <StaticRouter location="/instant-quote/summary">
+      <InstantQuoteSummaryContent
+        selectedAddress="123 Greenway Blvd, Vaughan, ON"
+        previewCenter={[-79.52, 43.84]}
+        previewPolygons={[
+          {
+            id: 'polygon-1',
+            kind: 'service',
+            ringPoints: [
+              [-79.52, 43.84],
+              [-79.521, 43.84],
+              [-79.521, 43.841]
+            ],
+            rawStrokePoints: null
+          }
+        ]}
+        areaValue="450 m²"
+        perimeterValue="92 m"
+        billingMode="seasonal"
+        onBillingModeChange={() => {}}
+        quoteTotal={74.25}
+        seasonalPricing={{
+          sessionsMin: 20,
+          sessionsMax: 20,
+          fullSeasonTotal: 1485,
+          seasonalDiscountRate: 0.2,
+          seasonalDiscountedTotal: 1188,
+          seasonalSavingsTotal: 297,
+          seasonalTotalMin: 1485,
+          seasonalTotalMax: 1485
+        }}
+        statusMessage={null}
+        onBack={() => {}}
+        onContinue={() => {}}
+        canContinue={false}
+        submitting={false}
+        legalAccepted={false}
+        onLegalAcceptedChange={() => {}}
+      />
+    </StaticRouter>
   );
 
 describe('InstantQuoteSummaryContent', () => {
@@ -94,7 +99,12 @@ describe('InstantQuoteSummaryContent', () => {
     expect(markup).not.toContain('Selected Plan');
     expect(markup).not.toContain('Select Plan');
     expect(markup).toContain('How the rate is calculated');
+    expect(markup).toContain('id="quote-summary-legal-acceptance"');
+    expect(markup).toContain('href="/legal/terms-of-service"');
+    expect(markup).toContain('href="/legal/service-disclaimer"');
+    expect(markup).toContain('href="/legal/ai-automation-disclaimer"');
     expect(markup).toContain('Submit Quote');
+    expect(markup).toContain('disabled=""');
     expect(markup).not.toContain(
       'Double-check the mapped property, pricing, and billing preferences before we save the draft and move to contact details.'
     );

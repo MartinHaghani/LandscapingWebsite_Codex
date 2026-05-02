@@ -2,8 +2,10 @@ import { useMemo, useState, type FormEvent } from 'react';
 import { Card } from '../components/ui/Card';
 import { SectionTitle } from '../components/ui/SectionTitle';
 import { Button } from '../components/ui/Button';
+import { LegalAgreementCheckbox, LegalDocumentLinks } from '../components/legal/LegalAgreementCheckbox';
 import { api, ApiError, createIdempotencyKey } from '../lib/api';
 import { getAttributionSnapshot } from '../lib/attribution';
+import { legalAcceptancePayload, legalDocumentSlugs } from '../lib/legalAcceptance';
 
 const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const phonePattern = /^[0-9+().\-\s]{7,40}$/;
@@ -65,6 +67,8 @@ const ContactIcon = ({ icon }: { icon: ContactMethodIcon }) => {
 
 export const ContactPage = () => {
   const [form, setForm] = useState(emptyForm);
+  const [marketingConsent, setMarketingConsent] = useState(false);
+  const [privacyAccepted, setPrivacyAccepted] = useState(false);
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
 
@@ -73,8 +77,9 @@ export const ContactPage = () => {
       form.name.trim().length > 1 &&
       emailPattern.test(form.email.trim()) &&
       phonePattern.test(form.phone.trim()) &&
-      form.message.trim().length > 7,
-    [form]
+      form.message.trim().length > 7 &&
+      privacyAccepted,
+    [form, privacyAccepted]
   );
 
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
@@ -90,7 +95,9 @@ export const ContactPage = () => {
           phone: form.phone.trim(),
           addressText: form.address.trim() || undefined,
           message: form.message.trim(),
-          attribution: getAttributionSnapshot()
+          marketingConsent,
+          attribution: getAttributionSnapshot(),
+          legalAcceptance: legalAcceptancePayload
         },
         createIdempotencyKey()
       );
@@ -99,6 +106,8 @@ export const ContactPage = () => {
         message: `Message received. Confirmation ID: ${response.id}`
       });
       setForm(emptyForm);
+      setMarketingConsent(false);
+      setPrivacyAccepted(false);
     } catch (error) {
       setResult({
         type: 'error',
@@ -263,6 +272,33 @@ export const ContactPage = () => {
                   placeholder="Tell us about your property, service goals, or any timeline requirements."
                 />
               </div>
+
+              <label
+                htmlFor="email-marketing-consent"
+                className="flex gap-3 rounded-lg border border-stroke bg-surface-raised/60 px-4 py-3 text-sm leading-6 text-copy-muted"
+              >
+                <input
+                  id="email-marketing-consent"
+                  type="checkbox"
+                  checked={marketingConsent}
+                  onChange={(event) => setMarketingConsent(event.target.checked)}
+                  className="mt-1 h-4 w-4 shrink-0 accent-brand"
+                />
+                <span>
+                  Email me Autoscape updates and offers. This is optional and separate from service
+                  or quote messages.
+                </span>
+              </label>
+
+              <LegalAgreementCheckbox
+                id="contact-privacy-acknowledgement"
+                checked={privacyAccepted}
+                onChange={setPrivacyAccepted}
+                documentSlugs={legalDocumentSlugs.contactPrivacy}
+              >
+                I have read the <LegalDocumentLinks documentSlugs={legalDocumentSlugs.contactPrivacy} /> and agree
+                that Autoscape may use my information to respond to this request.
+              </LegalAgreementCheckbox>
 
               {result ? (
                 <p

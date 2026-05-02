@@ -4,9 +4,12 @@ import type {
   AttributionPayload,
   ContactPayload,
   ContactResponse,
+  AccountLegalAcceptancePayload,
   QuoteClaimResponse,
+  QuoteClaimPayload,
   QuoteContactPayload,
   QuoteContactResponse,
+  PaymentCheckoutPayload,
   PaymentCheckoutResponse,
   PaymentLinkResponse,
   QuoteLookupResponse,
@@ -98,10 +101,11 @@ export const api = {
       body: JSON.stringify(payload)
     });
   },
-  claimQuote(quoteId: string, authToken: string) {
+  claimQuote(quoteId: string, authToken: string, payload: QuoteClaimPayload) {
     return request<QuoteClaimResponse>(`/api/quote/${encodeURIComponent(quoteId)}/claim`, {
       method: 'POST',
-      authToken
+      authToken,
+      body: JSON.stringify(payload)
     });
   },
   submitClaimedQuoteContact(
@@ -164,17 +168,26 @@ export const api = {
   getPaymentLink(token: string) {
     return request<PaymentLinkResponse>(`/api/payment-links/${encodeURIComponent(token)}`);
   },
-  createPaymentCheckout(token: string) {
-    return request<PaymentCheckoutResponse>(`/api/payment-links/${encodeURIComponent(token)}/checkout`, {
-      method: 'POST'
+  recordAccountLegalAcceptance(authToken: string, payload: AccountLegalAcceptancePayload) {
+    return request<{ ok: true }>('/api/account/legal-acceptance', {
+      method: 'POST',
+      authToken,
+      body: JSON.stringify(payload)
     });
   },
-  createAccountQuoteCheckout(quoteId: string, authToken: string) {
+  createPaymentCheckout(token: string, payload: PaymentCheckoutPayload) {
+    return request<PaymentCheckoutResponse>(`/api/payment-links/${encodeURIComponent(token)}/checkout`, {
+      method: 'POST',
+      body: JSON.stringify(payload)
+    });
+  },
+  createAccountQuoteCheckout(quoteId: string, authToken: string, payload: PaymentCheckoutPayload) {
     return request<PaymentCheckoutResponse>(
       `/api/account/quotes/${encodeURIComponent(quoteId)}/payment/checkout`,
       {
         method: 'POST',
-        authToken
+        authToken,
+        body: JSON.stringify(payload)
       }
     );
   },

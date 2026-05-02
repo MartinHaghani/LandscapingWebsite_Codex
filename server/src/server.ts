@@ -13,11 +13,14 @@ import {
   getApprovedQuotePreviewMapboxAccessToken
 } from './lib/approvedQuotePreview.js';
 import {
+  accountLegalAcceptancePayloadSchema,
   adminQuoteNoteSchema,
   adminQuoteRevisionSchema,
   adminQuoteStatusSchema,
   adminQuoteVersionCreateSchema,
   contactPayloadSchema,
+  paymentCheckoutPayloadSchema,
+  quoteClaimPayloadSchema,
   quoteDraftPayloadSchema,
   quoteContactPayloadSchema,
   serviceAreaCheckSchema,
@@ -25,6 +28,11 @@ import {
 } from './lib/schemas.js';
 import { createDataStore } from './lib/dataStore.js';
 import type { QuotePaymentStatus } from './lib/dataStore.js';
+import {
+  LEGAL_ACCEPTANCE_DOCUMENTS,
+  LEGAL_DOCUMENT_VERSION,
+  type LegalAcceptanceAction
+} from './lib/legalAcceptance.js';
 import {
   createStripePaymentProvider,
   StripePaymentConfigurationError,
@@ -584,6 +592,36 @@ export const createServer = (options: CreateServerOptions = {}) => {
     return `${apiBaseUrl}/api/approved-quote-preview`;
   };
 
+  const getUserAgent = (req: http.IncomingMessage) => {
+    const header = req.headers['user-agent'];
+    const value = Array.isArray(header) ? header[0] : header;
+    return value?.slice(0, 300) ?? null;
+  };
+
+  const recordLegalAcceptance = async (
+    req: http.IncomingMessage,
+    input: {
+      action: LegalAcceptanceAction;
+      leadId?: string | null;
+      quotePublicId?: string | null;
+      authUserId?: string | null;
+      email?: string | null;
+      metadata?: Record<string, unknown>;
+    }
+  ) =>
+    dataStore.recordLegalAcceptance({
+      action: input.action,
+      documentSlugs: LEGAL_ACCEPTANCE_DOCUMENTS[input.action],
+      documentVersion: LEGAL_DOCUMENT_VERSION,
+      leadId: input.leadId,
+      quotePublicId: input.quotePublicId,
+      authUserId: input.authUserId,
+      email: input.email,
+      ipHash: hashIp(getClientIp(req)),
+      userAgent: getUserAgent(req),
+      metadata: input.metadata
+    });
+
   const buildConfiguredPreviewImageBaseUrl = () =>
     configuredApiBaseUrl ? `${configuredApiBaseUrl}/api/approved-quote-preview` : null;
 
@@ -1103,6 +1141,7 @@ export const createServer = (options: CreateServerOptions = {}) => {
         pathname.match(/^\/api\/quote\/[^/]+\/claim$/) ||
         pathname.match(/^\/api\/payment-links\/[^/]+\/checkout$/) ||
         pathname.match(/^\/api\/account\/quotes\/[^/]+\/payment\/checkout$/) ||
+        pathname === '/api/account/legal-acceptance' ||
         pathname === '/api/contact' ||
         pathname === '/api/service-area/request')
     ) {
@@ -1192,6 +1231,13 @@ export const createServer = (options: CreateServerOptions = {}) => {
     const paymentLinkCheckoutToken = getPathMatch(pathname, /^\/api\/payment-links\/([^/]+)\/checkout$/);
     if (method === 'POST' && paymentLinkCheckoutToken) {
       try {
+        const body = await readJson(req);
+        const parsed = paymentCheckoutPayloadSchema.safeParse(body);
+        if (!parsed.success) {
+          json(res, 400, { error: 'Legal acceptance is required.', details: parsed.error.flatten() });
+          return;
+        }
+
         const paymentLink = await resolvePaymentLink(req, paymentLinkCheckoutToken);
         if (!paymentLink) {
           json(res, 404, { error: 'Payment link not found.' });
@@ -1212,6 +1258,18 @@ export const createServer = (options: CreateServerOptions = {}) => {
           return;
         }
 
+        await recordLegalAcceptance(req, {
+          action: 'payment_checkout_terms',
+          quotePublicId: paymentLink.publicQuoteId,
+          email: paymentLink.customerEmail,
+          metadata: {
+            surface: 'public_payment',
+            paymentLinkId: paymentLink.id,
+            mode: paymentLink.mode,
+            status: paymentLink.status
+          }
+        });
+
         if (isReusableCheckout(paymentLink)) {
           json(res, 200, {
             checkoutUrl: paymentLink.stripeCheckoutUrl,
@@ -1230,6 +1288,14 @@ export const createServer = (options: CreateServerOptions = {}) => {
         json(res, 200, await createCheckoutForPaymentLink(paymentLink, publicPaymentPageUrl));
         return;
       } catch (error) {
+        if (error instanceof SyntaxError) {
+          json(res, 400, { error: 'Invalid JSON body.' });
+          return;
+        }
+        if (error instanceof Error && error.message === 'Payload too large.') {
+          json(res, 413, { error: 'Payload too large.' });
+          return;
+        }
         if (error instanceof StripePaymentConfigurationError) {
           json(res, 503, { error: error.message });
           return;
@@ -1373,8 +1439,20 @@ export const createServer = (options: CreateServerOptions = {}) => {
           phone: parsed.data.phone,
           addressText: parsed.data.addressText,
           message: parsed.data.message,
+          marketingConsent: parsed.data.marketingConsent,
           attribution: parsed.data.attribution
         });
+
+        if (!result.replayed) {
+          await recordLegalAcceptance(req, {
+            action: 'contact_privacy_ack',
+            email: parsed.data.email,
+            metadata: {
+              surface: 'contact_form',
+              contactId: result.body.id
+            }
+          });
+        }
 
         json(res, result.statusCode, {
           ...result.body,
@@ -1450,6 +1528,20 @@ export const createServer = (options: CreateServerOptions = {}) => {
           });
         }
 
+        if (!result.replayed) {
+          await recordLegalAcceptance(req, {
+            action: 'quote_submit_terms',
+            quotePublicId: result.body.quoteId,
+            authUserId: customerIdentity?.userId,
+            email: customerIdentity?.email,
+            metadata: {
+              surface: 'instant_quote_summary',
+              billingMode: payload.billingMode ?? 'seasonal',
+              serviceFrequency: payload.serviceFrequency ?? 'weekly'
+            }
+          });
+        }
+
         json(res, result.statusCode, {
           ...result.body,
           replayed: result.replayed
@@ -1479,9 +1571,28 @@ export const createServer = (options: CreateServerOptions = {}) => {
           throw new Error('AUTH_REQUIRED');
         }
 
+        const body = await readJson(req);
+        const parsed = quoteClaimPayloadSchema.safeParse(body);
+        if (!parsed.success) {
+          json(res, 400, { error: 'Legal acceptance is required.', details: parsed.error.flatten() });
+          return;
+        }
+
         const result = await dataStore.claimQuoteOwnership({
           quotePublicId: quoteClaimId,
-          authUserId: customerIdentity.userId
+          authUserId: customerIdentity.userId,
+          marketingConsent: customerIdentity.emailMarketingConsent
+        });
+
+        await recordLegalAcceptance(req, {
+          action: 'quote_claim_terms',
+          quotePublicId: quoteClaimId,
+          authUserId: customerIdentity.userId,
+          email: customerIdentity.email,
+          metadata: {
+            surface: 'quote_confirmation',
+            claimed: result.body.claimed
+          }
         });
 
         json(res, result.statusCode, {
@@ -1489,6 +1600,14 @@ export const createServer = (options: CreateServerOptions = {}) => {
         });
         return;
       } catch (error) {
+        if (error instanceof SyntaxError) {
+          json(res, 400, { error: 'Invalid JSON body.' });
+          return;
+        }
+        if (error instanceof Error && error.message === 'Payload too large.') {
+          json(res, 413, { error: 'Payload too large.' });
+          return;
+        }
         const mapped = mapStoreError(error);
         json(res, mapped.statusCode, { error: mapped.message });
         return;
@@ -1525,6 +1644,7 @@ export const createServer = (options: CreateServerOptions = {}) => {
           name: customerIdentity.name ?? 'Autoscape Customer',
           email: customerIdentity.email,
           phone: customerIdentity.phone,
+          marketingConsent: customerIdentity.emailMarketingConsent,
           message: parsed.data.message,
           attribution: parsed.data.attribution
         });
@@ -1552,6 +1672,47 @@ export const createServer = (options: CreateServerOptions = {}) => {
           ...result.body,
           replayed: result.replayed
         });
+        return;
+      } catch (error) {
+        if (error instanceof SyntaxError) {
+          json(res, 400, { error: 'Invalid JSON body.' });
+          return;
+        }
+        if (error instanceof Error && error.message === 'Payload too large.') {
+          json(res, 413, { error: 'Payload too large.' });
+          return;
+        }
+
+        const mapped = mapStoreError(error);
+        json(res, mapped.statusCode, { error: mapped.message });
+        return;
+      }
+    }
+
+    if (method === 'POST' && pathname === '/api/account/legal-acceptance') {
+      try {
+        const customerIdentity = await customerIdentityResolver(req);
+        if (!customerIdentity) {
+          throw new Error('AUTH_REQUIRED');
+        }
+
+        const body = await readJson(req);
+        const parsed = accountLegalAcceptancePayloadSchema.safeParse(body);
+        if (!parsed.success) {
+          json(res, 400, { error: 'Legal acceptance is required.', details: parsed.error.flatten() });
+          return;
+        }
+
+        await recordLegalAcceptance(req, {
+          action: 'complete_profile_terms',
+          authUserId: customerIdentity.userId,
+          email: customerIdentity.email,
+          metadata: {
+            surface: 'complete_profile'
+          }
+        });
+
+        json(res, 200, { ok: true });
         return;
       } catch (error) {
         if (error instanceof SyntaxError) {
@@ -1612,6 +1773,13 @@ export const createServer = (options: CreateServerOptions = {}) => {
         }
         assertCustomerPhoneProfile(customerIdentity);
 
+        const body = await readJson(req);
+        const parsed = paymentCheckoutPayloadSchema.safeParse(body);
+        if (!parsed.success) {
+          json(res, 400, { error: 'Legal acceptance is required.', details: parsed.error.flatten() });
+          return;
+        }
+
         const paymentLink = await dataStore.getPaymentLinkByQuotePublicId({
           quotePublicId: accountQuotePaymentCheckoutId,
           access: {
@@ -1639,6 +1807,19 @@ export const createServer = (options: CreateServerOptions = {}) => {
           return;
         }
 
+        await recordLegalAcceptance(req, {
+          action: 'payment_checkout_terms',
+          quotePublicId: accountQuotePaymentCheckoutId,
+          authUserId: customerIdentity.userId,
+          email: customerIdentity.email,
+          metadata: {
+            surface: 'dashboard_payment',
+            paymentLinkId: paymentLink.id,
+            mode: paymentLink.mode,
+            status: paymentLink.status
+          }
+        });
+
         const dashboardPaymentPageUrl = buildPaymentPageUrl(req, accountQuotePaymentCheckoutId);
         if (!dashboardPaymentPageUrl) {
           json(res, 500, { error: 'Public application URL is not configured for payments.' });
@@ -1648,6 +1829,14 @@ export const createServer = (options: CreateServerOptions = {}) => {
         json(res, 200, await createCheckoutForPaymentLink(paymentLink, dashboardPaymentPageUrl));
         return;
       } catch (error) {
+        if (error instanceof SyntaxError) {
+          json(res, 400, { error: 'Invalid JSON body.' });
+          return;
+        }
+        if (error instanceof Error && error.message === 'Payload too large.') {
+          json(res, 413, { error: 'Payload too large.' });
+          return;
+        }
         if (error instanceof StripePaymentConfigurationError) {
           json(res, 503, { error: error.message });
           return;

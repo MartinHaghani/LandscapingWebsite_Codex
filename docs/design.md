@@ -139,6 +139,18 @@ Implementation:
 - full snapshots reserved for high-risk events (e.g., revisions)
 - correlation metadata (`request_id`, `correlation_id`, `ip_hash`, `user_agent`)
 
+## 10a) Action-Local Legal Acceptance
+
+Decision:
+
+- Keep legal discovery focused on the action being taken instead of adding footer/nav legal clutter.
+
+Implementation:
+
+- `/legal` and `/legal/:slug` expose editable Markdown legal drafts.
+- Required checkboxes sit beside contact, complete-profile, quote submit, quote claim, and payment checkout actions.
+- Client sends only `legalAcceptance: { accepted: true }`; server records the canonical action, document slugs, document version, timestamp, hashed IP, user agent, and related lead/quote/account identifiers in `legal_acceptances`.
+
 ## 11) Role-Based PII and Export Controls
 
 Decision:

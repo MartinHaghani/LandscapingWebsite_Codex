@@ -1,9 +1,12 @@
 import { useAuth, useUser } from '@clerk/clerk-react';
 import { useEffect, useState, type FormEvent } from 'react';
 import { Navigate, useLocation, useNavigate } from 'react-router-dom';
+import { LegalAgreementCheckbox, LegalDocumentLinks } from '../components/legal/LegalAgreementCheckbox';
 import { Button } from '../components/ui/Button';
 import { Card } from '../components/ui/Card';
 import { getAccountPhone, hasRequiredPhone } from '../lib/accountProfile';
+import { api, ApiError } from '../lib/api';
+import { legalAcceptancePayload, legalDocumentSlugs } from '../lib/legalAcceptance';
 
 const phonePattern = /^[0-9+().\-\s]{7,40}$/;
 
@@ -26,9 +29,11 @@ const toRecord = (value: unknown): Record<string, unknown> => {
 export const CompleteProfilePage = () => {
   const navigate = useNavigate();
   const location = useLocation();
-  const { isLoaded, isSignedIn } = useAuth();
+  const { isLoaded, isSignedIn, getToken } = useAuth();
   const { user } = useUser();
   const [phone, setPhone] = useState('');
+  const [marketingConsent, setMarketingConsent] = useState(false);
+  const [legalAccepted, setLegalAccepted] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const redirectUrl = getSafeRedirect(new URLSearchParams(location.search).get('redirect_url'));
@@ -75,19 +80,36 @@ export const CompleteProfilePage = () => {
       return;
     }
 
+    if (!legalAccepted) {
+      setError('Review and accept the website terms and privacy policy to continue.');
+      return;
+    }
+
     setSaving(true);
     setError(null);
 
     try {
+      const token = await getToken();
+      if (!token) {
+        throw new ApiError('Authentication is required.', 401);
+      }
+
       const unsafeMetadata = toRecord(user.unsafeMetadata);
       const profileMetadata = toRecord(unsafeMetadata.autoscapeProfile);
+      const now = new Date().toISOString();
+
+      await api.recordAccountLegalAcceptance(token, {
+        legalAcceptance: legalAcceptancePayload
+      });
 
       await user.update({
         unsafeMetadata: {
           ...unsafeMetadata,
           autoscapeProfile: {
             ...profileMetadata,
-            phone: trimmedPhone
+            phone: trimmedPhone,
+            emailMarketingConsent: marketingConsent,
+            emailMarketingConsentCapturedAt: marketingConsent ? now : null
           }
         }
       });
@@ -127,9 +149,35 @@ export const CompleteProfilePage = () => {
             />
           </div>
 
+          <label
+            htmlFor="complete-profile-email-marketing-consent"
+            className="flex gap-3 rounded-lg border border-stroke bg-surface-raised/60 px-4 py-3 text-sm leading-6 text-copy-muted"
+          >
+            <input
+              id="complete-profile-email-marketing-consent"
+              type="checkbox"
+              checked={marketingConsent}
+              onChange={(event) => setMarketingConsent(event.target.checked)}
+              className="mt-1 h-4 w-4 shrink-0 accent-brand"
+            />
+            <span>
+              Email me Autoscape updates and offers. This is optional and separate from quote,
+              account, payment, or service messages.
+            </span>
+          </label>
+
+          <LegalAgreementCheckbox
+            id="complete-profile-legal-acceptance"
+            checked={legalAccepted}
+            onChange={setLegalAccepted}
+            documentSlugs={legalDocumentSlugs.completeProfile}
+          >
+            I have read and agree to the <LegalDocumentLinks documentSlugs={legalDocumentSlugs.completeProfile} />.
+          </LegalAgreementCheckbox>
+
           {error ? <p className="text-sm text-red-700">{error}</p> : null}
 
-          <Button type="submit" disabled={saving} className="w-full sm:w-auto">
+          <Button type="submit" disabled={saving || !legalAccepted} className="w-full sm:w-auto">
             {saving ? 'Saving...' : 'Save and Continue'}
           </Button>
         </form>

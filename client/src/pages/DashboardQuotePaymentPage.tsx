@@ -1,12 +1,14 @@
 import { useAuth, useUser } from '@clerk/clerk-react';
 import { useEffect, useState } from 'react';
 import { Link, Navigate, useLocation, useParams, useSearchParams } from 'react-router-dom';
+import { LegalAgreementCheckbox, LegalDocumentLinks } from '../components/legal/LegalAgreementCheckbox';
 import { Button } from '../components/ui/Button';
 import { Card } from '../components/ui/Card';
 import { normalizeAccountQuote, type NormalizedAccountQuote } from '../lib/accountQuote';
 import { api, ApiError } from '../lib/api';
 import { hasRequiredPhone } from '../lib/accountProfile';
 import { formatNumber } from '../lib/geometry';
+import { legalAcceptancePayload, legalDocumentSlugs } from '../lib/legalAcceptance';
 
 interface DashboardQuotePaymentContentProps {
   quote: NormalizedAccountQuote | null;
@@ -14,7 +16,9 @@ interface DashboardQuotePaymentContentProps {
   error: string | null;
   checkoutError: string | null;
   checkoutLoading: boolean;
+  legalAccepted: boolean;
   returnStatus: string | null;
+  onLegalAcceptedChange: (accepted: boolean) => void;
   onCheckout: () => void;
 }
 
@@ -70,7 +74,9 @@ export const DashboardQuotePaymentContent = ({
   error,
   checkoutError,
   checkoutLoading,
+  legalAccepted,
   returnStatus,
+  onLegalAcceptedChange,
   onCheckout
 }: DashboardQuotePaymentContentProps) => {
   const quotePath = quote ? `/dashboard/quotes/${quote.id}` : '/dashboard';
@@ -85,7 +91,11 @@ export const DashboardQuotePaymentContent = ({
   const paymentCurrency = quote?.payment?.currency ?? 'CAD';
   const ctaLabel = isPerVisit ? 'Start weekly payments' : 'Pay seasonal total';
   const ctaDisabled =
-    !quote || checkoutLoading || isTerminalPaymentStatus(paymentStatus) || paymentStatus === 'canceled';
+    !quote ||
+    checkoutLoading ||
+    !legalAccepted ||
+    isTerminalPaymentStatus(paymentStatus) ||
+    paymentStatus === 'canceled';
   const returnMessage =
     returnStatus === 'success'
       ? 'Stripe is confirming the payment. This page updates once the secure webhook is received.'
@@ -179,6 +189,16 @@ export const DashboardQuotePaymentContent = ({
                       ? 'Stripe will set up weekly per-visit billing. If you pay before May 1, the first charge starts on May 1. If you pay after May 1, the first charge starts at checkout. Billing stops after the approved visit count and no later than September 30.'
                       : 'Stripe will collect the approved discounted seasonal total once. The amount shown here is the final approved quote total for payment.'}
                   </p>
+                  <div className="mt-5">
+                    <LegalAgreementCheckbox
+                      id="dashboard-payment-legal-acceptance"
+                      checked={legalAccepted}
+                      onChange={onLegalAcceptedChange}
+                      documentSlugs={legalDocumentSlugs.paymentCheckout}
+                    >
+                      I have read and agree to the <LegalDocumentLinks documentSlugs={legalDocumentSlugs.paymentCheckout} />.
+                    </LegalAgreementCheckbox>
+                  </div>
                   <div className="mt-5 flex flex-wrap gap-3">
                     <Button onClick={onCheckout} disabled={ctaDisabled} className="w-full sm:w-auto">
                       {checkoutLoading ? 'Opening Stripe...' : ctaLabel}
@@ -256,6 +276,7 @@ export const DashboardQuotePaymentPage = () => {
   const [error, setError] = useState<string | null>(null);
   const [checkoutLoading, setCheckoutLoading] = useState(false);
   const [checkoutError, setCheckoutError] = useState<string | null>(null);
+  const [legalAccepted, setLegalAccepted] = useState(false);
   const profileHasRequiredPhone = hasRequiredPhone(user);
 
   useEffect(() => {
@@ -330,7 +351,9 @@ export const DashboardQuotePaymentPage = () => {
         throw new ApiError('Authentication is required.', 401);
       }
 
-      const result = await api.createAccountQuoteCheckout(quoteId, token);
+      const result = await api.createAccountQuoteCheckout(quoteId, token, {
+        legalAcceptance: legalAcceptancePayload
+      });
       window.location.assign(result.checkoutUrl);
     } catch (err) {
       setCheckoutError(err instanceof ApiError ? err.message : 'Unable to open Stripe Checkout.');
@@ -356,7 +379,9 @@ export const DashboardQuotePaymentPage = () => {
       error={error}
       checkoutError={checkoutError}
       checkoutLoading={checkoutLoading}
+      legalAccepted={legalAccepted}
       returnStatus={searchParams.get('status')}
+      onLegalAcceptedChange={setLegalAccepted}
       onCheckout={startCheckout}
     />
   );

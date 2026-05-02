@@ -1,6 +1,7 @@
 import { useAuth } from '@clerk/clerk-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Navigate, useNavigate } from 'react-router-dom';
+import { LegalAgreementCheckbox, LegalDocumentLinks } from '../components/legal/LegalAgreementCheckbox';
 import { QuoteStaticPreview } from '../components/quote/QuoteStaticPreview';
 import { Button } from '../components/ui/Button';
 import { Card } from '../components/ui/Card';
@@ -9,6 +10,7 @@ import { getAttributionSnapshot } from '../lib/attribution';
 import { cn } from '../lib/cn';
 import { toFt, toFt2 } from '../lib/geometry';
 import { trackSubmitLeadConversion } from '../lib/googleAds';
+import { legalAcceptancePayload, legalDocumentSlugs } from '../lib/legalAcceptance';
 import { computeMultiPolygonMetrics } from '../lib/multiPolygonMetrics';
 import { canSubmitQuoteDraft } from '../lib/quoteFlow';
 import {
@@ -163,6 +165,8 @@ interface InstantQuoteSummaryContentProps {
   onContinue: () => void;
   canContinue: boolean;
   submitting: boolean;
+  legalAccepted: boolean;
+  onLegalAcceptedChange: (accepted: boolean) => void;
 }
 
 export const InstantQuoteSummaryContent = ({
@@ -179,7 +183,9 @@ export const InstantQuoteSummaryContent = ({
   onBack,
   onContinue,
   canContinue,
-  submitting
+  submitting,
+  legalAccepted,
+  onLegalAcceptedChange
 }: InstantQuoteSummaryContentProps) => {
   const isSeasonalSelected = billingMode === 'seasonal';
   const isPerSessionSelected = billingMode === 'per_session';
@@ -340,6 +346,15 @@ export const InstantQuoteSummaryContent = ({
             </p>
           ) : null}
 
+          <LegalAgreementCheckbox
+            id="quote-summary-legal-acceptance"
+            checked={legalAccepted}
+            onChange={onLegalAcceptedChange}
+            documentSlugs={legalDocumentSlugs.quoteSubmit}
+          >
+            I have read and agree to the <LegalDocumentLinks documentSlugs={legalDocumentSlugs.quoteSubmit} />.
+          </LegalAgreementCheckbox>
+
           <Button
             type="button"
             className="min-h-[56px] w-full text-base shadow-[0_18px_36px_-28px_rgba(50,159,91,0.95)]"
@@ -362,6 +377,7 @@ export const InstantQuoteSummaryPage = () => {
   const [draftState, setDraftState] = useState<QuoteDraftPersistedState | null>(null);
   const [loadingDraft, setLoadingDraft] = useState(true);
   const [submitting, setSubmitting] = useState(false);
+  const [legalAccepted, setLegalAccepted] = useState(false);
   const [statusMessage, setStatusMessage] = useState<StatusMessage | null>(null);
 
   useEffect(() => {
@@ -411,7 +427,7 @@ export const InstantQuoteSummaryPage = () => {
       selfIntersecting: metrics.selfIntersecting,
       effectiveGeometryEmpty: metrics.effectiveGeometryEmpty
     });
-  const canContinue = isDraftReady && !submitting;
+  const canContinue = isDraftReady && !submitting && legalAccepted;
 
   const areaValue =
     unitMode === 'metric'
@@ -473,7 +489,8 @@ export const InstantQuoteSummaryPage = () => {
           currency: 'CAD',
           serviceFrequency: 'weekly',
           billingMode,
-          attribution: attributionRef.current
+          attribution: attributionRef.current,
+          legalAcceptance: legalAcceptancePayload
         },
         createIdempotencyKey(),
         authToken ?? undefined
@@ -534,6 +551,8 @@ export const InstantQuoteSummaryPage = () => {
         onContinue={handleSubmitQuote}
         canContinue={canContinue}
         submitting={submitting}
+        legalAccepted={legalAccepted}
+        onLegalAcceptedChange={setLegalAccepted}
       />
     </div>
   );

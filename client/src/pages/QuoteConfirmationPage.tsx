@@ -1,8 +1,12 @@
 import { useAuth, useUser } from '@clerk/clerk-react';
 import { useEffect, useRef, useState } from 'react';
 import { Link, Navigate, useLocation, useParams } from 'react-router-dom';
+import { LegalAgreementCheckbox, LegalDocumentLinks } from '../components/legal/LegalAgreementCheckbox';
+import { Button } from '../components/ui/Button';
+import { Card } from '../components/ui/Card';
 import { hasRequiredPhone } from '../lib/accountProfile';
 import { ApiError } from '../lib/api';
+import { legalDocumentSlugs } from '../lib/legalAcceptance';
 import { getQuoteConfirmationRedirect, loadQuoteConfirmation } from '../lib/quoteConfirmationFlow';
 import type { BillingMode } from '../types';
 
@@ -131,13 +135,15 @@ export const QuoteConfirmationPage = () => {
   const [quote, setQuote] = useState<QuoteResult | null>(null);
   const [loading, setLoading] = useState(true);
   const [finalizing, setFinalizing] = useState(false);
+  const [legalChecked, setLegalChecked] = useState(false);
+  const [legalAccepted, setLegalAccepted] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const finalizeIdempotencyKeyRef = useRef<string | null>(null);
   const profileHasRequiredPhone = hasRequiredPhone(user);
   const customerEmail = user?.primaryEmailAddress?.emailAddress ?? null;
 
   useEffect(() => {
-    if (!quoteId || !isLoaded || !isSignedIn || !profileHasRequiredPhone) {
+    if (!quoteId || !isLoaded || !isSignedIn || !profileHasRequiredPhone || !legalAccepted) {
       return;
     }
 
@@ -212,7 +218,7 @@ export const QuoteConfirmationPage = () => {
     return () => {
       mounted = false;
     };
-  }, [quoteId, isLoaded, isSignedIn, profileHasRequiredPhone, getToken]);
+  }, [quoteId, isLoaded, isSignedIn, profileHasRequiredPhone, legalAccepted, getToken]);
 
   if (!quoteId) {
     return <Navigate to="/instant-quote" replace />;
@@ -229,6 +235,42 @@ export const QuoteConfirmationPage = () => {
 
   if (redirectTarget) {
     return <Navigate to={redirectTarget} replace />;
+  }
+
+  if (!legalAccepted) {
+    return (
+      <div className="mx-auto w-full max-w-4xl px-4 py-10 md:px-8 md:py-20">
+        <Card className="space-y-6 bg-surface p-5 md:p-10">
+          <div>
+            <p className="text-xs uppercase tracking-[0.15em] text-brand">Claim Quote</p>
+            <h1 className="mt-3 text-3xl font-semibold text-ink md:text-4xl">
+              Review the quote terms to continue
+            </h1>
+            <p className="mt-3 text-sm leading-6 text-copy-muted">
+              Autoscape will attach this quote to your account and submit it to the review queue.
+            </p>
+          </div>
+
+          <LegalAgreementCheckbox
+            id="quote-claim-legal-acceptance"
+            checked={legalChecked}
+            onChange={setLegalChecked}
+            documentSlugs={legalDocumentSlugs.quoteClaim}
+          >
+            I have read and agree to the <LegalDocumentLinks documentSlugs={legalDocumentSlugs.quoteClaim} />.
+          </LegalAgreementCheckbox>
+
+          <Button
+            type="button"
+            disabled={!legalChecked}
+            className="w-full sm:w-auto"
+            onClick={() => setLegalAccepted(true)}
+          >
+            Claim Quote
+          </Button>
+        </Card>
+      </div>
+    );
   }
 
   return (

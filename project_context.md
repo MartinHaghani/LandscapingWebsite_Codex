@@ -20,6 +20,7 @@ Autoscape provides:
 - Navigation includes the horizontal Autoscape PNG brand mark, mobile menu support, quote CTA, signed-out auth links separated by a slim divider, and a signed-in dashboard link styled with the standard site font/color treatment.
 - Public shell loads the Google Ads tag `AW-17991079326` from `client/index.html`; the admin shell is not tagged.
 - Footer repeats the horizontal Autoscape PNG brand mark and includes production contact details and internal quick links; quote, auth, payment, confirmation, and dashboard-payment funnel routes use a compact footer variant.
+- Legal documents are exposed through `/legal` and `/legal/:slug`; links are action-local beside required acknowledgement checkboxes instead of footer/nav items.
 - Marketing pages (home/services/contact) use non-placeholder production copy and a warm-light readability-first design system; the contact page makes phone and email compact direct actions beside the message form.
 - Home hero uses a symmetric desktop split with copy/CTAs on the left, `No sign-up required.` helper text under the CTA row, a stacked CTA layout on narrow mobile screens, and a responsive animated lawn parcel on the right with a perimeter-learning wall trace, an 11-pass rounded horizontal infill raster with denser direction arrows, direct mowing spawn on the first scanline, mowing follow-through, visible CAD dimensions, a restrained under-shadow, and a dynamically sized ticker-flip status capsule centered under the full lawn graphic.
 - Home page places a tighter pricing comparison section directly below the hero, using an unboxed sample-lawn context with a larger portrait lawn SVG and a muted two-column size/schedule row on the left, plus a flatter shared comparison panel on the right with a narrower row-label column and a top-right seasonal discount badge in the Autoscape season cell, so Autoscape and local competitors stay visually adjacent on mobile, the sample lawn avoids rounded bubble wrappers, and the same asymmetrical lawn-only mask, no interior decorative strokes, downward-facing driveway cutout, and brand-green fill treatment remain intact.
@@ -69,14 +70,14 @@ Autoscape provides:
    - Legacy `serviceFrequency` fields in local draft snapshots are accepted and stripped during restore.
    - Saved draft can be reset from address or map panels.
 5. Review page (`/instant-quote/summary`) removes the step progress rail and shows a two-section quote-ready layout: one top `Back to Map` action, a desktop top row with address-first property details on the left and the fitted map preview with quiet whole-number area/perimeter metadata on the right, then a full-width lower section with side-by-side radio billing plan cards before any server draft is created.
-6. Draft save (`POST /api/quote/draft`) after review-page confirmation.
+6. Draft save (`POST /api/quote/draft`) after review-page confirmation and required legal acknowledgement.
    - `polygonSource` now requires `schemaVersion: 2` with `activePolygonId`, `polygons[]`, `ringPoints`, and nullable `rawStrokePoints`.
    - Server derives/stores canonical quote geometry from `ringPoints`; legacy source payloads are rejected.
    - If the API is unreachable, the review page keeps the local draft intact and shows a direct API reachability error instead of a generic submit failure.
    - After a successful draft response, the public client fires the Google Ads `Submit lead form` conversion `AW-17991079326/FqIMCOHXqYIcEJ6r6IJD` with the quote ID as the transaction ID.
 7. Confirmation handoff at `/quote-confirmation/:quoteId` (legacy `/quote-contact/:quoteId` redirects here).
 8. Signed-in draft creation records quote address in Clerk account metadata (`addressHistory` + `defaultAddress`).
-9. Authenticated user claim step (`POST /api/quote/:quoteId/claim`) links quote ownership.
+9. Authenticated user claim step (`POST /api/quote/:quoteId/claim`) links quote ownership after required claim/payment-policy acknowledgement.
 10. Confirmation page claims/finalizes the draft by calling `POST /api/quote/:quoteId/contact`.
 
 - Server derives name/email/phone from authenticated account.
@@ -90,6 +91,7 @@ Autoscape provides:
 - Clerk handles customer sign-up/sign-in, Google auth, and password reset with a shared Autoscape-branded appearance in public auth and account profile screens.
 - Required phone is enforced in-app via `/complete-profile/*` for all auth methods.
 - Phone is stored on account metadata (`unsafeMetadata.autoscapeProfile.phone`).
+- Complete profile also stores optional email-marketing opt-in metadata and records required Terms/Privacy acceptance through `POST /api/account/legal-acceptance`.
 - Users without phone are gated before dashboard and quote confirmation routes.
 - Protected dashboard routes:
   - `/dashboard` (action-first account home with mobile-first CTA placement, primary quote state, lifecycle timeline, support/schedule panels, conditional quote history, and conditional Stripe card-on-file panel)
@@ -98,6 +100,7 @@ Autoscape provides:
   - `/dashboard/quotes/:quoteId/payment` (authenticated approved-quote payment surface with task-first mobile CTAs that can start Stripe Checkout)
 - Approved quote emails link to public `/pay/:token` pages. Tokens are long random secrets stored only as SHA-256 hashes and are regenerated on approval/resend.
 - Public/authenticated payment APIs are `GET /api/payment-links/:token`, `POST /api/payment-links/:token/checkout`, `POST /api/account/quotes/:quoteId/payment/checkout`, `POST /api/account/quotes/:quoteId/billing-portal`, and `POST /api/stripe/webhook`.
+- Payment checkout APIs require `legalAcceptance: { accepted: true }` and record acceptance before returning a Stripe Checkout URL.
 - Seasonal quotes create one-time Stripe Checkout Sessions for the approved discounted seasonal total. Per-session quotes create weekly Stripe subscription Checkout Sessions, use a May 1 billing-cycle anchor before season or charge immediately during season, cap paid invoices at `sessionsMax`, and stop no later than September 30.
 - Account quote detail responses now include conditional billing metadata so the dashboard can show the current card-on-file summary when Stripe has a reusable saved method.
 - Quote lookup APIs are owner-only unless caller is admin.
@@ -113,7 +116,8 @@ Autoscape provides:
 
 - Contact page presents compact direct phone/email actions for fast outreach.
 - Contact form captures name/email/phone/message (required) + address (optional).
-- Contact submission is idempotent (`POST /api/contact`).
+- Contact form includes an optional unchecked email-marketing opt-in and a required Privacy Policy acknowledgement.
+- Contact submission is idempotent (`POST /api/contact`) and records contact privacy acceptance.
 
 ## Admin Platform (`admin/`)
 
@@ -163,7 +167,9 @@ Admin app (separate Vite frontend) supports:
   - `server/prisma/migrations/20260415163000_weekly_only_service_frequency/migration.sql`
   - `server/prisma/migrations/20260416130000_approved_quote_email_delivery/migration.sql`
   - `server/prisma/migrations/20260421110000_stripe_quote_payments/migration.sql`
+  - `server/prisma/migrations/20260502090000_legal_acceptance_records/migration.sql`
 - Idempotency table stores request hash + exact response replay payload.
+- `legal_acceptances` records action, document slugs/version, optional lead/quote/auth user, email, hashed IP, user agent, timestamp, and metadata for required website acknowledgements.
 - In-memory fallback store remains for local runs without `DATABASE_URL`.
 - Dev cutover script: `npm --prefix server run cutover:freehand-reset-dev-data`
   - wipes test quote/leads/editor records before the freehand v2 rollout
@@ -178,6 +184,7 @@ Admin app (separate Vite frontend) supports:
 - Quote ownership stored on `quotes.auth_user_id` and enforced on quote read/finalize paths.
 - Customer phone requirement enforced for quote finalize and account quote APIs.
 - Customer address history/default persisted in Clerk private metadata (`autoscapeProfile`).
+- Customer legal acknowledgements are recorded server-side; the client sends only `legalAcceptance: { accepted: true }`.
 - Stripe Checkout handles card/payment collection; Autoscape stores Stripe object IDs, payment state, and paid invoice IDs, not card details.
 - Public payment-link tokens are stored hashed, scoped to approved quote payment, and revoked when a newer approved email/resend token is issued.
 - Admin RBAC roles: `OWNER`, `ADMIN`, `REVIEWER`, `MARKETING`.

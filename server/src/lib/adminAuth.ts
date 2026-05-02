@@ -8,6 +8,7 @@ export interface CustomerIdentity {
   email: string;
   name: string | null;
   phone: string | null;
+  emailMarketingConsent?: boolean;
 }
 
 export interface AdminIdentity {
@@ -229,6 +230,12 @@ const readPhoneFromUserMetadata = (metadata: unknown) => {
   return trimmed.length > 0 ? trimmed : null;
 };
 
+const readEmailMarketingConsentFromUserMetadata = (metadata: unknown) => {
+  const metadataRecord = toMetadataRecord(metadata);
+  const profileMetadata = toMetadataRecord(metadataRecord[accountAddressMetadataKey]);
+  return profileMetadata.emailMarketingConsent === true;
+};
+
 const loadUserProfile = async (userId: string) => {
   const clerk = getClerkClient();
   if (!clerk) {
@@ -248,11 +255,13 @@ const loadUserProfile = async (userId: string) => {
     user.phoneNumbers[0]?.phoneNumber ??
     metadataPhone ??
     null;
+  const emailMarketingConsent = readEmailMarketingConsentFromUserMetadata(user.unsafeMetadata);
 
   return {
     email,
     name,
-    phone
+    phone,
+    emailMarketingConsent
   };
 };
 
@@ -291,13 +300,12 @@ export const resolveCustomerIdentity = async (
     let email = readEmailFromTokenPayload(payload);
     let name = readNameFromTokenPayload(payload);
     let phone = readPhoneFromTokenPayload(payload);
+    const profile = await loadUserProfile(userId);
 
-    if (!email || !name || !phone) {
-      const profile = await loadUserProfile(userId);
-      email = email ?? profile?.email ?? null;
-      name = name ?? profile?.name ?? null;
-      phone = phone ?? profile?.phone ?? null;
-    }
+    email = email ?? profile?.email ?? null;
+    name = name ?? profile?.name ?? null;
+    phone = phone ?? profile?.phone ?? null;
+    const emailMarketingConsent = profile?.emailMarketingConsent ?? false;
 
     if (!email) {
       throw new Error('AUTH_PROFILE_INCOMPLETE');
@@ -307,7 +315,8 @@ export const resolveCustomerIdentity = async (
       userId,
       email,
       name,
-      phone
+      phone,
+      emailMarketingConsent
     };
   } catch (error) {
     const code = toAuthErrorCode(error);

@@ -455,6 +455,7 @@ export const DashboardPage = () => {
   const customerName = user?.fullName?.trim() || user?.firstName?.trim() || 'Autoscape Customer';
   const customerEmail = user?.primaryEmailAddress?.emailAddress ?? 'No email on file';
   const primaryQuote = useMemo(() => selectPrimaryDashboardQuote(quotes), [quotes]);
+  const primaryQuoteId = primaryQuote?.id ?? null;
 
   useEffect(() => {
     if (!isLoaded) {
@@ -510,7 +511,7 @@ export const DashboardPage = () => {
       return;
     }
 
-    if (!primaryQuote) {
+    if (!primaryQuoteId) {
       setPrimaryQuoteDetail(null);
       setPrimaryQuoteLoading(false);
       setPrimaryQuoteError(null);
@@ -529,7 +530,7 @@ export const DashboardPage = () => {
           throw new ApiError('Authentication is required.', 401);
         }
 
-        const result = await api.getAccountQuote(primaryQuote.id, token);
+        const result = await api.getAccountQuote(primaryQuoteId, token);
         if (!mounted) {
           return;
         }
@@ -556,7 +557,7 @@ export const DashboardPage = () => {
     return () => {
       mounted = false;
     };
-  }, [primaryQuote?.id, isLoaded, isSignedIn, profileHasRequiredPhone, getToken]);
+  }, [primaryQuoteId, isLoaded, isSignedIn, profileHasRequiredPhone, getToken]);
 
   const handleManageCard = async () => {
     if (!primaryQuote) {

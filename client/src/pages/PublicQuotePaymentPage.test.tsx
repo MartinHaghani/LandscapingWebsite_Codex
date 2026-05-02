@@ -50,7 +50,9 @@ const renderPayment = (paymentLink: PaymentLinkResponse, returnStatus: string | 
         error={null}
         checkoutError={null}
         checkoutLoading={false}
+        legalAccepted={false}
         returnStatus={returnStatus}
+        onLegalAcceptedChange={vi.fn()}
         onCheckout={vi.fn()}
       />
     </StaticRouter>
@@ -64,6 +66,9 @@ describe('PublicQuotePaymentPage', () => {
     expect(markup).toContain('Seasonal Payment');
     expect(markup).toContain('$1,160.00');
     expect(markup).toContain('Pay seasonal total');
+    expect(markup).toContain('id="public-payment-legal-acceptance"');
+    expect(markup).toContain('href="/legal/refund-cancellation-payment-policy"');
+    expect(markup).toContain('disabled=""');
     expect(markup).toContain('w-full sm:w-auto');
     expect(markup).toContain('Q-APPROVED1');
     expect(markup).toContain('/api/approved-quote-preview/token-123');
@@ -109,7 +114,9 @@ describe('PublicQuotePaymentPage', () => {
           error="This payment link is no longer active."
           checkoutError={null}
           checkoutLoading={false}
+          legalAccepted={false}
           returnStatus={null}
+          onLegalAcceptedChange={vi.fn()}
           onCheckout={vi.fn()}
         />
       </StaticRouter>

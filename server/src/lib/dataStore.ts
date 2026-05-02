@@ -8,6 +8,7 @@ import union from '@turf/union';
 import type { Feature, MultiPolygon, Polygon } from 'geojson';
 import { validateAndMeasureGeometry } from './geometry.js';
 import { hashJson } from './hash.js';
+import type { LegalAcceptanceAction } from './legalAcceptance.js';
 import {
   computePerSessionTotal,
   computeSessionRangePricing,
@@ -90,6 +91,7 @@ interface QuoteContactInput {
   name: string;
   email: string;
   phone: string;
+  marketingConsent?: boolean;
   message?: string;
   attribution?: AttributionInput;
 }
@@ -101,7 +103,21 @@ interface ContactFormInput {
   phone?: string;
   addressText?: string;
   message: string;
+  marketingConsent?: boolean;
   attribution?: AttributionInput;
+}
+
+interface RecordLegalAcceptanceInput {
+  action: LegalAcceptanceAction;
+  documentSlugs: readonly string[];
+  documentVersion: string;
+  leadId?: string | null;
+  quotePublicId?: string | null;
+  authUserId?: string | null;
+  email?: string | null;
+  ipHash?: string | null;
+  userAgent?: string | null;
+  metadata?: Record<string, unknown>;
 }
 
 interface ServiceAreaRequestInput {
@@ -575,6 +591,22 @@ interface MemoryLeadContact {
   phone: string | null;
   addressText: string | null;
   message: string | null;
+  createdAt: string;
+}
+
+interface MemoryLegalAcceptance {
+  id: string;
+  action: LegalAcceptanceAction;
+  documentSlugs: string[];
+  documentVersion: string;
+  leadId: string | null;
+  quoteId: string | null;
+  authUserId: string | null;
+  email: string | null;
+  ipHash: string | null;
+  userAgent: string | null;
+  metadata: Record<string, unknown> | null;
+  acceptedAt: string;
   createdAt: string;
 }
 
@@ -1460,6 +1492,7 @@ export class DataStore {
     paymentLinks: [] as MemoryQuotePaymentLink[],
     stripeWebhookEvents: [] as MemoryStripeWebhookEvent[],
     contacts: [] as MemoryLeadContact[],
+    legalAcceptances: [] as MemoryLegalAcceptance[],
     requests: [] as MemoryServiceAreaRequest[],
     attributionTouches: [] as MemoryAttributionTouch[],
     quoteNotes: [] as MemoryQuoteNote[],
@@ -1690,6 +1723,141 @@ export class DataStore {
         userAgent: params.actor.userAgent
       }
     });
+  }
+
+  async recordLegalAcceptance(input: RecordLegalAcceptanceInput) {
+    const now = nowIso();
+    let quoteId: string | null = null;
+    let leadId = input.leadId ?? null;
+
+    if (input.quotePublicId) {
+      if (!this.prisma) {
+        const quote = [...this.memory.quotes.values()].find((item) => item.publicQuoteId === input.quotePublicId);
+        if (!quote) {
+          throw new Error('QUOTE_NOT_FOUND');
+        }
+        quoteId = quote.id;
+        leadId = leadId ?? quote.leadId;
+      } else {
+        const quote = await this.prisma.quote.findUnique({
+          where: {
+            publicQuoteId: input.quotePublicId
+          },
+          select: {
+            id: true,
+            leadId: true
+          }
+        });
+        if (!quote) {
+          throw new Error('QUOTE_NOT_FOUND');
+        }
+        quoteId = quote.id;
+        leadId = leadId ?? quote.leadId;
+      }
+    }
+
+    if (!leadId && input.email) {
+      if (!this.prisma) {
+        const lead = [...this.memory.leads.values()].find(
+          (item) => item.primaryEmail?.toLowerCase() === input.email?.toLowerCase()
+        );
+        leadId = lead?.id ?? null;
+      } else {
+        const lead = await this.prisma.lead.findFirst({
+          where: {
+            primaryEmail: input.email
+          },
+          select: {
+            id: true
+          }
+        });
+        leadId = lead?.id ?? null;
+      }
+    }
+
+    const id = nanoid(14);
+    const documentSlugs = [...input.documentSlugs];
+    const metadata = input.metadata ?? null;
+
+    if (!this.prisma) {
+      this.memory.legalAcceptances.push({
+        id,
+        action: input.action,
+        documentSlugs,
+        documentVersion: input.documentVersion,
+        leadId,
+        quoteId,
+        authUserId: input.authUserId ?? null,
+        email: input.email?.trim() || null,
+        ipHash: input.ipHash ?? null,
+        userAgent: input.userAgent?.slice(0, 300) ?? null,
+        metadata,
+        acceptedAt: now,
+        createdAt: now
+      });
+    } else {
+      await this.prisma.$executeRaw(
+        Prisma.sql`
+          INSERT INTO "legal_acceptances" (
+            "id",
+            "action",
+            "document_slugs",
+            "document_version",
+            "lead_id",
+            "quote_id",
+            "auth_user_id",
+            "email",
+            "ip_hash",
+            "user_agent",
+            "metadata",
+            "accepted_at",
+            "created_at"
+          )
+          VALUES (
+            ${id},
+            ${input.action}::"LegalAcceptanceAction",
+            ARRAY[${Prisma.join(documentSlugs)}]::text[],
+            ${input.documentVersion},
+            ${leadId},
+            ${quoteId},
+            ${input.authUserId ?? null},
+            ${input.email?.trim() || null},
+            ${input.ipHash ?? null},
+            ${input.userAgent?.slice(0, 300) ?? null},
+            ${JSON.stringify(metadata)}::jsonb,
+            now(),
+            now()
+          )
+        `
+      );
+    }
+
+    await this.writeAuditLog({
+      actor: {
+        userId: input.authUserId ?? 'system',
+        role: 'SYSTEM',
+        ipHash: input.ipHash ?? undefined,
+        userAgent: input.userAgent ?? undefined
+      },
+      action: 'legal.accepted',
+      entityType: 'legal_acceptance',
+      entityId: id,
+      changedFields: ['action', 'document_slugs', 'document_version'],
+      afterRedacted: {
+        action: input.action,
+        documentSlugs,
+        documentVersion: input.documentVersion,
+        leadId,
+        quotePublicId: input.quotePublicId ?? null,
+        email: maskEmail(input.email ?? null)
+      }
+    });
+
+    return {
+      id,
+      action: input.action,
+      acceptedAt: now
+    };
   }
 
   private async attachLeadAttribution(
@@ -2208,6 +2376,7 @@ export class DataStore {
         name: input.name,
         email: input.email,
         phone: input.phone,
+        marketingConsent: input.marketingConsent ?? false,
         message: input.message,
         attribution: cleanAttribution(input.attribution)
       },
@@ -2235,6 +2404,7 @@ export class DataStore {
           lead.primaryName = input.name;
           lead.primaryEmail = input.email;
           lead.primaryPhone = input.phone;
+          lead.consentMarketing = input.marketingConsent ? true : lead.consentMarketing;
           lead.lastSeenAt = nowIso();
           lead.updatedAt = nowIso();
 
@@ -2333,6 +2503,7 @@ export class DataStore {
               primaryName: input.name,
               primaryEmail: input.email,
               primaryPhone: input.phone,
+              consentMarketing: input.marketingConsent ? true : undefined,
               lastSeenAt: new Date()
             }
           });
@@ -2448,6 +2619,7 @@ export class DataStore {
         phone: input.phone,
         addressText: input.addressText,
         message: input.message,
+        marketingConsent: input.marketingConsent ?? false,
         attribution: cleanAttribution(input.attribution)
       },
       async () => {
@@ -2465,7 +2637,7 @@ export class DataStore {
                 primaryName: input.name,
                 primaryEmail: input.email,
                 primaryPhone: input.phone?.trim() || null,
-                consentMarketing: false,
+                consentMarketing: input.marketingConsent ?? false,
                 externalIds: null,
                 firstSeenAt: now,
                 lastSeenAt: now,
@@ -2479,6 +2651,7 @@ export class DataStore {
           lead.primaryName = input.name;
           lead.primaryEmail = input.email;
           lead.primaryPhone = input.phone?.trim() || lead.primaryPhone;
+          lead.consentMarketing = input.marketingConsent ? true : lead.consentMarketing;
           lead.lastSeenAt = now;
           lead.updatedAt = now;
 
@@ -2541,6 +2714,7 @@ export class DataStore {
             data: {
               primaryName: input.name,
               primaryPhone: input.phone?.trim() || existingLead.primaryPhone,
+              consentMarketing: input.marketingConsent ? true : existingLead.consentMarketing,
               lastSeenAt: now
             }
           });
@@ -2551,6 +2725,7 @@ export class DataStore {
               primaryName: input.name,
               primaryEmail: input.email,
               primaryPhone: input.phone?.trim() || null,
+              consentMarketing: input.marketingConsent ?? false,
               firstSeenAt: now,
               lastSeenAt: now
             }
@@ -2715,7 +2890,11 @@ export class DataStore {
     );
   }
 
-  async claimQuoteOwnership(input: { quotePublicId: string; authUserId: string }) {
+  async claimQuoteOwnership(input: {
+    quotePublicId: string;
+    authUserId: string;
+    marketingConsent?: boolean;
+  }) {
     if (!this.prisma) {
       const quote = [...this.memory.quotes.values()].find((item) => item.publicQuoteId === input.quotePublicId);
       if (!quote) {
@@ -2729,6 +2908,11 @@ export class DataStore {
       const claimed = quote.authUserId === null;
       quote.authUserId = input.authUserId;
       quote.updatedAt = nowIso();
+      const lead = this.memory.leads.get(quote.leadId);
+      if (lead && input.marketingConsent) {
+        lead.consentMarketing = true;
+        lead.updatedAt = nowIso();
+      }
 
       return {
         statusCode: 200,
@@ -2756,12 +2940,34 @@ export class DataStore {
 
     const claimed = quote.authUserId === null;
     if (claimed) {
-      await this.prisma.quote.update({
+      await this.prisma.$transaction(async (tx) => {
+        await tx.quote.update({
+          where: {
+            id: quote.id
+          },
+          data: {
+            authUserId: input.authUserId
+          }
+        });
+
+        if (input.marketingConsent) {
+          await tx.lead.update({
+            where: {
+              id: quote.leadId
+            },
+            data: {
+              consentMarketing: true
+            }
+          });
+        }
+      });
+    } else if (input.marketingConsent) {
+      await this.prisma.lead.update({
         where: {
-          id: quote.id
+          id: quote.leadId
         },
         data: {
-          authUserId: input.authUserId
+          consentMarketing: true
         }
       });
     }

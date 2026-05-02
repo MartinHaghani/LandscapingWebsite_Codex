@@ -48,6 +48,7 @@ const PublicQuotePaymentPage = lazy(() =>
 const CompleteProfilePage = lazy(() =>
   import('./pages/CompleteProfilePage').then((module) => ({ default: module.CompleteProfilePage }))
 );
+const LegalPage = lazy(() => import('./pages/LegalPage').then((module) => ({ default: module.LegalPage })));
 
 const LegacyQuoteContactRedirect = () => {
   const { quoteId } = useParams();
@@ -83,6 +84,8 @@ const App = () => (
         <Route path="/sign-in/*" element={<SignInPage />} />
         <Route path="/sign-up/*" element={<SignUpPage />} />
         <Route path="/complete-profile/*" element={<CompleteProfilePage />} />
+        <Route path="/legal" element={<LegalPage />} />
+        <Route path="/legal/:slug" element={<LegalPage />} />
         <Route path="/pay/:token" element={<PublicQuotePaymentPage />} />
         <Route path="/dashboard" element={<DashboardPage />} />
         <Route path="/dashboard/account/*" element={<DashboardAccountPage />} />

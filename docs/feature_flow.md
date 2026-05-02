@@ -6,6 +6,7 @@
 2. Navbar keeps desktop nav links, quote CTA, signed-out auth links with the slim divider, signed-in dashboard link, and mobile menu behavior.
 3. Public page loads include the Google Ads tag `AW-17991079326` from the Vite HTML shell.
 4. Quote, auth, confirmation, payment, and dashboard-payment funnel routes render a compact footer; general marketing routes keep the full footer.
+5. `/legal` exposes the legal document index and `/legal/:slug` exposes individual documents; legal links appear beside required user actions rather than in the footer or navbar.
 
 ## Services: Coverage-First Entry
 
@@ -129,19 +130,21 @@
 1. `Done` navigates to `/instant-quote/summary` only when the mapped draft passes the existing geometry guardrails.
 2. Review page removes the step progress rail and shows a two-section quote-ready layout: one top `Back to Map` action, a desktop top row with address-first quote details on the left and the map preview with quiet whole-number area/perimeter metadata on the right, then a full-width lower payment-plan section.
 3. Review page presents `Per Season` and `Per Visit` as side-by-side radio plan cards under `Choose how to pay`; `Per Season` shows a struck-through regular price plus savings, `Per Visit` shows the full-season total inline, and `billingMode` stays in sync with the selected card.
-4. User taps the bottom `Submit Quote` button, which still creates the draft and then routes to contact details.
-5. Client submits idempotent draft from the review page:
+4. User must accept the Terms, Privacy Policy, Estimate/Booking Terms, Service Disclaimer, AI/Automation Disclaimer, and Service Area Disclaimer before the bottom `Submit Quote` button enables.
+5. User taps `Submit Quote`, which creates the draft and then routes to contact details.
+6. Client submits idempotent draft from the review page:
 
 - `POST /api/quote/draft`
 - header: `Idempotency-Key`
 - payload includes `serviceFrequency` + `billingMode`
 - payload includes `polygonSource.schemaVersion = 2` with `activePolygonId`, `polygons[].ringPoints`, and nullable `polygons[].rawStrokePoints`
+- payload includes `legalAcceptance: { accepted: true }`; the server maps the action to the canonical document set
 
-6. Server validates geometry, derives canonical quote geometry from `ringPoints`, and stores draft quote + version 1 history row.
-7. After the successful draft response, the client fires the Google Ads `Submit lead form` conversion `AW-17991079326/FqIMCOHXqYIcEJ6r6IJD` with the quote ID as the transaction ID.
-8. If request is authenticated, server records draft address to Clerk account metadata (`addressHistory`, latest as `defaultAddress`).
-9. Client clears local draft snapshot and routes to `/quote-confirmation/:quoteId`.
-10. If the API is unreachable instead, client keeps the local draft and shows a direct API reachability error so the user can retry after the backend is available.
+7. Server validates geometry, derives canonical quote geometry from `ringPoints`, stores draft quote + version 1 history row, and records `quote_submit_terms`.
+8. After the successful draft response, the client fires the Google Ads `Submit lead form` conversion `AW-17991079326/FqIMCOHXqYIcEJ6r6IJD` with the quote ID as the transaction ID.
+9. If request is authenticated, server records draft address to Clerk account metadata (`addressHistory`, latest as `defaultAddress`).
+10. Client clears local draft snapshot and routes to `/quote-confirmation/:quoteId`.
+11. If the API is unreachable instead, client keeps the local draft and shows a direct API reachability error so the user can retry after the backend is available.
 
 ### Contact Finalize (Required)
 
@@ -149,34 +152,38 @@
 2. If signed out, client redirects to `/sign-in/*` with a return URL for the confirmation page.
 3. User signs in (email/password, Google, forgot/reset supported by Clerk).
 4. If signed-in account has no phone (legacy profile), user is redirected to `/complete-profile/*`.
-5. Client claims ownership of draft quote:
+5. User must accept the claim terms before claim/finalize begins.
+6. Client claims ownership of draft quote:
 
 - `POST /api/quote/:quoteId/claim`
 - header: `Authorization: Bearer <clerk session token>`
+- payload: `legalAcceptance: { accepted: true }`
 
-6. Confirmation page fetches the draft quote and auto-finalizes it when `contactPending === true`.
-7. Client calls idempotent finalize endpoint:
+7. Server records `quote_claim_terms`.
+8. Confirmation page fetches the draft quote and auto-finalizes it when `contactPending === true`.
+9. Client calls idempotent finalize endpoint:
 
 - `POST /api/quote/:quoteId/contact`
 - header: `Idempotency-Key`
 - header: `Authorization: Bearer <clerk session token>`
 
-8. Server marks quote `in_review`, `customer_status=pending`, `contact_pending=false`, and writes lead contact event.
-9. Server records quote address again into Clerk metadata as a secondary sync pass.
-10. Confirmation page renders the in-review workflow summary and 24-hour response-time note.
+10. Server marks quote `in_review`, `customer_status=pending`, `contact_pending=false`, and writes lead contact event.
+11. Server records quote address again into Clerk metadata as a secondary sync pass.
+12. Confirmation page renders the in-review workflow summary and 24-hour response-time note.
 
 ### Customer Dashboard
 
 1. Signed-in user opens `/dashboard`.
 2. If phone is missing, user is redirected to `/complete-profile/*`.
-3. Client calls owner-scoped account APIs:
+3. Complete profile requires Terms/Privacy acceptance, records it through `POST /api/account/legal-acceptance`, and stores optional email-marketing consent in Clerk unsafe metadata.
+4. Client calls owner-scoped account APIs:
 
 - `GET /api/account/quotes`
 - `GET /api/account/quotes/:quoteId`
 - `GET /api/quote/:quoteId` (owner/admin only)
 
-4. Dashboard ranks one primary quote by urgency: awaiting payment/payment issue first, then in review, then draft/contact-pending recovery, then paid/active.
-5. Dashboard shows an action-first customer home:
+5. Dashboard ranks one primary quote by urgency: awaiting payment/payment issue first, then in review, then draft/contact-pending recovery, then paid/active.
+6. Dashboard shows an action-first customer home:
 
 - `Next action` panel with one of: get instant quote, finish submitting quote, quote is in review, waiting for payment, or all done
 - active property card with address, subdued quote ID, billing mode, and price only after `contact_pending=false`
@@ -187,19 +194,21 @@
 - account summary card with link to `/dashboard/account/*` for Clerk-managed password, profile, and security tasks
 - secondary quote detail screen (`/dashboard/quotes/:quoteId`) with grouped mobile-readable quote details
 - authenticated approved-quote payment screen (`/dashboard/quotes/:quoteId/payment`) that can start Stripe Checkout for the owned quote with full-width mobile actions
-6. On mobile, the dashboard and payment surfaces keep the amount/status/next CTA before secondary summaries and supporting account details.
-7. If a saved Stripe billing method exists, `POST /api/account/quotes/:quoteId/billing-portal` creates a Stripe Customer Portal session so the customer can update the card on file from the dashboard without a custom card form.
+7. On mobile, the dashboard and payment surfaces keep the amount/status/next CTA before secondary summaries and supporting account details.
+8. If a saved Stripe billing method exists, `POST /api/account/quotes/:quoteId/billing-portal` creates a Stripe Customer Portal session so the customer can update the card on file from the dashboard without a custom card form.
 
 ### Public Approved Quote Payment
 
 1. Admin approval or manual resend creates a fresh secure payment token and sends a simplified approved-quote payment email with one `/pay/:token` button, the actual selected payment amount/mode, quote details, and the unchanged approved map preview.
 2. `GET /api/payment-links/:token` loads sanitized approved quote details, payment status, and the shared approved quote preview image without requiring sign-in.
-3. `POST /api/payment-links/:token/checkout` creates or reuses a Stripe Checkout Session. Signed-in customers can also create/reuse Checkout from `POST /api/account/quotes/:quoteId/payment/checkout`.
-4. Seasonal quotes use one-time Checkout for the approved discounted seasonal total.
-5. Per-session quotes use weekly subscription Checkout; if paid before May 1, the subscription uses a May 1 billing-cycle anchor with no proration, otherwise the first charge starts at checkout.
-6. Per-session billing is capped at the approved `sessionsMax` count and no later than September 30.
-7. Stripe webhooks, not success redirects, update payment state. Duplicate webhook events are ignored idempotently, and duplicate paid invoice IDs do not advance the visit counter twice.
-8. Staging Checkout has the required API Stripe env configured and still needs to be smoke-tested end to end.
+3. User must accept Terms, Payment Policy, and Estimate/Booking Terms before checkout actions enable.
+4. `POST /api/payment-links/:token/checkout` creates or reuses a Stripe Checkout Session. Signed-in customers can also create/reuse Checkout from `POST /api/account/quotes/:quoteId/payment/checkout`.
+5. Checkout payloads include `legalAcceptance: { accepted: true }`, and the server records `payment_checkout_terms` before returning a Stripe Checkout URL.
+6. Seasonal quotes use one-time Checkout for the approved discounted seasonal total.
+7. Per-session quotes use weekly subscription Checkout; if paid before May 1, the subscription uses a May 1 billing-cycle anchor with no proration, otherwise the first charge starts at checkout.
+8. Per-session billing is capped at the approved `sessionsMax` count and no later than September 30.
+9. Stripe webhooks, not success redirects, update payment state. Duplicate webhook events are ignored idempotently, and duplicate paid invoice IDs do not advance the visit counter twice.
+10. Staging Checkout has the required API Stripe env configured and still needs to be smoke-tested end to end.
 
 ## Out-of-Area Expansion Capture
 

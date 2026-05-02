@@ -94,7 +94,11 @@ describe('quoteConfirmationFlow', () => {
     expect(result.finalizedDuringLoad).toBe(true);
     expect(result.quote.status).toBe('in_review');
     expect(result.quote.contactPending).toBe(false);
-    expect(claimQuote).toHaveBeenCalledWith('Q-ABC12345', 'token-123');
+    expect(claimQuote).toHaveBeenCalledWith('Q-ABC12345', 'token-123', {
+      legalAcceptance: {
+        accepted: true
+      }
+    });
     expect(getQuote).toHaveBeenCalledTimes(2);
     expect(submitClaimedQuoteContact).toHaveBeenCalledWith(
       'Q-ABC12345',

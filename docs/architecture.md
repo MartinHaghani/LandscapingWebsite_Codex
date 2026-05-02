@@ -27,6 +27,7 @@ Primary domains:
 - Public HTML shell: `client/index.html` includes the Google Ads tag `AW-17991079326`; `admin/index.html` is intentionally separate and untagged.
 - Google Ads conversion helper: `client/src/lib/googleAds.ts` sends the `Submit lead form` conversion `AW-17991079326/FqIMCOHXqYIcEJ6r6IJD` only after successful public quote draft creation.
 - Contact page: `client/src/pages/ContactPage.tsx` (warm-light two-column contact surface with compact direct phone/email actions and the existing idempotent message form)
+- Legal documents: `client/src/content/legal/*` + `client/src/pages/LegalPage.tsx`; `/legal` and `/legal/:slug` render Markdown drafts, while legal links are placed beside required action acknowledgements rather than in the footer/nav.
 - Services gallery: `client/src/pages/ServicesPage.tsx` + `client/src/components/service/ServiceIllustrations.tsx` (coverage-first entry page with a shorter mobile service-area map and five shared-style inline SVG service scenes)
 - Instant quote builder: `client/src/pages/InstantQuotePage.tsx` (badge-only header + compact-on-mobile non-interactive three-step progress rail, mobile-stacked address input/submit controls, full-width map builder, delayed map-guide modal shell for fresh address loads, cleaner editorial guide chrome with one white panel, a slowly fading unified demo-and-caption media unit, no divider or white caption box between SVG and guide text, a right-sized demo viewport with the camera layer aligned to the map-body clip window so the SVG starts centered and the bottom remains visible, a tighter centered caption strip directly under the demo, equal-width toolbar buttons above the artwork, separate bottom navigation/progress chrome, looping first-step miniature draw-lawn demo using the refreshed brighter popup-house SVG background to draw both left-side lawn zones inside the same framed viewport treatment used by step 2, with a shared 1.6-second camera transform that does not slow cursor/edit phases, plus loop-edge fades that soften the demo restart, animated second-step SVG lesson that carries those two completed left-side lawns forward while drawing and correcting the right-side backyard zone with the same decoupled camera transform timing, matching framed background treatment, shorter `Add extra points` / `Delete extra points` captions, and the same loop-edge fade behavior, animated third-step SVG obstacle lesson that keeps that same house background and finished lawn state while clicking `Draw obstacle`, tracing a selected red obstacle polygon around the front tree in the bottom-left lawn, holding the completed obstacle scene for 2 seconds before looping again, and swapping the last-slide nav control from `Next` to a green `Done` button that slowly fades the popup back into the tool, floating `Guide` plus `Done` action cluster, local draft autosave, and review handoff)
 - Instant quote review: `client/src/pages/InstantQuoteSummaryPage.tsx` (two-section quote-ready review layout without the progress rail, one top `Back to Map` action, a desktop top row with address-first quote details plus a right-side fitted property preview, quiet whole-number area/perimeter metadata, a full-width lower payment-plan section with accessible side-by-side radio plan cards, and `POST /api/quote/draft` trigger)
@@ -52,6 +53,7 @@ Primary domains:
   - `server/prisma/migrations/20260415163000_weekly_only_service_frequency/migration.sql`
   - `server/prisma/migrations/20260416130000_approved_quote_email_delivery/migration.sql`
   - `server/prisma/migrations/20260421110000_stripe_quote_payments/migration.sql`
+  - `server/prisma/migrations/20260502090000_legal_acceptance_records/migration.sql`
 
 Canonical tables:
 
@@ -66,6 +68,7 @@ Canonical tables:
 - `service_area_requests`
 - `attribution_touches`
 - `audit_logs`
+- `legal_acceptances`
 - `base_stations`
 - `idempotency_records`
 
@@ -94,7 +97,15 @@ Spatial storage:
 
 - `GET /api/account/quotes` (auth required; returns owned quotes plus customer status, verification timing, payment summary, and dashboard payment-page URL)
 - `GET /api/account/quotes/:quoteId` (auth required, owner scoped; returns quote detail plus conditional Stripe card-on-file metadata)
+- `POST /api/account/legal-acceptance` (auth required; records complete-profile Terms/Privacy acknowledgement)
 - `POST /api/account/quotes/:quoteId/billing-portal` (auth required, owner scoped; opens Stripe-hosted card management when a Stripe customer billing context exists)
+
+Legal acceptance contract:
+
+- Required write surfaces send only `legalAcceptance: { accepted: true }`.
+- Server maps the action to canonical document slugs and document version `May 1, 2026`.
+- Recorded actions are `contact_privacy_ack`, `complete_profile_terms`, `quote_submit_terms`, `quote_claim_terms`, and `payment_checkout_terms`.
+- Records include optional lead/quote/auth user references, email, server timestamp, hashed IP, user agent, and metadata.
 
 Client-side quote draft resilience:
 
@@ -154,7 +165,7 @@ Customer profile sync contract:
 
 ### Contact
 
-- `POST /api/contact` (idempotent)
+- `POST /api/contact` (idempotent; requires Privacy Policy acknowledgement and supports optional email-marketing opt-in)
 
 ### Service Area
 
