@@ -76,11 +76,11 @@ Autoscape provides:
    - `polygonSource` now requires `schemaVersion: 2` with `activePolygonId`, `polygons[]`, `ringPoints`, and nullable `rawStrokePoints`.
    - Server derives/stores canonical quote geometry from `ringPoints`; legacy source payloads are rejected.
    - If the API is unreachable, the review page keeps the local draft intact and shows a direct API reachability error instead of a generic submit failure.
-   - After a successful draft response, the public client fires the Google Ads `Submit lead form` conversion `AW-17991079326/FqIMCOHXqYIcEJ6r6IJD` with the quote ID as the transaction ID.
 7. Confirmation handoff at `/quote-confirmation/:quoteId` (legacy `/quote-contact/:quoteId` redirects here).
 8. Signed-in draft creation records quote address in Clerk account metadata (`addressHistory` + `defaultAddress`).
 9. Authenticated user claim step (`POST /api/quote/:quoteId/claim`) links quote ownership and now requires the completed-phone profile gate.
 10. Confirmation page claims/finalizes the draft by calling `POST /api/quote/:quoteId/contact`.
+11. The quote confirmation page fires the Google Ads `Submit lead form` conversion `AW-17991079326/FqIMCOHXqYIcEJ6r6IJD` only after the quote reaches `Your quote is in review`; browser storage dedupes repeat fires for the same quote ID.
 
 - Server derives name/email/phone from authenticated account.
 - Property address is derived from stored quote draft address (not a form field).

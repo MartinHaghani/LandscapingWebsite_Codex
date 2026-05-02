@@ -61,7 +61,7 @@ Media Release Terms were not created because the inspected codebase does not sho
 - Stripe: Checkout, subscriptions, Billing Portal, payment links, payment status, card summary data.
 - Resend: approved-quote transactional email.
 - Mapbox: address suggestions/geocoding, Mapbox GL maps, satellite/static map previews.
-- Google Ads/Google tag: public shell tag `AW-17991079326` and quote draft conversion `AW-17991079326/FqIMCOHXqYIcEJ6r6IJD`.
+- Google Ads/Google tag: public shell tag `AW-17991079326` and in-review quote confirmation conversion `AW-17991079326/FqIMCOHXqYIcEJ6r6IJD`.
 - PostgreSQL/PostGIS through Prisma: application data persistence.
 - DigitalOcean App Platform and DigitalOcean Managed PostgreSQL: documented staging/production hosting model.
 - GoDaddy: documented DNS/domain references.
@@ -75,7 +75,7 @@ Media Release Terms were not created because the inspected codebase does not sho
 - Clerk user IDs, account profile metadata, required phone metadata, email marketing consent metadata, and customer address metadata.
 - Legal acceptance records containing action, document slugs, document version, optional lead/quote/auth user references, email, hashed IP, user agent, timestamp, and metadata.
 - Stripe payment object IDs, checkout session IDs, customer IDs, payment intent/subscription IDs, payment status, paid invoice IDs, card brand, last four digits, and card expiry summary when available.
-- Attribution data including Google click identifiers, UTM parameters, landing path, referrer, device type, browser summary, and conversion transaction ID.
+- Attribution data including Google click identifiers, UTM parameters, landing path, referrer, device type, browser summary, and quote-level Google Ads conversion dedupe state.
 - Admin audit log metadata including hashed IP address and user-agent string.
 
 ## Cookies, Storage, and Tracking Detected
@@ -83,6 +83,7 @@ Media Release Terms were not created because the inspected codebase does not sho
 - Google Ads/Google tag in `client/index.html`.
 - Clerk authentication cookies and session handling through Clerk SDK usage.
 - Browser `localStorage` quote draft persistence key `autoscape.quoteDraft.v2`.
+- Browser `localStorage` Google Ads quote conversion dedupe key `autoscape.googleAds.submitLeadConversions.v1`.
 - Browser `sessionStorage` attribution key `autoscape_attribution_v1`.
 - Mapbox browser requests for maps, geocoding, and static imagery.
 - Stripe Checkout and Billing Portal browser sessions.

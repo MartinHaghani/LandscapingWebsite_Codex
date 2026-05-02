@@ -245,7 +245,7 @@ Implementation:
 - mobile navigation includes in-header menu with quote CTA
 - metadata updates in `client/index.html` improve social preview and launch polish
 - `client/index.html` also loads the public Google Ads tag `AW-17991079326`; the admin shell stays separate from public advertising measurement
-- successful public quote draft submissions fire the Google Ads `Submit lead form` conversion after server acceptance, using the quote ID as the transaction ID so repeat fires can be deduplicated
+- successful public quote flows fire the Google Ads `Submit lead form` conversion only after the confirmation page reaches `Your quote is in review`, with browser storage deduping repeat fires for the same quote ID
 
 ## 17) Quote Draft Recovery UX
 

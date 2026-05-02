@@ -12,23 +12,6 @@
 
       gtag('config', 'AW-17991079326');
     </script>
-    <!-- Event snippet for Submit lead form conversion action -->
-    <script>
-      function gtag_report_submit_lead_conversion(transactionId, callback) {
-        var conversionParams = {
-          send_to: 'AW-17991079326/FqIMCOHXqYIcEJ6r6IJD',
-          value: 1.0,
-          currency: 'CAD',
-          event_callback: callback
-        };
-
-        if (transactionId) {
-          conversionParams.transaction_id = transactionId;
-        }
-
-        gtag('event', 'conversion', conversionParams);
-      }
-    </script>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Autoscape | Autonomous Lawn Care</title>

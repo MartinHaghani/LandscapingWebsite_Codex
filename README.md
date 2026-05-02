@@ -7,7 +7,7 @@ Autoscape is a multi-app monorepo for:
 - admin operations console (`admin/`)
 - public shell branding uses the horizontal Autoscape PNG mark at `client/public/images/brand/autoscape-horizontal-brand.png`
 - public shell loads the Google Ads tag `AW-17991079326` from `client/index.html`
-- successful public `Submit Quote` draft saves fire the Google Ads `Submit lead form` conversion `AW-17991079326/FqIMCOHXqYIcEJ6r6IJD`
+- the quote confirmation page fires the Google Ads `Submit lead form` conversion `AW-17991079326/FqIMCOHXqYIcEJ6r6IJD` only after the quote reaches `Your quote is in review`
 
 ## Documentation Map
 

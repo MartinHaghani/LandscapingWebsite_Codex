@@ -146,10 +146,9 @@
 - payload includes `polygonSource.schemaVersion = 2` with `activePolygonId`, `polygons[].ringPoints`, and nullable `polygons[].rawStrokePoints`
 
 7. Server validates geometry, derives canonical quote geometry from `ringPoints`, and stores draft quote + version 1 history row.
-8. After the successful draft response, the client fires the Google Ads `Submit lead form` conversion `AW-17991079326/FqIMCOHXqYIcEJ6r6IJD` with the quote ID as the transaction ID.
-9. If request is authenticated, server records draft address to Clerk account metadata (`addressHistory`, latest as `defaultAddress`).
-10. Client clears local draft snapshot and routes to `/quote-confirmation/:quoteId`.
-11. If the API is unreachable instead, client keeps the local draft and shows a direct API reachability error so the user can retry after the backend is available.
+8. If request is authenticated, server records draft address to Clerk account metadata (`addressHistory`, latest as `defaultAddress`).
+9. Client clears local draft snapshot and routes to `/quote-confirmation/:quoteId`.
+10. If the API is unreachable instead, client keeps the local draft and shows a direct API reachability error so the user can retry after the backend is available.
 
 ### Contact Finalize (Required)
 
@@ -174,6 +173,7 @@
 8. Server marks quote `in_review`, `customer_status=pending`, `contact_pending=false`, and writes lead contact event.
 9. Server records quote address again into Clerk metadata as a secondary sync pass and propagates any account email marketing opt-in to the lead.
 10. Confirmation page renders the in-review workflow summary and 24-hour response-time note.
+11. Once the rendered quote is `in_review` and no longer contact-pending, the client fires the Google Ads `Submit lead form` conversion `AW-17991079326/FqIMCOHXqYIcEJ6r6IJD` and stores the quote ID in browser storage to avoid repeat fires on reload.
 
 ### Customer Dashboard
 

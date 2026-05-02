@@ -18,7 +18,7 @@ The codebase shows use of:
 - Google tag and Google Ads conversion measurement.
 - Mapbox maps, geocoding, satellite tiles, and static map previews.
 - Stripe Checkout and Billing Portal payment handoff.
-- Browser local storage for quote draft restoration.
+- Browser local storage for quote draft restoration and quote-level Google Ads conversion deduplication.
 - Browser session storage for attribution snapshots.
 - Server-side rate limiting and admin audit logs.
 
@@ -43,7 +43,7 @@ You can clear browser storage through your browser settings. Clearing storage ma
 
 ## Analytics and Advertising
 
-The public website loads Google tag for Google Ads conversion measurement. The codebase sends a Submit Lead Form conversion event after a successful public quote draft save.
+The public website loads Google tag for Google Ads conversion measurement. The codebase sends a Submit Lead Form conversion event after a public quote reaches the in-review confirmation state.
 
 Google may use cookies or similar technologies according to its own policies. Autoscape uses these tools to understand advertising performance and quote submissions.
 
@@ -62,4 +62,3 @@ Stripe powers payment checkout, subscriptions, billing portal access, and paymen
 You can manage cookies and storage through your browser settings. You may also use privacy controls offered by Google, Clerk, Stripe, Mapbox, or your browser.
 
 Blocking or clearing cookies may affect account login, quote restoration, payment checkout, map rendering, or other website functionality.
-

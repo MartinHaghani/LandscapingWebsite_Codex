@@ -10,51 +10,35 @@ describe('trackSubmitLeadConversion', () => {
     await expect(trackSubmitLeadConversion('quote-123', {})).resolves.toBeUndefined();
   });
 
-  it('uses the page-level Submit lead form conversion reporter when available', async () => {
-    const gtag_report_submit_lead_conversion = vi.fn(
-      (_transactionId: string | undefined, callback: () => void) => {
-        callback();
-      }
-    );
-
-    await expect(
-      trackSubmitLeadConversion(' quote-123 ', { gtag_report_submit_lead_conversion })
-    ).resolves.toBeUndefined();
-
-    expect(gtag_report_submit_lead_conversion).toHaveBeenCalledWith(
-      'quote-123',
-      expect.any(Function)
-    );
-  });
-
-  it('fires the Submit lead form conversion with the quote id as the transaction id', async () => {
+  it('fires the Google Ads Submit lead form conversion snippet', async () => {
     const gtag = vi.fn();
 
-    const conversionSent = trackSubmitLeadConversion(' quote-123 ', { gtag });
+    await expect(trackSubmitLeadConversion(' quote-123 ', { gtag })).resolves.toBeUndefined();
 
     expect(gtag).toHaveBeenCalledWith(
       'event',
       'conversion',
-      expect.objectContaining({
+      {
         send_to: 'AW-17991079326/FqIMCOHXqYIcEJ6r6IJD',
         value: 1.0,
-        currency: 'CAD',
-        transaction_id: 'quote-123'
-      })
+        currency: 'CAD'
+      }
     );
-
-    const params = gtag.mock.calls[0]?.[2];
-    params.event_callback();
-
-    await expect(conversionSent).resolves.toBeUndefined();
   });
 
-  it('continues after a short timeout if Google does not call the event callback', async () => {
-    vi.useFakeTimers();
-    const conversionSent = trackSubmitLeadConversion('quote-123', { gtag: vi.fn() });
+  it('does not fire twice for the same quote in the same browser storage', async () => {
+    const values = new Map<string, string>();
+    const localStorage = {
+      getItem: vi.fn((key: string) => values.get(key) ?? null),
+      setItem: vi.fn((key: string, value: string) => {
+        values.set(key, value);
+      })
+    };
+    const gtag = vi.fn();
 
-    await vi.advanceTimersByTimeAsync(1000);
+    await trackSubmitLeadConversion('quote-123', { gtag, localStorage });
+    await trackSubmitLeadConversion('quote-123', { gtag, localStorage });
 
-    await expect(conversionSent).resolves.toBeUndefined();
+    expect(gtag).toHaveBeenCalledTimes(1);
   });
 });

@@ -6,6 +6,7 @@ import { Button } from '../components/ui/Button';
 import { Card } from '../components/ui/Card';
 import { hasRequiredPhone } from '../lib/accountProfile';
 import { ApiError } from '../lib/api';
+import { trackSubmitLeadConversion } from '../lib/googleAds';
 import { legalDocumentSlugs } from '../lib/legalAcceptance';
 import { getQuoteConfirmationRedirect, loadQuoteConfirmation } from '../lib/quoteConfirmationFlow';
 import type { BillingMode } from '../types';
@@ -41,6 +42,21 @@ const toMoney = (value: number | undefined, fallback = 0) =>
 
 const toRate = (value: number | undefined, fallback = 0.2) =>
   typeof value === 'number' && Number.isFinite(value) ? Math.min(1, Math.max(0, value)) : fallback;
+
+export const shouldTrackQuoteInReviewConversion = (input: {
+  quote: Pick<QuoteResult, 'status' | 'contactPending'> | null;
+  loading: boolean;
+  finalizing: boolean;
+  error: string | null;
+}) =>
+  Boolean(
+    input.quote &&
+      !input.loading &&
+      !input.finalizing &&
+      !input.error &&
+      input.quote.status === 'in_review' &&
+      !input.quote.contactPending
+  );
 
 interface QuoteConfirmationContentProps {
   quote: QuoteResult | null;
@@ -139,6 +155,7 @@ export const QuoteConfirmationPage = () => {
   const [legalAccepted, setLegalAccepted] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const finalizeIdempotencyKeyRef = useRef<string | null>(null);
+  const conversionTrackedRef = useRef(false);
   const profileHasRequiredPhone = hasRequiredPhone(user);
   const customerEmail = user?.primaryEmailAddress?.emailAddress ?? null;
 
@@ -219,6 +236,18 @@ export const QuoteConfirmationPage = () => {
       mounted = false;
     };
   }, [quoteId, isLoaded, isSignedIn, profileHasRequiredPhone, legalAccepted, getToken]);
+
+  useEffect(() => {
+    if (
+      conversionTrackedRef.current ||
+      !shouldTrackQuoteInReviewConversion({ quote, loading, finalizing, error })
+    ) {
+      return;
+    }
+
+    conversionTrackedRef.current = true;
+    void trackSubmitLeadConversion(quote?.id);
+  }, [quote, loading, finalizing, error]);
 
   if (!quoteId) {
     return <Navigate to="/instant-quote" replace />;

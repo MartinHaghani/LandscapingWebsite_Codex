@@ -45,7 +45,7 @@ Account and payment information may include:
 Technical, analytics, and attribution information may include:
 
 - Google Ads click identifiers, UTM parameters, landing path, referrer, device type, browser summary, and conversion events.
-- Browser local storage and session storage values used to restore quote drafts and attribution snapshots.
+- Browser local storage and session storage values used to restore quote drafts, deduplicate quote conversion events, and keep attribution snapshots.
 - IP address used for rate limiting and, for admin actions, a hashed IP address and user-agent string in audit logs.
 - Cookies or similar technologies from Clerk, Google, Mapbox, Stripe, and other service providers.
 
@@ -154,4 +154,3 @@ The website and services are intended for residential landscaping customers and 
 ## Changes
 
 Autoscape may update this Privacy Policy from time to time. The "Last updated" date shows when this draft was last revised.
-

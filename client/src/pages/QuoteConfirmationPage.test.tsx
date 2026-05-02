@@ -2,7 +2,11 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import { Route, Routes } from 'react-router-dom';
 import { StaticRouter } from 'react-router-dom/server';
 import { describe, expect, it, vi } from 'vitest';
-import { QuoteConfirmationContent, QuoteConfirmationPage } from './QuoteConfirmationPage';
+import {
+  QuoteConfirmationContent,
+  QuoteConfirmationPage,
+  shouldTrackQuoteInReviewConversion
+} from './QuoteConfirmationPage';
 
 vi.mock('@clerk/clerk-react', () => ({
   useAuth: () => ({
@@ -105,5 +109,31 @@ describe('QuoteConfirmationPage', () => {
     expect(markup).toContain('href="/legal/refund-cancellation-payment-policy"');
     expect(markup).toContain('Claim Quote');
     expect(markup).toContain('disabled=""');
+  });
+
+  it('tracks Google Ads conversion only once the quote is in review', () => {
+    expect(
+      shouldTrackQuoteInReviewConversion({
+        quote: {
+          status: 'in_review',
+          contactPending: false
+        },
+        loading: false,
+        finalizing: false,
+        error: null
+      })
+    ).toBe(true);
+
+    expect(
+      shouldTrackQuoteInReviewConversion({
+        quote: {
+          status: 'draft',
+          contactPending: true
+        },
+        loading: false,
+        finalizing: false,
+        error: null
+      })
+    ).toBe(false);
   });
 });

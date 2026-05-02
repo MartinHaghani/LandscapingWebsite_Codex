@@ -9,7 +9,6 @@ import { Card } from '../components/ui/Card';
 import { api, ApiError, createIdempotencyKey } from '../lib/api';
 import { getAttributionSnapshot } from '../lib/attribution';
 import { toFt, toFt2 } from '../lib/geometry';
-import { trackSubmitLeadConversion } from '../lib/googleAds';
 import { legalAcceptancePayload, legalDocumentSlugs } from '../lib/legalAcceptance';
 import { computeMultiPolygonMetrics } from '../lib/multiPolygonMetrics';
 import { canSubmitQuoteDraft } from '../lib/quoteFlow';
@@ -391,7 +390,6 @@ export const InstantQuoteSummaryPage = () => {
         clearQuoteDraftState(window.localStorage);
       }
 
-      await trackSubmitLeadConversion(response.quoteId);
       navigate(response.nextStepUrl ?? `/quote-confirmation/${response.quoteId}`);
     } catch (error) {
       setStatusMessage({
