@@ -16,7 +16,20 @@ Staging is created and active in DigitalOcean:
 - Runtime status: the root, `server/`, `client/`, and `admin/` package manifests pin `engines.node` to `20.x`; DigitalOcean App Platform's Node buildpack reads this package setting for Node version selection.
 - Stripe status: the Autoscape sandbox webhook destination `we_1TSTjbFOk9B0ar2ot9otfd2x` sends the seven API-handled event types to `https://api-staging.autoscape.ca/api/stripe/webhook`; `STRIPE_WEBHOOK_SECRET` was rotated on the `api` service and deployed in `5ef1fdfd-a64f-4274-a628-225d45dfccbd`.
 - Smoke-test status: authenticated staging smoke passes for custom domains, API health, public/admin SPA routes, CORS, service-area check, draft quote creation, customer Clerk claim/finalize/dashboard, admin Clerk health/list/editor/version submit, verified quote page, CSV export, audit logging, persistence after redeploy, approval-email resend, and Stripe sandbox Checkout/webhook payment confirmation for quote `Q-XFIZFLJX`.
-- Production status: not created. Do not create or route production until production Clerk/Mapbox/Resend/Stripe values are confirmed and Martin confirms launch.
+
+Production is created and active in DigitalOcean:
+
+- App: `autoscape-production` (`d4c4c9f9-f197-4a85-a9ee-352f40e74648`)
+- Region: App Platform `tor`; database `tor1`
+- Components: `public-web`, `admin-web`, `api`, `migrate`
+- Branch/deploy mode: `main`, auto-deploy on push for all components
+- Default ingress: `https://autoscape-production-w66ds.ondigitalocean.app`
+- Database cluster: `autoscape-production-db` (`f9149079-98cf-4e49-9277-e771a237d659`), PostgreSQL 16, size `db-s-1vcpu-1gb`
+- Database/user names: `autoscape_production`
+- Migration status: the `migrate` pre-deploy job ran against the empty production database and reports all 10 committed Prisma migrations applied with no pending migrations.
+- Runtime status: active deployment `615b1a2c-12de-4f06-86b0-0a6595f2db87` is `ACTIVE`; API health returns `{"ok":true,"service":"autoscape-server","mode":"admin-platform-v1"}`.
+- Stripe status: live webhook endpoint `we_1TSkCpJuc7sM2vW49NWyXozU` is enabled, `livemode=true`, and sends the seven API-handled event types to `https://api.autoscape.ca/api/stripe/webhook`. Live Stripe secrets are set only in DigitalOcean environment variables.
+- Smoke-test status: production HTTPS checks pass for API health, public/admin SPA loads, public/admin CORS preflight, service-area output, and Clerk JWKS at `https://clerk.autoscape.ca/.well-known/jwks.json`.
 
 Staging custom domains use self-managed DNS at GoDaddy:
 
@@ -26,7 +39,16 @@ Staging custom domains use self-managed DNS at GoDaddy:
 | `api-staging.autoscape.ca` | `ACTIVE` | CNAME to `autoscape-staging-w9537.ondigitalocean.app` |
 | `admin-staging.autoscape.ca` | `ACTIVE` | CNAME to `autoscape-staging-w9537.ondigitalocean.app` |
 
-Current public DNS for `autoscape.ca` remains delegated to `ns63.domaincontrol.com` and `ns64.domaincontrol.com`. Keep the existing Google Workspace, SPF, DKIM, DMARC, Resend, `www`, and `_domainconnect` records in place. Do not switch production traffic until the staging blocker above is resolved and production launch is confirmed.
+Current public DNS for `autoscape.ca` remains delegated to `ns63.domaincontrol.com` and `ns64.domaincontrol.com`. Keep the existing Google Workspace, SPF, DKIM, DMARC, Resend, Clerk, and `_domainconnect` records in place when changing App Platform records.
+
+Production custom domains use self-managed DNS at GoDaddy:
+
+| Domain | DigitalOcean state | DNS record |
+| --- | --- | --- |
+| `autoscape.ca` | `ACTIVE` | A records to `162.159.140.98` and `172.66.0.96`; AAAA records to `2606:4700:7::60` and `2a06:98c1:58::60` |
+| `www.autoscape.ca` | `ACTIVE` | CNAME to `autoscape-production-w66ds.ondigitalocean.app` |
+| `api.autoscape.ca` | `ACTIVE` | CNAME to `autoscape-production-w66ds.ondigitalocean.app` |
+| `admin.autoscape.ca` | `ACTIVE` | CNAME to `autoscape-production-w66ds.ondigitalocean.app` |
 
 Passed staging checks:
 
@@ -46,10 +68,14 @@ Passed staging checks:
 - Stripe sandbox Checkout payment on quote `Q-XFIZFLJX`; Stripe Workbench showed webhook deliveries `Total 1` and `Failed 0`, and the admin editor showed `Status: paid`
 - bundle scan for accidental `localhost`/loopback API origins
 
-Remaining staging validation before production:
+Production launch validation completed on 2026-05-02 UTC:
 
-- `POST /api/admin/quotes/:id/versions/:versionNumber/submit` should record an approved-quote email delivery attempt and keep the quote verified if Resend, Mapbox, or public URL configuration fails.
-- Confirm production Clerk, Mapbox, Resend, and Stripe live values before creating or routing production.
+- `https://autoscape.ca`, `https://www.autoscape.ca`, and `https://admin.autoscape.ca` return `200` over HTTPS.
+- `https://api.autoscape.ca/api/health` returns healthy JSON over HTTPS.
+- CORS preflight allows `https://autoscape.ca` and `https://admin.autoscape.ca`.
+- `https://api.autoscape.ca/api/service-area` returns the same Vaughan coverage shape used for staging.
+- Clerk production JWKS is reachable at `https://clerk.autoscape.ca/.well-known/jwks.json`.
+- The Stripe live webhook endpoint is enabled and points at the production API. No live card charge was created during deployment automation.
 
 Staging environment variable audit, names only:
 
@@ -69,6 +95,26 @@ Staging environment variable audit, names only:
 | `SERVICE_AREA_REGIONS` | found |
 | `SYSTEM_LAUNCH_AT` | found |
 | `VITE_SYSTEM_LAUNCH_AT` | found |
+| `DATABASE_URL` | DigitalOcean managed database binding only |
+
+Production environment variable audit, names only:
+
+| Key | Status |
+| --- | --- |
+| `VITE_CLERK_PUBLISHABLE_KEY` | set |
+| `CLERK_SECRET_KEY` | set |
+| `CLERK_JWT_ISSUER` | set |
+| `CLERK_ADMIN_ORG_ID` | set |
+| `VITE_CLERK_ADMIN_ORG_ID` | set |
+| `VITE_MAPBOX_TOKEN` | set separately for public and admin builds |
+| `MAPBOX_STATIC_ACCESS_TOKEN` | set |
+| `RESEND_API_KEY` | set |
+| `STRIPE_WEBHOOK_SECRET` | set |
+| `STRIPE_SECRET_KEY` | set |
+| `AUTOSCAPE_BASE_STATIONS_JSON` | set |
+| `SERVICE_AREA_REGIONS` | set |
+| `SYSTEM_LAUNCH_AT` | set |
+| `VITE_SYSTEM_LAUNCH_AT` | set |
 | `DATABASE_URL` | DigitalOcean managed database binding only |
 
 ## 1) Deployment Topology
@@ -268,9 +314,9 @@ Manual checks:
 - CSV/admin list endpoints work for allowed roles.
 - CORS allows only the configured public/admin origins.
 
-## 8) Create Production
+## 8) Production Operations
 
-Only create or switch production after staging passes the smoke test.
+Production has been created. Reuse this checklist when auditing, recreating, or changing the production deployment after staging passes the smoke test.
 
 1. Create the production app from `.do/app.production.yaml`, or mirror it manually.
 2. Confirm:
@@ -285,7 +331,7 @@ Only create or switch production after staging passes the smoke test.
    - `api.autoscape.ca`
    - `admin.autoscape.ca`
 4. Use production Clerk, Mapbox, Resend, and database values.
-5. Let the first production deploy start from `main`, or trigger a deploy manually only if DigitalOcean does not start one after app creation.
+5. Let production deploy from `main`; trigger a manual deploy only if DigitalOcean does not start one after app creation or after a required env/DNS change.
 
 Production API runtime env differences:
 
@@ -294,6 +340,15 @@ DATABASE_URL=<production managed postgres url or ${autoscape-production-db.DATAB
 CLIENT_ORIGIN=https://autoscape.ca,https://www.autoscape.ca,https://admin.autoscape.ca
 PUBLIC_APP_BASE_URL=https://autoscape.ca
 PUBLIC_API_BASE_URL=https://api.autoscape.ca
+SERVICE_AREA_REGIONS=Vaughan, Ontario
+AUTOSCAPE_BASE_STATIONS_JSON=<production service-area stations JSON>
+CLERK_SECRET_KEY=<production Clerk secret key>
+CLERK_JWT_ISSUER=<production Clerk issuer>
+CLERK_ADMIN_ORG_ID=<production Clerk admin org id>
+RESEND_API_KEY=<production Resend key>
+MAPBOX_STATIC_ACCESS_TOKEN=<production static Mapbox token>
+STRIPE_SECRET_KEY=<production Stripe live secret key>
+STRIPE_WEBHOOK_SECRET=<production Stripe webhook signing secret>
 ```
 
 Production frontend build env differences:
@@ -301,9 +356,12 @@ Production frontend build env differences:
 ```text
 public-web VITE_API_BASE_URL=https://api.autoscape.ca
 public-web VITE_MAPBOX_TOKEN=<production public browser token>
+public-web VITE_CLERK_PUBLISHABLE_KEY=<production Clerk publishable key>
 admin-web VITE_API_BASE_URL=https://api.autoscape.ca
 admin-web VITE_PUBLIC_APP_BASE_URL=https://autoscape.ca
 admin-web VITE_MAPBOX_TOKEN=<production admin browser token>
+admin-web VITE_CLERK_PUBLISHABLE_KEY=<production Clerk publishable key>
+admin-web VITE_CLERK_ADMIN_ORG_ID=<production Clerk admin org id>
 ```
 
 Run the staging smoke test again against production domains before sending real traffic.
