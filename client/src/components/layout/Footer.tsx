@@ -13,6 +13,21 @@ const quickLinks = [
   { label: 'How Pricing Works', to: '/how-rate-is-calculated' }
 ];
 
+const legalLinks = [
+  { label: 'Privacy Policy', to: '/legal/privacy-policy' },
+  { label: 'Terms of Service', to: '/legal/terms-of-service' }
+];
+
+const FooterLegalLinks = ({ className = '' }: { className?: string }) => (
+  <nav aria-label="Legal links" className={`flex flex-wrap gap-x-4 gap-y-2 text-xs ${className}`}>
+    {legalLinks.map((link) => (
+      <Link key={link.to} to={link.to} className="transition-colors hover:text-brand">
+        {link.label}
+      </Link>
+    ))}
+  </nav>
+);
+
 export const Footer = ({ variant = 'full' }: FooterProps) => {
   if (variant === 'compact') {
     return (
@@ -27,6 +42,7 @@ export const Footer = ({ variant = 'full' }: FooterProps) => {
             <p className="mt-2 max-w-xl">
               Deterministic lawn measurement, reviewed quotes, and secure payment handoff.
             </p>
+            <FooterLegalLinks className="mt-3 text-copy-soft" />
           </div>
 
           <div className="flex flex-col gap-2 font-medium sm:flex-row sm:flex-wrap sm:gap-x-5">
@@ -45,51 +61,52 @@ export const Footer = ({ variant = 'full' }: FooterProps) => {
   return (
     <footer className="mt-16 border-t border-stroke bg-surface-muted/70">
       <div className="mx-auto grid w-full max-w-7xl gap-8 px-4 py-10 md:grid-cols-3 md:px-8">
-      <div>
-        <img
-          src="/images/brand/autoscape-horizontal-brand.png"
-          alt="Autoscape"
-          className="h-8 w-auto max-w-[10.5rem]"
-        />
-        <p className="mt-2 max-w-md text-sm text-copy-muted">
-          Autonomous lawn care with deterministic quote measurement, route precision, and dependable
-          recurring service.
-        </p>
-      </div>
+        <div>
+          <img
+            src="/images/brand/autoscape-horizontal-brand.png"
+            alt="Autoscape"
+            className="h-8 w-auto max-w-[10.5rem]"
+          />
+          <p className="mt-2 max-w-md text-sm text-copy-muted">
+            Autonomous lawn care with deterministic quote measurement, route precision, and dependable
+            recurring service.
+          </p>
+          <FooterLegalLinks className="mt-4 text-copy-soft" />
+        </div>
 
-      <div>
-        <p className="text-xs font-semibold uppercase tracking-[0.14em] text-copy-soft">
-          Quick Links
-        </p>
-        <div className="mt-3 flex flex-col gap-2">
-          {quickLinks.map((link) => (
-            <Link
-              key={link.to}
-              to={link.to}
-              className="text-sm text-copy-muted transition-colors hover:text-brand"
-            >
-              {link.label}
-            </Link>
-          ))}
+        <div>
+          <p className="text-xs font-semibold uppercase tracking-[0.14em] text-copy-soft">
+            Quick Links
+          </p>
+          <div className="mt-3 flex flex-col gap-2">
+            {quickLinks.map((link) => (
+              <Link
+                key={link.to}
+                to={link.to}
+                className="text-sm text-copy-muted transition-colors hover:text-brand"
+              >
+                {link.label}
+              </Link>
+            ))}
+          </div>
+        </div>
+
+        <div className="text-sm text-copy-muted">
+          <p className="text-xs font-semibold uppercase tracking-[0.14em] text-copy-soft">Contact</p>
+          <p className="mt-3">Greater Toronto Area, Ontario</p>
+          <p className="mt-2">
+            <a className="transition-colors hover:text-brand" href="tel:+14168482841">
+              +1 (416) 848-2841
+            </a>
+          </p>
+          <p className="mt-2">
+            <a className="transition-colors hover:text-brand" href="mailto:contact@autoscape.ca">
+              contact@autoscape.ca
+            </a>
+          </p>
+          <p className="mt-3 text-xs text-copy-soft">Mon-Sat 7:00 AM - 7:00 PM</p>
         </div>
       </div>
-
-      <div className="text-sm text-copy-muted">
-        <p className="text-xs font-semibold uppercase tracking-[0.14em] text-copy-soft">Contact</p>
-        <p className="mt-3">Greater Toronto Area, Ontario</p>
-        <p className="mt-2">
-          <a className="transition-colors hover:text-brand" href="tel:+14168482841">
-            +1 (416) 848-2841
-          </a>
-        </p>
-        <p className="mt-2">
-          <a className="transition-colors hover:text-brand" href="mailto:contact@autoscape.ca">
-            contact@autoscape.ca
-          </a>
-        </p>
-        <p className="mt-3 text-xs text-copy-soft">Mon-Sat 7:00 AM - 7:00 PM</p>
-      </div>
-    </div>
     </footer>
   );
 };

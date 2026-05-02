@@ -11,6 +11,19 @@ vi.mock('@clerk/clerk-react', () => ({
 }));
 
 describe('SiteLayout footer variants', () => {
+  it('renders crawlable legal links on the home page footer', () => {
+    const markup = renderToStaticMarkup(
+      <StaticRouter location="/">
+        <SiteLayout />
+      </StaticRouter>
+    );
+
+    expect(markup).toContain('href="/legal/privacy-policy"');
+    expect(markup).toContain('Privacy Policy');
+    expect(markup).toContain('href="/legal/terms-of-service"');
+    expect(markup).toContain('Terms of Service');
+  });
+
   it('uses the compact footer on quote/auth/payment funnel routes', () => {
     const markup = renderToStaticMarkup(
       <StaticRouter location="/payment-complete">
@@ -19,6 +32,8 @@ describe('SiteLayout footer variants', () => {
     );
 
     expect(markup).toContain('Deterministic lawn measurement, reviewed quotes');
+    expect(markup).toContain('href="/legal/privacy-policy"');
+    expect(markup).toContain('href="/legal/terms-of-service"');
     expect(markup).not.toContain('Quick Links');
   });
 

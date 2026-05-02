@@ -500,6 +500,6 @@ Implementation:
 - `client/src/pages/LegalPage.tsx` renders `/legal` and `/legal/:slug` through raw Vite imports, avoiding a Markdown dependency for this pass
 - launch documents cover privacy, terms, cookies, payments/refunds, landscaping/service disclaimers, automation, SMS/email communications, accessibility, acceptable use, third-party services, service area, and estimate/booking terms
 - no media release terms were added because the app does not expose photo upload, testimonials, public reviews, before/after galleries, or customer media publishing
-- footer legal links are present in full and compact footer variants
+- Privacy Policy and Terms of Service footer links are present in full and compact footer variants, with no-script fallback links in the public HTML shell for basic crawlers
 - action-adjacent legal notices are added to contact, quote submit, complete-profile, claim-quote, and payment checkout surfaces
 - cookie banner behavior was intentionally not added because no consent framework exists in the app yet; the legal evidence report flags cookie consent strategy for business/legal review

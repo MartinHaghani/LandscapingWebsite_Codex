@@ -93,7 +93,7 @@ Media Release Terms were not created because the inspected codebase does not sho
 - Added public legal source files under `client/src/content/legal/`.
 - Added a raw Markdown legal registry in `client/src/content/legal/index.ts`.
 - Added `client/src/pages/LegalPage.tsx` with a small static Markdown renderer and routes `/legal` and `/legal/:slug`.
-- Kept footer/nav free of legal links; `/legal` remains directly accessible and action-local links appear only where acknowledgement is required.
+- Added footer Privacy Policy and Terms of Service links so the home page exposes the core legal pages directly, plus no-script fallback links in the public HTML shell for basic crawlers; `/legal` remains directly accessible and action-local acknowledgement links stay near guarded actions.
 - Added required legal acknowledgement checkboxes near contact, instant quote submit, complete profile, quote confirmation claim, public payment checkout, and dashboard payment checkout actions.
 - Added optional unchecked email marketing opt-in to the contact form.
 - Added optional unchecked email marketing opt-in to the complete-profile account intake flow.

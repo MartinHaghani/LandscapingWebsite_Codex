@@ -6,7 +6,7 @@
 2. Navbar keeps desktop nav links, quote CTA, signed-out auth links with the slim divider, signed-in dashboard link, and mobile menu behavior.
 3. Public page loads include the Google Ads tag `AW-17991079326` from the Vite HTML shell.
 4. Quote, auth, confirmation, payment, payment-complete, and dashboard-payment funnel routes render a compact footer; general marketing routes keep the full footer.
-5. Footer variants link to core legal pages, and `/legal` lists the Markdown legal documents rendered from `client/src/content/legal/`.
+5. Footer variants link to Privacy Policy and Terms of Service, the Vite HTML shell includes no-script Privacy/Terms fallback links for basic crawlers, and `/legal` lists the Markdown legal documents rendered from `client/src/content/legal/`.
 
 ## Services: Coverage-First Entry
 
