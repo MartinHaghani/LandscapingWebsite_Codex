@@ -190,3 +190,9 @@ export const adminQuoteCreateSchema = z.object({
 export const accountQuoteBillingModeSchema = z.object({
   billingMode: z.enum(['seasonal', 'per_session'])
 });
+
+export const legalAcceptancePayloadSchema = z.object({
+  legalAcceptance: z.object({
+    accepted: z.literal(true)
+  })
+});

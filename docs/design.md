@@ -397,6 +397,7 @@ Implementation:
   - `autoscapeProfile.defaultAddress`
   - `autoscapeProfile.addressHistory` (latest-first, deduped, max 10)
 - account APIs:
+  - `POST /api/account/legal-acceptance` records Complete Profile Terms/Privacy acceptance before the user has a saved phone number
   - `GET /api/account/quotes` returns owned quotes plus customer status, verification timing, payment summary, and dashboard payment-page URL
   - `GET /api/account/quotes/:quoteId` returns owned quote detail plus conditional Stripe card-on-file metadata
   - `POST /api/account/quotes/:quoteId/billing-portal` creates a Stripe-hosted customer portal session when billing context exists

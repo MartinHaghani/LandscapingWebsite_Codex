@@ -157,6 +157,7 @@
 2. If signed out, client redirects to `/sign-in/*` with a return URL for the confirmation page.
 3. User signs in (email/password, Google, forgot/reset supported by Clerk).
 4. If signed-in account has no phone (legacy profile), user is redirected to `/complete-profile/*`.
+   - Complete Profile posts Terms/Privacy acceptance to `POST /api/account/legal-acceptance` before phone metadata is saved.
    - Complete Profile includes an optional unchecked email-marketing opt-in and stores it in Clerk unsafe metadata.
 5. Client claims ownership of draft quote:
 

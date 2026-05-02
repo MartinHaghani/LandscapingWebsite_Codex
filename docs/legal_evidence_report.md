@@ -98,7 +98,7 @@ Media Release Terms were not created because the inspected codebase does not sho
 - Added optional unchecked email marketing opt-in to the contact form.
 - Added optional unchecked email marketing opt-in to the complete-profile account intake flow.
 - Added `marketingConsent?: boolean` and `legalAcceptance: { accepted: true }` to the relevant client/server payload contracts.
-- Added `POST /api/account/legal-acceptance`.
+- Added `POST /api/account/legal-acceptance` for Complete Profile Terms/Privacy acceptance before Clerk phone metadata is saved.
 - Added Prisma-backed `LegalAcceptance` records and migration `20260502090000_legal_acceptance_records`.
 - Server maps each action to canonical document slugs/version rather than trusting client-supplied document lists.
 - Persisted contact-form opt-in to `Lead.consentMarketing`.

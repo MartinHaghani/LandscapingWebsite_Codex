@@ -21,6 +21,11 @@ import {
 } from './pricing.js';
 import { getPrisma } from './prisma.js';
 import type { BaseStationConfig } from './serviceAreaConfig.js';
+import {
+  LEGAL_ACCEPTANCE_DOCUMENTS,
+  LEGAL_DOCUMENT_VERSION,
+  type LegalAcceptanceAction
+} from './legalAcceptance.js';
 import type { QuoteGeometry } from '../types.js';
 
 export type AdminRole = 'OWNER' | 'ADMIN' | 'REVIEWER' | 'MARKETING';
@@ -488,6 +493,17 @@ interface RecordStripeWebhookEventInput {
   payload?: unknown;
 }
 
+interface RecordLegalAcceptanceInput {
+  action: LegalAcceptanceAction;
+  authUserId?: string;
+  leadId?: string;
+  quoteId?: string;
+  email?: string;
+  ipHash?: string;
+  userAgent?: string;
+  metadata?: unknown;
+}
+
 interface ApprovedQuotePreviewRecord {
   publicQuoteId: string;
   addressText: string;
@@ -743,6 +759,22 @@ interface MemoryStripeWebhookEvent {
   eventType: string;
   payload: unknown | null;
   processedAt: string;
+  createdAt: string;
+}
+
+interface MemoryLegalAcceptance {
+  id: string;
+  action: LegalAcceptanceAction;
+  documentSlugs: string[];
+  documentVersion: string;
+  leadId: string | null;
+  quoteId: string | null;
+  authUserId: string | null;
+  email: string | null;
+  ipHash: string | null;
+  userAgent: string | null;
+  metadata: unknown | null;
+  acceptedAt: string;
   createdAt: string;
 }
 
@@ -1536,6 +1568,7 @@ export class DataStore {
     contacts: [] as MemoryLeadContact[],
     requests: [] as MemoryServiceAreaRequest[],
     attributionTouches: [] as MemoryAttributionTouch[],
+    legalAcceptances: [] as MemoryLegalAcceptance[],
     quoteNotes: [] as MemoryQuoteNote[],
     auditLogs: [] as MemoryAuditLog[],
     idempotency: new Map<string, MemoryIdempotencyRecord>(),
@@ -3217,6 +3250,79 @@ export class DataStore {
         };
       }
     );
+  }
+
+  async recordLegalAcceptance(input: RecordLegalAcceptanceInput) {
+    const documentSlugs = [...LEGAL_ACCEPTANCE_DOCUMENTS[input.action]];
+    const id = nanoid(14);
+    const acceptedAt = new Date();
+    const createdAt = acceptedAt;
+
+    if (!this.prisma) {
+      this.memory.legalAcceptances.push({
+        id,
+        action: input.action,
+        documentSlugs,
+        documentVersion: LEGAL_DOCUMENT_VERSION,
+        leadId: input.leadId ?? null,
+        quoteId: input.quoteId ?? null,
+        authUserId: input.authUserId ?? null,
+        email: input.email ?? null,
+        ipHash: input.ipHash ?? null,
+        userAgent: input.userAgent ?? null,
+        metadata: input.metadata ?? null,
+        acceptedAt: acceptedAt.toISOString(),
+        createdAt: createdAt.toISOString()
+      });
+
+      return {
+        ok: true,
+        id,
+        acceptedAt: acceptedAt.toISOString()
+      };
+    }
+
+    const metadataJson = input.metadata === undefined ? null : JSON.stringify(input.metadata);
+
+    await this.prisma.$executeRaw(
+      Prisma.sql`
+        INSERT INTO "legal_acceptances" (
+          "id",
+          "action",
+          "document_slugs",
+          "document_version",
+          "lead_id",
+          "quote_id",
+          "auth_user_id",
+          "email",
+          "ip_hash",
+          "user_agent",
+          "metadata",
+          "accepted_at",
+          "created_at"
+        ) VALUES (
+          ${id},
+          ${input.action}::"LegalAcceptanceAction",
+          ${documentSlugs},
+          ${LEGAL_DOCUMENT_VERSION},
+          ${input.leadId ?? null},
+          ${input.quoteId ?? null},
+          ${input.authUserId ?? null},
+          ${input.email ?? null},
+          ${input.ipHash ?? null},
+          ${input.userAgent ?? null},
+          ${metadataJson}::jsonb,
+          ${acceptedAt},
+          ${createdAt}
+        )
+      `
+    );
+
+    return {
+      ok: true,
+      id,
+      acceptedAt: acceptedAt.toISOString()
+    };
   }
 
   async createServiceAreaRequest(input: ServiceAreaRequestInput) {

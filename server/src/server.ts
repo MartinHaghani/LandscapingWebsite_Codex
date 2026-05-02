@@ -20,6 +20,7 @@ import {
   adminQuoteVersionCreateSchema,
   accountQuoteBillingModeSchema,
   contactPayloadSchema,
+  legalAcceptancePayloadSchema,
   quoteDraftPayloadSchema,
   quoteContactPayloadSchema,
   serviceAreaCheckSchema,
@@ -1144,6 +1145,7 @@ export const createServer = (options: CreateServerOptions = {}) => {
         pathname === '/api/quote/draft' ||
         pathname.match(/^\/api\/quote\/[^/]+\/contact$/) ||
         pathname.match(/^\/api\/quote\/[^/]+\/claim$/) ||
+        pathname === '/api/account/legal-acceptance' ||
         pathname.match(/^\/api\/account\/quotes\/[^/]+\/billing-mode$/) ||
         pathname.match(/^\/api\/payment-links\/[^/]+\/checkout$/) ||
         pathname.match(/^\/api\/account\/quotes\/[^/]+\/payment\/checkout$/) ||
@@ -1658,6 +1660,52 @@ export const createServer = (options: CreateServerOptions = {}) => {
         });
         return;
       } catch (error) {
+        const mapped = mapStoreError(error);
+        json(res, mapped.statusCode, { error: mapped.message });
+        return;
+      }
+    }
+
+    if (method === 'POST' && pathname === '/api/account/legal-acceptance') {
+      try {
+        const customerIdentity = await customerIdentityResolver(req);
+        if (!customerIdentity) {
+          throw new Error('AUTH_REQUIRED');
+        }
+
+        const body = await readJson(req);
+        const parsed = legalAcceptancePayloadSchema.safeParse(body);
+        if (!parsed.success) {
+          json(res, 400, {
+            error: 'Invalid legal acceptance payload.',
+            details: parsed.error.flatten()
+          });
+          return;
+        }
+
+        await dataStore.recordLegalAcceptance({
+          action: 'complete_profile_terms',
+          authUserId: customerIdentity.userId,
+          email: customerIdentity.email,
+          ipHash: hashIp(ip),
+          userAgent: (req.headers['user-agent'] as string | undefined)?.slice(0, 300),
+          metadata: {
+            source: 'complete_profile'
+          }
+        });
+
+        json(res, 200, { ok: true });
+        return;
+      } catch (error) {
+        if (error instanceof SyntaxError) {
+          json(res, 400, { error: 'Invalid JSON body.' });
+          return;
+        }
+        if (error instanceof Error && error.message === 'Payload too large.') {
+          json(res, 413, { error: 'Payload too large.' });
+          return;
+        }
+
         const mapped = mapStoreError(error);
         json(res, mapped.statusCode, { error: mapped.message });
         return;

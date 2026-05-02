@@ -102,6 +102,7 @@ Spatial storage:
 
 - `GET /api/account/quotes` (auth required; returns owned quotes plus customer status, verification timing, payment summary, and dashboard payment-page URL)
 - `GET /api/account/quotes/:quoteId` (auth required, owner scoped; returns quote detail plus conditional Stripe card-on-file metadata)
+- `POST /api/account/legal-acceptance` (auth required, phone not yet required; records Complete Profile Terms/Privacy acceptance before Clerk phone metadata is saved)
 - `POST /api/account/quotes/:quoteId/billing-mode` (auth + phone required, owner scoped; switches `seasonal` / `per_session` before payment starts)
 - `POST /api/account/quotes/:quoteId/billing-portal` (auth required, owner scoped; opens Stripe-hosted card management when a Stripe customer billing context exists)
 
@@ -312,6 +313,7 @@ Customer profile completeness:
 - required account field: phone number
 - client gate route: `/complete-profile/*`
 - dashboard and quote-confirmation flows redirect to the mobile-readable profile gate when phone is missing
+- `POST /api/account/legal-acceptance` is allowed before phone completeness so the gate can record Terms/Privacy acceptance and then save phone metadata through Clerk
 - phone source of truth: Clerk `unsafeMetadata.autoscapeProfile.phone` (fallback from Clerk primary phone when available)
 - shared Clerk appearance helper: `client/src/lib/clerkAppearance.ts` applies Autoscape colors, buttons, inputs, and card styling to public sign-in, sign-up, and account profile screens
 

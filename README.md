@@ -200,6 +200,7 @@ Current live status: `autoscape-staging` is active in Toronto with `autoscape-st
   - claiming now requires an authenticated account with completed phone, then attaches `quotes.auth_user_id`, records a `quote_claim` contact event when contact data is available, lets the customer choose `seasonal` or `per_session`, and opens Stripe Checkout directly from the claim flow
 - Customer dashboard:
   - `/complete-profile/*` captures required phone number for any auth method
+    - it records required Terms/Privacy acceptance through `POST /api/account/legal-acceptance` before phone metadata is saved, so new social sign-ups can complete the gate without already having a phone on file
     - it also stores optional email marketing opt-in at `unsafeMetadata.autoscapeProfile.emailMarketingConsent`, which the API propagates to lead records during quote claim/finalize
   - `/dashboard` is now an action-first customer home with mobile-first CTA placement, a primary quote state, lifecycle timeline, May-September schedule note, support panel, conditional quote history, and conditional card-on-file panel
   - `/dashboard/account/*` renders Clerk profile/security/password management with the shared Autoscape Clerk appearance inside the dashboard area

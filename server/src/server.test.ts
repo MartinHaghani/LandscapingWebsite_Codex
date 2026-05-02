@@ -882,6 +882,69 @@ describe('quote draft + contact finalize flow', () => {
     assert.equal(accountQuotes.status, 400);
   });
 
+  it('records complete-profile legal acceptance before account phone is saved', async () => {
+    const { baseUrl } = await startServer({
+      customerIdentityFromToken: (token) => {
+        const identity = customerIdentityFromToken(token);
+        if (!identity) {
+          return null;
+        }
+
+        return {
+          ...identity,
+          phone: null
+        };
+      }
+    });
+
+    const response = await fetch(`${baseUrl}/api/account/legal-acceptance`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: 'Bearer customer-needs-phone'
+      },
+      body: JSON.stringify({
+        legalAcceptance: {
+          accepted: true
+        }
+      })
+    });
+
+    assert.equal(response.status, 200);
+    assert.deepEqual(await response.json(), { ok: true });
+  });
+
+  it('requires auth and accepted terms for account legal acceptance', async () => {
+    const { baseUrl } = await startServer();
+
+    const unauthenticated = await fetch(`${baseUrl}/api/account/legal-acceptance`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        legalAcceptance: {
+          accepted: true
+        }
+      })
+    });
+    assert.equal(unauthenticated.status, 401);
+
+    const rejected = await fetch(`${baseUrl}/api/account/legal-acceptance`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: 'Bearer customer-terms'
+      },
+      body: JSON.stringify({
+        legalAcceptance: {
+          accepted: false
+        }
+      })
+    });
+    assert.equal(rejected.status, 400);
+  });
+
   it('records signed-in customer addresses on draft create and finalize', async () => {
     const recordedAddresses: Array<{ userId: string; addressText: string }> = [];
     const { baseUrl } = await startServer({

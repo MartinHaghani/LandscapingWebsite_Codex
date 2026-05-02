@@ -91,7 +91,7 @@ Autoscape provides:
 ### Customer Accounts
 
 - Clerk handles customer sign-up/sign-in, Google auth, and password reset with a shared Autoscape-branded appearance in public auth and account profile screens.
-- Required phone is enforced in-app via `/complete-profile/*` for all auth methods.
+- Required phone is enforced in-app via `/complete-profile/*` for all auth methods; the gate records required Terms/Privacy acceptance through `POST /api/account/legal-acceptance` before Clerk phone metadata is saved.
 - Phone is stored on account metadata (`unsafeMetadata.autoscapeProfile.phone`).
 - Optional email marketing consent is stored on account metadata (`unsafeMetadata.autoscapeProfile.emailMarketingConsent`) and propagated to `Lead.consentMarketing` during quote claim/finalize.
 - Users without phone are gated before dashboard and quote confirmation routes.
