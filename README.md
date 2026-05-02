@@ -117,7 +117,7 @@ Local dev connectivity notes:
 Production-like hosting uses DigitalOcean App Platform with two isolated apps:
 
 - Staging: `staging` branch -> `autoscape-staging`, auto-deployed to `staging.autoscape.ca`, `api-staging.autoscape.ca`, and `admin-staging.autoscape.ca`.
-- Production: `main` branch -> `autoscape-production`, manually deployed to `autoscape.ca`, `www.autoscape.ca`, `api.autoscape.ca`, and `admin.autoscape.ca`.
+- Production: `main` branch -> `autoscape-production`, auto-deployed to `autoscape.ca`, `www.autoscape.ca`, `api.autoscape.ca`, and `admin.autoscape.ca`.
 
 Each environment has `public-web` (`client/` static site), `admin-web` (`admin/` static site), `api` (`server/` Node service), a pre-deploy Prisma migration job, and its own DigitalOcean Managed PostgreSQL database with PostGIS enabled. App spec templates live in `.do/app.staging.yaml` and `.do/app.production.yaml`; fill secrets only in DigitalOcean or in ignored private spec copies. DigitalOcean's Node buildpack reads the committed `engines.node=20.x` package pins for runtime selection. See [`docs/deployment.md`](./docs/deployment.md) for setup, env vars, DNS, smoke tests, and rollback.
 

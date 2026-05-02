@@ -17,7 +17,7 @@ Primary domains:
 ## 2) Runtime and Entry Points
 
 - API runtime: `server/src/index.ts` -> `server/src/server.ts`
-- Hosted runtime: DigitalOcean App Platform runs two isolated apps from the GitHub repo: staging from `staging` with auto-deploy and production from `main` with manual deploys.
+- Hosted runtime: DigitalOcean App Platform runs two isolated apps from the GitHub repo: staging from `staging` with auto-deploy and production from `main` with auto-deploy.
 - Hosted components per environment: `public-web` static site from `client/`, `admin-web` static site from `admin/`, `api` Node service from `server/`, and a `migrate` pre-deploy job that runs `npm run prisma:migrate:deploy`.
 - Hosted Node version: the root, `server/`, `client/`, and `admin/` package manifests pin `engines.node=20.x`, which DigitalOcean App Platform's Node buildpack uses for build/runtime selection.
 - Hosted domains: staging uses `staging.autoscape.ca`, `api-staging.autoscape.ca`, and `admin-staging.autoscape.ca`; production uses `autoscape.ca`, `www.autoscape.ca`, `api.autoscape.ca`, and `admin.autoscape.ca`.

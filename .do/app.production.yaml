@@ -25,7 +25,7 @@ static_sites:
     github:
       repo: MartinHaghani/LandscapingWebsite_Codex
       branch: main
-      deploy_on_push: false
+      deploy_on_push: true
     source_dir: client
     build_command: npm ci && npm run build
     output_dir: dist
@@ -54,7 +54,7 @@ static_sites:
     github:
       repo: MartinHaghani/LandscapingWebsite_Codex
       branch: main
-      deploy_on_push: false
+      deploy_on_push: true
     source_dir: admin
     build_command: npm ci && npm run build
     output_dir: dist
@@ -65,6 +65,14 @@ static_sites:
         value: https://api.autoscape.ca
         scope: BUILD_TIME
         type: GENERAL
+      - key: VITE_PUBLIC_APP_BASE_URL
+        value: https://autoscape.ca
+        scope: BUILD_TIME
+        type: GENERAL
+      - key: VITE_MAPBOX_TOKEN
+        value: __SET_IN_DIGITALOCEAN__
+        scope: BUILD_TIME
+        type: SECRET
       - key: VITE_CLERK_PUBLISHABLE_KEY
         value: __SET_IN_DIGITALOCEAN__
         scope: BUILD_TIME
@@ -84,7 +92,7 @@ services:
     github:
       repo: MartinHaghani/LandscapingWebsite_Codex
       branch: main
-      deploy_on_push: false
+      deploy_on_push: true
     source_dir: server
     build_command: npm ci && npm run prisma:generate && npm run build
     run_command: npm start
@@ -169,7 +177,7 @@ jobs:
     github:
       repo: MartinHaghani/LandscapingWebsite_Codex
       branch: main
-      deploy_on_push: false
+      deploy_on_push: true
     source_dir: server
     build_command: npm ci && npm run prisma:generate && npm run build
     run_command: npm run prisma:migrate:deploy
@@ -185,19 +193,15 @@ jobs:
 domains:
   - domain: autoscape.ca
     type: PRIMARY
-    zone: autoscape.ca
     minimum_tls_version: "1.2"
   - domain: www.autoscape.ca
     type: ALIAS
-    zone: autoscape.ca
     minimum_tls_version: "1.2"
   - domain: api.autoscape.ca
     type: ALIAS
-    zone: autoscape.ca
     minimum_tls_version: "1.2"
   - domain: admin.autoscape.ca
     type: ALIAS
-    zone: autoscape.ca
     minimum_tls_version: "1.2"
 
 ingress:

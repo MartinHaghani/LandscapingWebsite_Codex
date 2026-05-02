@@ -90,12 +90,12 @@ Decision:
 Implementation:
 
 - DigitalOcean App Platform runs separate staging and production apps.
-- Staging auto-deploys from `staging`; production deploys manually from `main`.
+- Staging auto-deploys from `staging`; production auto-deploys from `main`.
 - Each environment has isolated public/admin/API components and a separate managed Postgres/PostGIS database.
 - Node is pinned to `20.x` through the committed package `engines` fields so DigitalOcean builds do not drift to the platform default.
 - Prisma migrations run as a pre-deploy job so schema changes block rollout if they fail.
 - Secrets live in DigitalOcean environment variables, not committed app specs or `.env` files.
-- Live status on 2026-05-02 UTC keeps this separation intact: staging is active with PostgreSQL 16/PostGIS and self-managed GoDaddy CNAMEs, authenticated quote/admin smoke tests pass through admin verification, redeploy persistence, approval-email resend, and Stripe sandbox Checkout/webhook payment confirmation. Production is intentionally uncreated until production environment values and launch confirmation are ready.
+- Live status on 2026-05-02 UTC keeps this separation intact: staging is active with PostgreSQL 16/PostGIS and self-managed GoDaddy CNAMEs, authenticated quote/admin smoke tests pass through admin verification, redeploy persistence, approval-email resend, and Stripe sandbox Checkout/webhook payment confirmation. Production uses the same App Platform shape, a separate empty managed database, and auto-deploys only from `main`.
 
 ## 8) Immutable Revision History
 

@@ -162,7 +162,7 @@ Admin app (separate Vite frontend) supports:
 - Runtime API: `server/src/server.ts` via `server/src/index.ts`
 - Hosted deployment target: DigitalOcean App Platform with isolated staging and production apps.
   - Staging uses the `staging` branch, auto-deploys to `staging.autoscape.ca`, `api-staging.autoscape.ca`, and `admin-staging.autoscape.ca`.
-  - Production uses the `main` branch, deploys manually to `autoscape.ca`, `www.autoscape.ca`, `api.autoscape.ca`, and `admin.autoscape.ca`.
+  - Production uses the `main` branch, auto-deploys to `autoscape.ca`, `www.autoscape.ca`, `api.autoscape.ca`, and `admin.autoscape.ca`.
   - Each environment has `public-web` (`client/`), `admin-web` (`admin/`), `api` (`server/`), a Prisma pre-deploy migration job, and its own managed Postgres/PostGIS database.
   - Node runtime selection is pinned by committed `engines.node=20.x` package manifests for the root, `server/`, `client/`, and `admin/` apps.
   - Live status on 2026-05-02 UTC: staging app `autoscape-staging` is active in `tor`, `autoscape-staging-db` is PostgreSQL 16 in `tor1`, and migrations have run. Staging custom domains use self-managed GoDaddy CNAME records and are active. Authenticated staging smoke tests passed for customer quote finalization, admin review/verification, persistence after redeploy, approval-email resend, and Stripe sandbox Checkout/webhook payment confirmation for quote `Q-XFIZFLJX`; production remains uncreated until production environment values and launch confirmation are ready.

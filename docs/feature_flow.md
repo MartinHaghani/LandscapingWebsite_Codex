@@ -71,8 +71,8 @@
 1. Codex/local work happens on feature branches and is verified locally before merge.
 2. Staging deploys automatically from the `staging` branch to the DigitalOcean `autoscape-staging` app.
 3. Current staging status on 2026-05-02 UTC: the app deployment and migration job are active, package manifests pin Node `20.x`, custom domains use self-managed GoDaddy CNAME records, and authenticated customer/admin quote smoke tests pass through admin verification, approval-email resend, Stripe Checkout/webhook payment confirmation, and persistence after redeploy.
-4. Staging smoke tests cover API health, public/admin SPA refreshes, quote creation, Clerk auth, admin review, CORS, persistence after API redeploy, approval-email resend, and Stripe sandbox payment confirmation. Production remains blocked until production environment values and launch confirmation are complete.
-5. Production deploys manually from `main` to the DigitalOcean `autoscape-production` app only after staging blockers are cleared and launch is confirmed.
+4. Staging smoke tests cover API health, public/admin SPA refreshes, quote creation, Clerk auth, admin review, CORS, persistence after API redeploy, approval-email resend, and Stripe sandbox payment confirmation before promotion.
+5. Production deploys automatically from `main` to the DigitalOcean `autoscape-production` app only after staging smoke tests pass and launch is confirmed.
 6. Schema migrations run through the App Platform `migrate` pre-deploy job before the API rollout in each environment.
 
 ## Instant Quote: Draft + Finalize

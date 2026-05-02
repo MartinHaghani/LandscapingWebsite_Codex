@@ -76,7 +76,7 @@ Staging environment variable audit, names only:
 | Environment | Branch | App Platform app | Deploy mode | Public domains |
 | --- | --- | --- | --- | --- |
 | Staging | `staging` | `autoscape-staging` | auto-deploy on push | `staging.autoscape.ca`, `api-staging.autoscape.ca`, `admin-staging.autoscape.ca` |
-| Production | `main` | `autoscape-production` | manual deploy | `autoscape.ca`, `www.autoscape.ca`, `api.autoscape.ca`, `admin.autoscape.ca` |
+| Production | `main` | `autoscape-production` | auto-deploy on push | `autoscape.ca`, `www.autoscape.ca`, `api.autoscape.ca`, `admin.autoscape.ca` |
 
 Each app contains:
 
@@ -120,10 +120,10 @@ git pull --ff-only
 3. Use this flow after the initial setup:
 
 ```text
-feature branch -> pull request -> staging -> smoke test -> main -> manual production deploy
+feature branch -> pull request -> staging -> smoke test -> main -> automatic production deploy
 ```
 
-Production should stay manual until the quote/admin/email workflows are stable.
+Production auto-deploys from `main`; only fast-forward or merge staging into `main` after staging smoke tests pass.
 
 ## 3) Databases
 
@@ -177,6 +177,8 @@ Set these on `admin-web` as build-time env vars:
 
 ```text
 VITE_API_BASE_URL=https://api-staging.autoscape.ca
+VITE_PUBLIC_APP_BASE_URL=https://staging.autoscape.ca
+VITE_MAPBOX_TOKEN=<staging admin browser token>
 VITE_CLERK_PUBLISHABLE_KEY=<staging publishable key>
 VITE_CLERK_ADMIN_ORG_ID=<staging admin org id>
 VITE_SYSTEM_LAUNCH_AT=2026-03-04T00:00:00.000Z
@@ -274,7 +276,7 @@ Only create or switch production after staging passes the smoke test.
 2. Confirm:
    - app name: `autoscape-production`
    - branch: `main`
-   - auto-deploy: disabled
+   - auto-deploy: enabled
    - app/database region matches production database
    - `api` uses the larger `apps-s-1vcpu-1gb` instance from the template
 3. Add production domains:
@@ -283,7 +285,7 @@ Only create or switch production after staging passes the smoke test.
    - `api.autoscape.ca`
    - `admin.autoscape.ca`
 4. Use production Clerk, Mapbox, Resend, and database values.
-5. Trigger the first production deploy manually.
+5. Let the first production deploy start from `main`, or trigger a deploy manually only if DigitalOcean does not start one after app creation.
 
 Production API runtime env differences:
 
@@ -292,6 +294,16 @@ DATABASE_URL=<production managed postgres url or ${autoscape-production-db.DATAB
 CLIENT_ORIGIN=https://autoscape.ca,https://www.autoscape.ca,https://admin.autoscape.ca
 PUBLIC_APP_BASE_URL=https://autoscape.ca
 PUBLIC_API_BASE_URL=https://api.autoscape.ca
+```
+
+Production frontend build env differences:
+
+```text
+public-web VITE_API_BASE_URL=https://api.autoscape.ca
+public-web VITE_MAPBOX_TOKEN=<production public browser token>
+admin-web VITE_API_BASE_URL=https://api.autoscape.ca
+admin-web VITE_PUBLIC_APP_BASE_URL=https://autoscape.ca
+admin-web VITE_MAPBOX_TOKEN=<production admin browser token>
 ```
 
 Run the staging smoke test again against production domains before sending real traffic.
