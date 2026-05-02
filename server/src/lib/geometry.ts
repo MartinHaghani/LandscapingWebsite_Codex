@@ -166,6 +166,10 @@ export const validateAndMeasureGeometry = (geometry: QuoteGeometry): GeometryVal
     }
   }
 
+  if (selfIntersecting) {
+    throw new Error('Polygon source includes a self-intersecting polygon.');
+  }
+
   const merged = mergePolygons(normalizedPolygons);
   const areaM2 = area(merged);
 

@@ -19,10 +19,6 @@ export const polygonSourceSchema = z.object({
   activePolygonId: z.string().trim().max(120).nullable().optional()
 });
 
-export const legalAcceptanceSchema = z.object({
-  accepted: z.literal(true)
-});
-
 export const quotePayloadSchema = z.object({
   address: z.string().trim().min(3).max(300),
   location: z.object({
@@ -46,8 +42,7 @@ export const quotePayloadSchema = z.object({
   plan: z.string().trim().min(3).max(120),
   quoteTotal: z.number().nonnegative(),
   serviceFrequency: z.enum(['weekly']).optional(),
-  billingMode: z.enum(['seasonal', 'per_session']).optional(),
-  legalAcceptance: legalAcceptanceSchema
+  billingMode: z.enum(['seasonal', 'per_session']).optional()
 });
 
 export const attributionSchema = z
@@ -92,8 +87,7 @@ export const quoteDraftPayloadSchema = z.object({
   pricingVersion: z.string().trim().min(1).max(40).optional(),
   currency: z.string().trim().min(1).max(8).optional(),
   polygonSource: polygonSourceSchema,
-  attribution: attributionSchema,
-  legalAcceptance: legalAcceptanceSchema
+  attribution: attributionSchema
 });
 
 export const quoteContactPayloadSchema = z.object({
@@ -108,20 +102,7 @@ export const contactPayloadSchema = z.object({
   addressText: z.string().trim().max(300).optional(),
   message: z.string().trim().min(8).max(5000),
   marketingConsent: z.boolean().optional(),
-  attribution: attributionSchema,
-  legalAcceptance: legalAcceptanceSchema
-});
-
-export const quoteClaimPayloadSchema = z.object({
-  legalAcceptance: legalAcceptanceSchema
-});
-
-export const paymentCheckoutPayloadSchema = z.object({
-  legalAcceptance: legalAcceptanceSchema
-});
-
-export const accountLegalAcceptancePayloadSchema = z.object({
-  legalAcceptance: legalAcceptanceSchema
+  attribution: attributionSchema
 });
 
 export const serviceAreaCheckSchema = z.object({
@@ -160,5 +141,42 @@ export const adminQuoteVersionCreateSchema = z.object({
   serviceFrequency: z.enum(['weekly']).optional(),
   perSessionTotal: z.number().nonnegative(),
   finalTotal: z.number().nonnegative(),
+  globalDiscountRate: z.number().min(0).max(0.5).optional(),
+  seasonalDiscountRate: z.number().min(0).max(0.5).optional(),
+  priceOverrideEnabled: z.boolean().optional(),
+  overrideBasePerSessionTotal: z.number().nonnegative().optional(),
   overrideReason: z.string().trim().max(2000).optional()
+});
+
+export const adminQuoteCreateSchema = z.object({
+  quoteId: z.string().trim().regex(/^Q-[A-Z0-9_-]{4,30}$/).optional(),
+  address: z.string().trim().min(3).max(300),
+  location: z.object({
+    lat: z.number().min(-90).max(90),
+    lng: z.number().min(-180).max(180)
+  }),
+  polygon: z.discriminatedUnion('type', [
+    z.object({
+      type: z.literal('Polygon'),
+      coordinates: z.array(z.array(coordinateSchema).min(1)).min(1)
+    }),
+    z.object({
+      type: z.literal('MultiPolygon'),
+      coordinates: z.array(z.array(z.array(coordinateSchema).min(1)).min(1)).min(1)
+    })
+  ]),
+  polygonSource: polygonSourceSchema,
+  serviceFrequency: z.enum(['weekly']).optional(),
+  billingMode: z.enum(['seasonal', 'per_session']).optional(),
+  pricingVersion: z.string().trim().min(1).max(40).optional(),
+  currency: z.string().trim().min(1).max(8).optional(),
+  globalDiscountRate: z.number().min(0).max(0.5).optional(),
+  seasonalDiscountRate: z.number().min(0).max(0.5).optional(),
+  priceOverrideEnabled: z.boolean().optional(),
+  overrideBasePerSessionTotal: z.number().nonnegative().optional(),
+  overrideReason: z.string().trim().max(2000).optional()
+});
+
+export const accountQuoteBillingModeSchema = z.object({
+  billingMode: z.enum(['seasonal', 'per_session'])
 });

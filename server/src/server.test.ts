@@ -23,8 +23,6 @@ const stations: BaseStationConfig[] = [
   }
 ];
 
-const legalAcceptance = { accepted: true } as const;
-
 const startedServers: Array<ReturnType<typeof createServer>['server']> = [];
 
 const parseToken = (req: http.IncomingMessage) => {
@@ -45,7 +43,7 @@ const customerIdentityFromToken = (token: string): CustomerIdentity | null => {
       email: `${userId}@example.com`,
       name: userId.replace('customer-', 'Customer '),
       phone: token.includes('no-phone') ? null : '+1 416 555 0100',
-      emailMarketingConsent: token.includes('email-consent')
+      emailMarketingConsent: token.includes('marketing')
     };
   }
 
@@ -261,24 +259,6 @@ const extractPaymentToken = (html: string) => {
   return match[1];
 };
 
-const getLegalAuditActions = async (baseUrl: string) => {
-  const response = await fetch(`${baseUrl}/api/admin/audit-logs?entityType=legal_acceptance&limit=100`, {
-    headers: {
-      Authorization: 'Bearer admin-admin'
-    }
-  });
-  assert.equal(response.status, 200);
-  const body = (await response.json()) as {
-    items: Array<{
-      action: string;
-      entityType: string;
-      afterRedacted?: { action?: string; documentSlugs?: string[] };
-    }>;
-  };
-
-  return body.items.map((item) => item.afterRedacted?.action ?? item.action);
-};
-
 const createReviewQuoteVersion = async (
   baseUrl: string,
   idPrefix: string,
@@ -317,8 +297,7 @@ const createReviewQuoteVersion = async (
       baseTotal: 49,
       pricingVersion: 'v1',
       currency: 'CAD',
-      ...draftOverrides,
-      legalAcceptance
+      ...draftOverrides
     })
   });
   assert.equal(draftResponse.status, 201);
@@ -472,110 +451,45 @@ describe('CORS policy', () => {
   });
 });
 
-describe('legal acceptance enforcement', () => {
-  it('requires and records contact privacy acknowledgement', async () => {
+describe('/api/contact', () => {
+  it('accepts marketing consent and persists it on the lead record', async () => {
     const { baseUrl } = await startServer();
-    const payload = {
-      name: 'Jane Customer',
-      email: 'jane.customer@example.com',
-      phone: '+1 416 555 0100',
-      message: 'Please contact me about lawn service.',
-      marketingConsent: true
+
+    const contactResponse = await fetch(`${baseUrl}/api/contact`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Idempotency-Key': 'contact-marketing-consent-1'
+      },
+      body: JSON.stringify({
+        name: 'Marketing Optin',
+        email: 'marketing-optin@example.com',
+        phone: '+1 416 555 0111',
+        addressText: '57 Whitburn Crescent, Maple, ON',
+        message: 'Please follow up about service availability.',
+        marketingConsent: true
+      })
+    });
+
+    assert.equal(contactResponse.status, 201);
+
+    const leadsResponse = await fetch(`${baseUrl}/api/admin/leads?consentMarketing=true`, {
+      headers: {
+        Authorization: 'Bearer admin-admin'
+      }
+    });
+    assert.equal(leadsResponse.status, 200);
+    const leadsBody = (await leadsResponse.json()) as {
+      items: Array<{ primaryEmail: string | null; consentMarketing: boolean }>;
     };
+    const lead = leadsBody.items.find((item) => item.primaryEmail === 'marketing-optin@example.com');
 
-    const missing = await fetch(`${baseUrl}/api/contact`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Idempotency-Key': 'contact-legal-missing'
-      },
-      body: JSON.stringify(payload)
-    });
-    assert.equal(missing.status, 400);
-
-    const accepted = await fetch(`${baseUrl}/api/contact`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Idempotency-Key': 'contact-legal-accepted'
-      },
-      body: JSON.stringify({
-        ...payload,
-        legalAcceptance
-      })
-    });
-    assert.equal(accepted.status, 201);
-
-    const actions = await getLegalAuditActions(baseUrl);
-    assert.ok(actions.includes('contact_privacy_ack'));
-  });
-
-  it('records complete-profile terms acceptance for authenticated accounts', async () => {
-    const { baseUrl } = await startServer();
-
-    const missing = await fetch(`${baseUrl}/api/account/legal-acceptance`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: 'Bearer customer-profile'
-      },
-      body: JSON.stringify({})
-    });
-    assert.equal(missing.status, 400);
-
-    const accepted = await fetch(`${baseUrl}/api/account/legal-acceptance`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: 'Bearer customer-profile'
-      },
-      body: JSON.stringify({
-        legalAcceptance
-      })
-    });
-    assert.equal(accepted.status, 200);
-
-    const actions = await getLegalAuditActions(baseUrl);
-    assert.ok(actions.includes('complete_profile_terms'));
+    assert.ok(lead);
+    assert.equal(lead.consentMarketing, true);
   });
 });
 
 describe('quote draft + contact finalize flow', () => {
-  it('rejects quote draft submission without legal acceptance', async () => {
-    const { baseUrl } = await startServer();
-    const ring: Array<[number, number]> = [
-      [-79.5204, 43.8436],
-      [-79.5191, 43.8436],
-      [-79.5191, 43.8447],
-      [-79.5204, 43.8447]
-    ];
-
-    const draft = await fetch(`${baseUrl}/api/quote/draft`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Idempotency-Key': 'quote-draft-missing-legal'
-      },
-      body: JSON.stringify({
-        address: '123 Missing Legal Lane, Vaughan, ON',
-        location: {
-          lat: 43.844147,
-          lng: -79.51962
-        },
-        polygon: createPolygonGeometry(ring),
-        polygonSource: createPolygonSource('service-1', ring),
-        plan: 'Premium Weekly',
-        quoteTotal: 245.55,
-        serviceFrequency: 'weekly',
-        baseTotal: 120,
-        pricingVersion: 'v1',
-        currency: 'CAD'
-      })
-    });
-
-    assert.equal(draft.status, 400);
-  });
-
   it('creates draft quote with idempotent replay and finalizes contact', async () => {
     const { baseUrl } = await startServer();
     const draftRing: Array<[number, number]> = [
@@ -598,8 +512,7 @@ describe('quote draft + contact finalize flow', () => {
       serviceFrequency: 'weekly',
       baseTotal: 120,
       pricingVersion: 'v1',
-      currency: 'CAD',
-      legalAcceptance
+      currency: 'CAD'
     };
 
     const firstDraft = await fetch(`${baseUrl}/api/quote/draft`, {
@@ -657,12 +570,8 @@ describe('quote draft + contact finalize flow', () => {
     const claimResponse = await fetch(`${baseUrl}/api/quote/${firstDraftBody.quoteId}/claim`, {
       method: 'POST',
       headers: {
-        'Content-Type': 'application/json',
         Authorization: 'Bearer customer-martin'
-      },
-      body: JSON.stringify({
-        legalAcceptance
-      })
+      }
     });
     assert.equal(claimResponse.status, 200);
 
@@ -747,10 +656,63 @@ describe('quote draft + contact finalize flow', () => {
     assert.ok(quoteContact);
     assert.equal(quoteContact.phone, '+1 416 555 0100');
     assert.equal(quoteContact.addressText, draftPayload.address);
+  });
 
-    const legalActions = await getLegalAuditActions(baseUrl);
-    assert.ok(legalActions.includes('quote_submit_terms'));
-    assert.ok(legalActions.includes('quote_claim_terms'));
+  it('propagates account email marketing consent when a customer finalizes a quote', async () => {
+    const { baseUrl } = await startServer();
+    const draftRing: Array<[number, number]> = [
+      [-79.5202, 43.8438],
+      [-79.5193, 43.8438],
+      [-79.5193, 43.8445],
+      [-79.5202, 43.8445]
+    ];
+
+    const draft = await fetch(`${baseUrl}/api/quote/draft`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Idempotency-Key': 'quote-marketing-draft-1'
+      },
+      body: JSON.stringify({
+        address: '42 Consent Lane, Vaughan, ON',
+        location: {
+          lat: 43.844147,
+          lng: -79.51962
+        },
+        polygon: createPolygonGeometry(draftRing),
+        polygonSource: createPolygonSource('service-1', draftRing),
+        plan: 'Premium Weekly',
+        quoteTotal: 180,
+        serviceFrequency: 'weekly'
+      })
+    });
+    assert.equal(draft.status, 201);
+    const draftBody = (await draft.json()) as { quoteId: string };
+
+    const finalize = await fetch(`${baseUrl}/api/quote/${draftBody.quoteId}/contact`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Idempotency-Key': 'quote-marketing-contact-1',
+        Authorization: 'Bearer customer-marketing'
+      },
+      body: JSON.stringify({})
+    });
+    assert.equal(finalize.status, 200);
+
+    const leadsResponse = await fetch(`${baseUrl}/api/admin/leads?consentMarketing=true`, {
+      headers: {
+        Authorization: 'Bearer admin-admin'
+      }
+    });
+    assert.equal(leadsResponse.status, 200);
+    const leadsBody = (await leadsResponse.json()) as {
+      items: Array<{ primaryEmail: string | null; consentMarketing: boolean }>;
+    };
+    const lead = leadsBody.items.find((item) => item.primaryEmail === 'customer-marketing@example.com');
+
+    assert.ok(lead);
+    assert.equal(lead.consentMarketing, true);
   });
 
   it('enforces quote ownership for claim, contact finalize, and lookup', async () => {
@@ -782,8 +744,7 @@ describe('quote draft + contact finalize flow', () => {
         ]),
         plan: 'Starter',
         quoteTotal: 180,
-        serviceFrequency: 'weekly',
-        legalAcceptance
+        serviceFrequency: 'weekly'
       })
     });
     assert.equal(draft.status, 201);
@@ -799,37 +760,19 @@ describe('quote draft + contact finalize flow', () => {
     });
     assert.equal(unauthFinalize.status, 401);
 
-    const missingClaimLegal = await fetch(`${baseUrl}/api/quote/${draftBody.quoteId}/claim`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: 'Bearer customer-owner'
-      },
-      body: JSON.stringify({})
-    });
-    assert.equal(missingClaimLegal.status, 400);
-
     const firstClaim = await fetch(`${baseUrl}/api/quote/${draftBody.quoteId}/claim`, {
       method: 'POST',
       headers: {
-        'Content-Type': 'application/json',
         Authorization: 'Bearer customer-owner'
-      },
-      body: JSON.stringify({
-        legalAcceptance
-      })
+      }
     });
     assert.equal(firstClaim.status, 200);
 
     const secondUserClaim = await fetch(`${baseUrl}/api/quote/${draftBody.quoteId}/claim`, {
       method: 'POST',
       headers: {
-        'Content-Type': 'application/json',
         Authorization: 'Bearer customer-other'
-      },
-      body: JSON.stringify({
-        legalAcceptance
-      })
+      }
     });
     assert.equal(secondUserClaim.status, 409);
 
@@ -902,8 +845,7 @@ describe('quote draft + contact finalize flow', () => {
         ]),
         plan: 'Starter',
         quoteTotal: 180,
-        serviceFrequency: 'weekly',
-        legalAcceptance
+        serviceFrequency: 'weekly'
       })
     });
     assert.equal(draft.status, 201);
@@ -912,14 +854,12 @@ describe('quote draft + contact finalize flow', () => {
     const claim = await fetch(`${baseUrl}/api/quote/${draftBody.quoteId}/claim`, {
       method: 'POST',
       headers: {
-        'Content-Type': 'application/json',
         Authorization: 'Bearer customer-no-phone'
-      },
-      body: JSON.stringify({
-        legalAcceptance
-      })
+      }
     });
-    assert.equal(claim.status, 200);
+    assert.equal(claim.status, 400);
+    const claimBody = (await claim.json()) as { error: string };
+    assert.equal(claimBody.error, 'Authenticated account profile is missing required fields.');
 
     const finalizeResponse = await fetch(`${baseUrl}/api/quote/${draftBody.quoteId}/contact`, {
       method: 'POST',
@@ -978,8 +918,7 @@ describe('quote draft + contact finalize flow', () => {
         ]),
         plan: 'Starter',
         quoteTotal: 180,
-        serviceFrequency: 'weekly',
-        legalAcceptance
+        serviceFrequency: 'weekly'
       })
     });
     assert.equal(draft.status, 201);
@@ -1037,8 +976,7 @@ describe('admin quote editor workflow', () => {
         serviceFrequency: 'weekly',
         baseTotal: 49,
         pricingVersion: 'v1',
-        currency: 'CAD',
-        legalAcceptance
+        currency: 'CAD'
       })
     });
     assert.equal(draftResponse.status, 400);
@@ -1078,8 +1016,7 @@ describe('admin quote editor workflow', () => {
         serviceFrequency: 'weekly',
         baseTotal: 49,
         pricingVersion: 'v1',
-        currency: 'CAD',
-        legalAcceptance
+        currency: 'CAD'
       })
     });
     assert.equal(draftResponse.status, 400);
@@ -1119,13 +1056,178 @@ describe('admin quote editor workflow', () => {
         serviceFrequency: 'weekly',
         baseTotal: 49,
         pricingVersion: 'v1',
-        currency: 'CAD',
-        legalAcceptance
+        currency: 'CAD'
       })
     });
     assert.equal(draftResponse.status, 400);
     const draftBody = (await draftResponse.json()) as { error: string };
     assert.equal(draftBody.error, 'Invalid quote editor payload.');
+  });
+
+  it('creates admin quotes with reserved IDs, previews before auth, claims with phone, chooses billing, and starts checkout', async () => {
+    const sessions: CreateStripeCheckoutSessionInput[] = [];
+    const { baseUrl } = await startServer({
+      publicUrls: {
+        appBaseUrl: 'https://client.autoscape.test',
+        apiBaseUrl: 'https://api.autoscape.test'
+      },
+      stripeProvider: createFakeStripeProvider({ sessions })
+    });
+
+    const reservationResponse = await fetch(`${baseUrl}/api/admin/quotes/reserve-id`, {
+      method: 'POST',
+      headers: {
+        Authorization: 'Bearer admin-admin'
+      }
+    });
+    assert.equal(reservationResponse.status, 201);
+    const reservationBody = (await reservationResponse.json()) as { quoteId: string; expiresAt: string };
+    assert.match(reservationBody.quoteId, /^Q-/);
+    assert.ok(reservationBody.expiresAt);
+
+    const adminRing: Array<[number, number]> = [
+      [-79.5204, 43.8437],
+      [-79.519, 43.8437],
+      [-79.519, 43.8446],
+      [-79.5204, 43.8446]
+    ];
+
+    const createResponse = await fetch(`${baseUrl}/api/admin/quotes`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: 'Bearer admin-admin'
+      },
+      body: JSON.stringify({
+        quoteId: reservationBody.quoteId,
+        address: '12 Admin Claim Way, Vaughan, ON',
+        location: {
+          lat: 43.844147,
+          lng: -79.51962
+        },
+        polygon: createPolygonGeometry(adminRing),
+        polygonSource: createPolygonSource('admin-service-1', adminRing),
+        billingMode: 'seasonal',
+        globalDiscountRate: 0.1,
+        seasonalDiscountRate: 0.25,
+        priceOverrideEnabled: true,
+        overrideBasePerSessionTotal: 100,
+        serviceFrequency: 'weekly',
+        pricingVersion: 'v1',
+        currency: 'CAD'
+      })
+    });
+    assert.equal(createResponse.status, 201);
+    const createBody = (await createResponse.json()) as {
+      quoteId: string;
+      status: string;
+      customerStatus: string;
+      contactPending: boolean;
+      perSessionTotal: number;
+      seasonalDiscountedTotal: number;
+    };
+    assert.equal(createBody.quoteId, reservationBody.quoteId);
+    assert.equal(createBody.status, 'verified');
+    assert.equal(createBody.customerStatus, 'awaiting_payment');
+    assert.equal(createBody.contactPending, false);
+    assert.equal(createBody.perSessionTotal, 90);
+    assert.equal(createBody.seasonalDiscountedTotal, 1350);
+
+    const previewResponse = await fetch(`${baseUrl}/api/quote-preview/${reservationBody.quoteId}`);
+    assert.equal(previewResponse.status, 200);
+    const previewBody = (await previewResponse.json()) as {
+      id: string;
+      address: string;
+      customerStatus: string;
+      polygonSource: { schemaVersion: number; polygons: unknown[] } | null;
+      perSessionTotal: number;
+      seasonalDiscountedTotal: number;
+    };
+    assert.equal(previewBody.id, reservationBody.quoteId);
+    assert.equal(previewBody.address, '12 Admin Claim Way, Vaughan, ON');
+    assert.equal(previewBody.customerStatus, 'awaiting_payment');
+    assert.equal(previewBody.polygonSource?.schemaVersion, 2);
+    assert.equal(previewBody.polygonSource?.polygons.length, 1);
+    assert.equal(previewBody.perSessionTotal, 90);
+    assert.equal(previewBody.seasonalDiscountedTotal, 1350);
+
+    const incompleteClaimResponse = await fetch(`${baseUrl}/api/quote/${reservationBody.quoteId}/claim`, {
+      method: 'POST',
+      headers: {
+        Authorization: 'Bearer customer-no-phone'
+      }
+    });
+    assert.equal(incompleteClaimResponse.status, 400);
+
+    const claimResponse = await fetch(`${baseUrl}/api/quote/${reservationBody.quoteId}/claim`, {
+      method: 'POST',
+      headers: {
+        Authorization: 'Bearer customer-admin-quote'
+      }
+    });
+    assert.equal(claimResponse.status, 200);
+    const claimBody = (await claimResponse.json()) as { ok: boolean; claimed: boolean };
+    assert.equal(claimBody.ok, true);
+    assert.equal(claimBody.claimed, true);
+
+    const billingResponse = await fetch(`${baseUrl}/api/account/quotes/${reservationBody.quoteId}/billing-mode`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: 'Bearer customer-admin-quote'
+      },
+      body: JSON.stringify({ billingMode: 'per_session' })
+    });
+    assert.equal(billingResponse.status, 200);
+    const billingBody = (await billingResponse.json()) as { billingMode: string };
+    assert.equal(billingBody.billingMode, 'per_session');
+
+    const checkoutResponse = await fetch(
+      `${baseUrl}/api/account/quotes/${reservationBody.quoteId}/payment/checkout`,
+      {
+        method: 'POST',
+        headers: {
+          Authorization: 'Bearer customer-admin-quote'
+        }
+      }
+    );
+    assert.equal(checkoutResponse.status, 200);
+    const checkoutBody = (await checkoutResponse.json()) as { checkoutUrl: string; checkoutSessionId: string };
+    assert.equal(checkoutBody.checkoutUrl, 'https://checkout.stripe.test/session/1');
+    assert.equal(checkoutBody.checkoutSessionId, 'cs_test_1');
+    assert.equal(sessions[0]?.mode, 'per_session_subscription');
+    assert.equal(sessions[0]?.amountCents, 9000);
+  });
+
+  it('rejects admin quote creation with invalid self-intersecting geometry', async () => {
+    const { baseUrl } = await startServer();
+    const bowTieRing: Array<[number, number]> = [
+      [-79.5204, 43.8437],
+      [-79.519, 43.8446],
+      [-79.5204, 43.8446],
+      [-79.519, 43.8437]
+    ];
+
+    const createResponse = await fetch(`${baseUrl}/api/admin/quotes`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: 'Bearer admin-admin'
+      },
+      body: JSON.stringify({
+        address: '44 Invalid Geometry Rd, Vaughan, ON',
+        location: {
+          lat: 43.844147,
+          lng: -79.51962
+        },
+        polygon: createPolygonGeometry(bowTieRing),
+        polygonSource: createPolygonSource('invalid-service-1', bowTieRing),
+        serviceFrequency: 'weekly',
+        pricingVersion: 'v1',
+        currency: 'CAD'
+      })
+    });
+    assert.equal(createResponse.status, 400);
   });
 
   it('supports versioned admin edits and submit to verified awaiting payment', async () => {
@@ -1150,8 +1252,7 @@ describe('admin quote editor workflow', () => {
       serviceFrequency: 'weekly',
       baseTotal: 49,
       pricingVersion: 'v1',
-      currency: 'CAD',
-      legalAcceptance
+      currency: 'CAD'
     };
 
     const draftResponse = await fetch(`${baseUrl}/api/quote/draft`, {
@@ -1315,8 +1416,7 @@ describe('admin quote editor workflow', () => {
         serviceFrequency: 'weekly',
         baseTotal: 49,
         pricingVersion: 'v1',
-        currency: 'CAD',
-        legalAcceptance
+        currency: 'CAD'
       })
     });
     assert.equal(draftResponse.status, 201);
@@ -1582,23 +1682,8 @@ describe('admin quote editor workflow', () => {
     const revokedResponse = await fetch(`${baseUrl}/api/payment-links/${firstToken}`);
     assert.equal(revokedResponse.status, 410);
 
-    const missingLegalCheckoutResponse = await fetch(`${baseUrl}/api/payment-links/${secondToken}/checkout`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify({})
-    });
-    assert.equal(missingLegalCheckoutResponse.status, 400);
-
     const checkoutResponse = await fetch(`${baseUrl}/api/payment-links/${secondToken}/checkout`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify({
-        legalAcceptance
-      })
+      method: 'POST'
     });
     assert.equal(checkoutResponse.status, 200);
     const checkoutBody = (await checkoutResponse.json()) as {
@@ -1612,16 +1697,9 @@ describe('admin quote editor workflow', () => {
     assert.equal(sessions.length, 1);
     assert.equal(sessions[0]?.mode, 'seasonal_payment');
     assert.equal(sessions[0]?.amountCents, 319984);
-    assert.ok((await getLegalAuditActions(baseUrl)).includes('payment_checkout_terms'));
 
     const replayCheckoutResponse = await fetch(`${baseUrl}/api/payment-links/${secondToken}/checkout`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify({
-        legalAcceptance
-      })
+      method: 'POST'
     });
     assert.equal(replayCheckoutResponse.status, 200);
     const replayCheckoutBody = (await replayCheckoutResponse.json()) as { reused: boolean };
@@ -1669,30 +1747,13 @@ describe('admin quote editor workflow', () => {
     assert.equal(submitResponse.status, 200);
     assert.equal(sentEmails.length, 1);
 
-    const missingLegalCheckout = await fetch(
-      `${baseUrl}/api/account/quotes/${scenario.quoteId}/payment/checkout`,
-      {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: 'Bearer customer-reviewer'
-        },
-        body: JSON.stringify({})
-      }
-    );
-    assert.equal(missingLegalCheckout.status, 400);
-
     const checkoutResponse = await fetch(
       `${baseUrl}/api/account/quotes/${scenario.quoteId}/payment/checkout`,
       {
         method: 'POST',
         headers: {
-          'Content-Type': 'application/json',
           Authorization: 'Bearer customer-reviewer'
-        },
-        body: JSON.stringify({
-          legalAcceptance
-        })
+        }
       }
     );
     assert.equal(checkoutResponse.status, 200);
@@ -1840,12 +1901,8 @@ describe('admin quote editor workflow', () => {
       {
         method: 'POST',
         headers: {
-          'Content-Type': 'application/json',
           Authorization: 'Bearer customer-reviewer'
-        },
-        body: JSON.stringify({
-          legalAcceptance
-        })
+        }
       }
     );
     assert.equal(checkoutResponse.status, 200);
@@ -1986,13 +2043,7 @@ describe('admin quote editor workflow', () => {
     const token = extractPaymentToken(sentEmails[0]?.html ?? '');
 
     const checkoutResponse = await fetch(`${baseUrl}/api/payment-links/${token}/checkout`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify({
-        legalAcceptance
-      })
+      method: 'POST'
     });
     assert.equal(checkoutResponse.status, 200);
     assert.equal(sessions.length, 1);
@@ -2056,8 +2107,7 @@ describe('admin quote editor workflow', () => {
         billingMode: 'per_session',
         baseTotal: 49,
         pricingVersion: 'v1',
-        currency: 'CAD',
-        legalAcceptance
+        currency: 'CAD'
       })
     });
     assert.equal(draftResponse.status, 201);
@@ -2108,13 +2158,7 @@ describe('admin quote editor workflow', () => {
     const token = extractPaymentToken(sentEmails[0]?.html ?? '');
 
     const checkoutResponse = await fetch(`${baseUrl}/api/payment-links/${token}/checkout`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify({
-        legalAcceptance
-      })
+      method: 'POST'
     });
     assert.equal(checkoutResponse.status, 200);
     assert.equal(sessions.length, 1);
@@ -2278,8 +2322,7 @@ describe('admin quote editor workflow', () => {
         serviceFrequency: 'weekly',
         baseTotal: 49,
         pricingVersion: 'v1',
-        currency: 'CAD',
-        legalAcceptance
+        currency: 'CAD'
       })
     });
     assert.equal(draftResponse.status, 201);
@@ -2397,8 +2440,7 @@ describe('admin quote editor workflow', () => {
         serviceFrequency: 'weekly',
         baseTotal: 49,
         pricingVersion: 'v1',
-        currency: 'CAD',
-        legalAcceptance
+        currency: 'CAD'
       })
     });
     assert.equal(draftResponse.status, 201);

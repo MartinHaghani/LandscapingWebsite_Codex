@@ -9,6 +9,7 @@ datasource db {
 
 enum LeadContactChannel {
   quote_finalize
+  quote_claim
   contact_form
 }
 
@@ -116,14 +117,6 @@ enum IdempotencyScope {
   contact_submit
 }
 
-enum LegalAcceptanceAction {
-  contact_privacy_ack
-  complete_profile_terms
-  quote_submit_terms
-  quote_claim_terms
-  payment_checkout_terms
-}
-
 model Lead {
   id               String               @id @default(cuid())
   primaryName      String?              @map("primary_name") @db.VarChar(120)
@@ -139,7 +132,6 @@ model Lead {
   quotes           Quote[]
   serviceRequests  ServiceAreaRequest[]
   touches          AttributionTouch[]
-  legalAcceptances LegalAcceptance[]
 
   @@index([createdAt(sort: Desc)])
   @@map("leads")
@@ -184,7 +176,10 @@ model Quote {
   seasonalTotalMin    Decimal               @map("seasonal_total_min") @db.Decimal(14, 2)
   seasonalTotalMax    Decimal               @map("seasonal_total_max") @db.Decimal(14, 2)
   billingMode         BillingMode           @default(seasonal) @map("billing_mode")
+  globalDiscountRate  Decimal               @default(0) @map("global_discount_rate") @db.Decimal(6, 4)
   seasonalDiscountRate Decimal              @default(0.2) @map("seasonal_discount_rate") @db.Decimal(6, 4)
+  priceOverrideEnabled Boolean              @default(false) @map("price_override_enabled")
+  overrideBasePerSessionTotal Decimal?      @map("override_base_per_session_total") @db.Decimal(14, 2)
   distanceToNearestStationKm Decimal        @default(0) @map("distance_to_nearest_station_km") @db.Decimal(14, 3)
   baseTotal           Decimal               @map("base_total") @db.Decimal(14, 2)
   finalTotal          Decimal               @map("final_total") @db.Decimal(14, 2)
@@ -206,7 +201,6 @@ model Quote {
   touches             AttributionTouch[]
   approvedQuoteEmailDeliveries ApprovedQuoteEmailDelivery[]
   paymentLinks        QuotePaymentLink[]
-  legalAcceptances    LegalAcceptance[]
 
   @@index([submittedAt(sort: Desc)])
   @@index([status, submittedAt(sort: Desc)])
@@ -297,6 +291,10 @@ model QuoteVersion {
   perSessionTotal     Decimal                @map("per_session_total") @db.Decimal(14, 2)
   seasonalTotalMin    Decimal                @map("seasonal_total_min") @db.Decimal(14, 2)
   seasonalTotalMax    Decimal                @map("seasonal_total_max") @db.Decimal(14, 2)
+  globalDiscountRate  Decimal                @default(0) @map("global_discount_rate") @db.Decimal(6, 4)
+  seasonalDiscountRate Decimal               @default(0.2) @map("seasonal_discount_rate") @db.Decimal(6, 4)
+  priceOverrideEnabled Boolean               @default(false) @map("price_override_enabled")
+  overrideBasePerSessionTotal Decimal?       @map("override_base_per_session_total") @db.Decimal(14, 2)
   baseTotal           Decimal                @map("base_total") @db.Decimal(14, 2)
   finalTotal          Decimal                @map("final_total") @db.Decimal(14, 2)
   overrideAmount      Decimal?               @map("override_amount") @db.Decimal(14, 2)
@@ -390,30 +388,6 @@ model AuditLog {
   @@map("audit_logs")
 }
 
-model LegalAcceptance {
-  id              String                @id @default(cuid())
-  action          LegalAcceptanceAction
-  documentSlugs   String[]              @map("document_slugs")
-  documentVersion String                @map("document_version") @db.VarChar(40)
-  leadId          String?               @map("lead_id")
-  quoteId         String?               @map("quote_id")
-  authUserId      String?               @map("auth_user_id") @db.VarChar(255)
-  email           String?               @db.VarChar(160)
-  ipHash          String?               @map("ip_hash") @db.VarChar(128)
-  userAgent       String?               @map("user_agent") @db.VarChar(300)
-  metadata        Json?
-  acceptedAt      DateTime              @default(now()) @map("accepted_at")
-  createdAt       DateTime              @default(now()) @map("created_at")
-  lead            Lead?                 @relation(fields: [leadId], references: [id], onDelete: SetNull)
-  quote           Quote?                @relation(fields: [quoteId], references: [id], onDelete: SetNull)
-
-  @@index([action, acceptedAt(sort: Desc)])
-  @@index([leadId, acceptedAt(sort: Desc)])
-  @@index([quoteId, acceptedAt(sort: Desc)])
-  @@index([authUserId, acceptedAt(sort: Desc)])
-  @@map("legal_acceptances")
-}
-
 model BaseStation {
   id              String   @id @default(cuid())
   internalLabel   String   @unique @map("internal_label") @db.VarChar(120)
@@ -442,4 +416,17 @@ model IdempotencyRecord {
   @@unique([scope, idempotencyKey])
   @@index([createdAt(sort: Desc)])
   @@map("idempotency_records")
+}
+
+model QuoteIdReservation {
+  quoteId         String    @id @map("quote_id") @db.VarChar(32)
+  reservedBy      String    @map("reserved_by") @db.VarChar(128)
+  expiresAt       DateTime  @map("expires_at")
+  consumedQuoteId String?   @map("consumed_quote_id") @db.VarChar(128)
+  consumedAt      DateTime? @map("consumed_at")
+  createdAt       DateTime  @default(now()) @map("created_at")
+
+  @@index([expiresAt])
+  @@index([consumedQuoteId])
+  @@map("quote_id_reservations")
 }

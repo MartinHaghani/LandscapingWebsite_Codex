@@ -108,6 +108,9 @@ export const api = {
       body: JSON.stringify(payload)
     });
   },
+  getQuotePreview(quoteId: string) {
+    return request<QuoteLookupResponse>(`/api/quote-preview/${encodeURIComponent(quoteId)}`);
+  },
   submitClaimedQuoteContact(
     quoteId: string,
     payload: QuoteContactPayload,
@@ -163,6 +166,13 @@ export const api = {
   getAccountQuote(quoteId: string, authToken: string) {
     return request<QuoteLookupResponse>(`/api/account/quotes/${encodeURIComponent(quoteId)}`, {
       authToken
+    });
+  },
+  updateAccountQuoteBillingMode(quoteId: string, billingMode: 'seasonal' | 'per_session', authToken: string) {
+    return request<QuoteLookupResponse>(`/api/account/quotes/${encodeURIComponent(quoteId)}/billing-mode`, {
+      method: 'POST',
+      authToken,
+      body: JSON.stringify({ billingMode })
     });
   },
   getPaymentLink(token: string) {

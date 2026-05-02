@@ -22,21 +22,23 @@ Primary domains:
 - Hosted Node version: the root, `server/`, `client/`, and `admin/` package manifests pin `engines.node=20.x`, which DigitalOcean App Platform's Node buildpack uses for build/runtime selection.
 - Hosted domains: staging uses `staging.autoscape.ca`, `api-staging.autoscape.ca`, and `admin-staging.autoscape.ca`; production uses `autoscape.ca`, `www.autoscape.ca`, `api.autoscape.ca`, and `admin.autoscape.ca`.
 - Live hosted status on 2026-04-21: `autoscape-staging` is active in `tor` with `public-web`, `admin-web`, `api`, and `migrate`; its custom domains use self-managed GoDaddy CNAME records and are active. Authenticated staging smoke tests pass through customer quote finalization, admin verification, and persistence after redeploy. Approved-quote preview/resend routes are deployed and both Stripe API secrets are configured; production has not been created because real approval email/resend smoke testing, Stripe checkout smoke testing, and launch confirmation are still pending.
-- Local dev connectivity: public/admin frontends default to `VITE_API_BASE_URL=http://localhost:4000`; the API reflects loopback origins (`localhost`, `127.0.0.1`, `[::1]`) across arbitrary local ports to avoid Vite port drift breaking quote writes.
+- Local dev connectivity: public/admin frontends default to `VITE_API_BASE_URL=http://localhost:4000`; admin also uses `VITE_PUBLIC_APP_BASE_URL=http://localhost:5173` to generate customer claim links. The API reflects loopback origins (`localhost`, `127.0.0.1`, `[::1]`) across arbitrary local ports to avoid Vite port drift breaking quote writes.
 - Public app routes: `client/src/App.tsx`
+- Public legal routes: `/legal` and `/legal/:slug` render Markdown drafts from `client/src/content/legal/` through `client/src/pages/LegalPage.tsx`; footer/form/payment links are wired to these routes.
 - Public HTML shell: `client/index.html` includes the Google Ads tag `AW-17991079326`; `admin/index.html` is intentionally separate and untagged.
 - Google Ads conversion helper: `client/src/lib/googleAds.ts` sends the `Submit lead form` conversion `AW-17991079326/FqIMCOHXqYIcEJ6r6IJD` only after successful public quote draft creation.
 - Contact page: `client/src/pages/ContactPage.tsx` (warm-light two-column contact surface with compact direct phone/email actions and the existing idempotent message form)
-- Legal documents: `client/src/content/legal/*` + `client/src/pages/LegalPage.tsx`; `/legal` and `/legal/:slug` render Markdown drafts, while legal links are placed beside required action acknowledgements rather than in the footer/nav.
 - Services gallery: `client/src/pages/ServicesPage.tsx` + `client/src/components/service/ServiceIllustrations.tsx` (coverage-first entry page with a shorter mobile service-area map and five shared-style inline SVG service scenes)
-- Instant quote builder: `client/src/pages/InstantQuotePage.tsx` (badge-only header + compact-on-mobile non-interactive three-step progress rail, mobile-stacked address input/submit controls, full-width map builder, delayed map-guide modal shell for fresh address loads, cleaner editorial guide chrome with one white panel, a slowly fading unified demo-and-caption media unit, no divider or white caption box between SVG and guide text, a right-sized demo viewport with the camera layer aligned to the map-body clip window so the SVG starts centered and the bottom remains visible, a tighter centered caption strip directly under the demo, equal-width toolbar buttons above the artwork, separate bottom navigation/progress chrome, looping first-step miniature draw-lawn demo using the refreshed brighter popup-house SVG background to draw both left-side lawn zones inside the same framed viewport treatment used by step 2, with a shared 1.6-second camera transform that does not slow cursor/edit phases, plus loop-edge fades that soften the demo restart, animated second-step SVG lesson that carries those two completed left-side lawns forward while drawing and correcting the right-side backyard zone with the same decoupled camera transform timing, matching framed background treatment, shorter `Add extra points` / `Delete extra points` captions, and the same loop-edge fade behavior, animated third-step SVG obstacle lesson that keeps that same house background and finished lawn state while clicking `Draw obstacle`, tracing a selected red obstacle polygon around the front tree in the bottom-left lawn, holding the completed obstacle scene for 2 seconds before looping again, and swapping the last-slide nav control from `Next` to a green `Done` button that slowly fades the popup back into the tool, floating `Guide` plus `Done` action cluster, local draft autosave, and review handoff)
-- Instant quote review: `client/src/pages/InstantQuoteSummaryPage.tsx` (two-section quote-ready review layout without the progress rail, one top `Back to Map` action, a desktop top row with address-first quote details plus a right-side fitted property preview, quiet whole-number area/perimeter metadata, a full-width lower payment-plan section with accessible side-by-side radio plan cards, and `POST /api/quote/draft` trigger)
+- Instant quote builder: `client/src/pages/InstantQuotePage.tsx` + `client/src/components/quote/QuoteMapDrawingToolbar.tsx` (badge-only header + compact-on-mobile non-interactive three-step progress rail, mobile-stacked address input/submit controls, address suggestion click/highlighted-Enter auto-continue through the coverage gate using the selected suggestion data directly with duplicate-check protection, full-width map builder, delayed map-guide modal shell for fresh address loads, cleaner editorial guide chrome with one white panel, responsive shorter mobile demo heights, a slowly fading unified demo-and-caption media unit, no divider or white caption box between SVG and guide text, a right-sized desktop demo viewport with the camera layer aligned to the map-body clip window so the SVG starts centered and the bottom remains visible, a tighter centered caption strip directly under the demo, equal-width toolbar buttons above the artwork, separate bottom navigation/progress chrome, looping first-step miniature draw-lawn demo using the refreshed brighter popup-house SVG background to draw both left-side lawn zones inside the same framed viewport treatment used by step 2, with a shared 1.6-second camera transform that does not slow cursor/edit phases, plus loop-edge fades that soften the demo restart, animated second-step SVG lesson that carries those two completed left-side lawns forward while drawing and correcting the right-side backyard zone with the same decoupled camera transform timing, matching framed background treatment, shorter `Add extra points` / `Delete extra points` captions, and the same loop-edge fade behavior, animated third-step SVG obstacle lesson that keeps that same house background and finished lawn state while clicking `Draw obstacle`, tracing a selected red obstacle polygon around the front tree in the bottom-left lawn, holding the completed obstacle scene for 2 seconds before looping again, and swapping the last-slide nav control from `Next` to a green `Done` button that slowly fades the popup back into the tool, desktop floating `Guide` plus `Done` action cluster, compact two-row mobile map dock, desktop-only under-map metrics/unit/draft summary, local draft autosave, and review handoff)
+- Instant quote review: `client/src/pages/InstantQuoteSummaryPage.tsx` (two-section quote-ready review layout without the progress rail, one top `Back to Map` action, a desktop top row with address-first quote details plus top season/per-visit price cards separated by an `or` divider, a right-side desktop-only fitted property preview, quiet whole-number area/perimeter metadata, a full-width lower payment-plan section with accessible radio plan cards separated by an `or` divider, seasonal savings shown inside the season plan card instead of as a standalone summary tile, and `POST /api/quote/draft` trigger)
+- Quote claim page: `client/src/pages/ClaimQuotePage.tsx` (`/claim-quote`, optional `quoteId` query prefill, unauthenticated full quote preview, auth/profile return flow, billing choice, and payment navigation)
 - Admin app routes/state: `admin/src/App.tsx`
+- Admin quote creator: `admin/src/pages/QuoteCreatorPage.tsx` (`/quotes/new`, reserved Quote ID, copyable claim links, Mapbox address search, satellite geometry drawing, live stats/pricing, warning-only service-area check, and direct admin quote creation)
 - Admin quote editor map module: `admin/src/components/QuoteEditorMap.tsx` (Mapbox satellite basemap, public quote-map polygon styling/controls, immediate freehand polygon source hydration, vertex dragging, outline-click vertex insertion, and the same shared draw-end simplifier used in public)
 - Public layout shell: `client/src/components/layout/SiteLayout.tsx` (`Navbar`, route-aware full/compact `Footer`, `ScrollToTop`; navbar/footer use the horizontal PNG brand mark from `client/public/images/brand/autoscape-horizontal-brand.png`, and signed-out desktop auth links use a slim divider rather than punctuation)
 - Public theming system: `client/tailwind.config.ts` + `client/src/index.css` (warm-light semantic tokens, shared form/focus/map-control styling)
-- Home hero system: `client/src/pages/HomePage.tsx` + `client/src/components/home/HomeHeroLawnGraphic.tsx` + `client/src/lib/homeHeroLawn.ts` + `client/src/lib/homeHeroLawnCoverage.ts` (true desktop 50/50 split, CTA helper copy, fixed parcel geometry constants, perimeter wall-trace metadata, rounded 11-pass boustrophedon infill path with sampled motion/denser arrows, direct mowing spawn on the first scanline, multi-phase hero timing, slightly heavier white outline, and a dynamically sized ticker-flip status capsule centered below the full lawn graphic)
-- Home page marketing composition: `client/src/pages/HomePage.tsx` + `client/src/components/home/HomePricingComparisonSection.tsx` + `client/src/components/home/HomeLawnmowersSection.tsx` (hero-adjacent pricing comparison using existing client quote helpers for a 3,000 sq ft weekly sample lawn in a flatter non-bubbled presentation with an unboxed larger sample lawn, muted size/schedule metadata, a narrower row-label column, and a top-right seasonal `20% off` badge in the Autoscape season cell, followed by a two-column mower section with an icon-led four-point unnumbered spec list on the left and the cleaned transparent asset `client/public/images/home/mower-technology-transparent.png` floating directly on the right-side background, then a streamlined flatter flow into a three-card services overview for Autonomous Mowing, Edging, and Cleanup & Debris, an FAQ with larger emphasized answers, and the closing quote CTA without separate Why Electric, How It Works, Why Autoscape, Testimonials, or About surfaces)
+- Home hero system: `client/src/pages/HomePage.tsx` + `client/src/components/home/HomeHeroLawnGraphic.tsx` + `client/src/lib/homeHeroLawn.ts` + `client/src/lib/homeHeroLawnCoverage.ts` (true desktop 50/50 split, CTA helper copy, mobile-only hero graphic placed between `Precise Cuts, Lower Costs` and the CTA buttons, fixed parcel geometry constants, perimeter wall-trace metadata, rounded 11-pass boustrophedon infill path with sampled motion/denser arrows, direct mowing spawn on the first scanline, multi-phase hero timing, slightly heavier white outline, and a dynamically sized ticker-flip status capsule centered below the full lawn graphic)
+- Home page marketing composition: `client/src/pages/HomePage.tsx` + `client/src/components/home/HomePricingComparisonSection.tsx` + `client/src/components/home/HomeLawnmowersSection.tsx` (hero-adjacent pricing comparison using existing client quote helpers for a 3,000 sq ft weekly sample lawn in a flatter non-bubbled presentation with an unboxed larger sample lawn, muted size/schedule metadata, a narrower row-label column, and a top-right seasonal `20% off` badge in the Autoscape season cell, followed by a two-column mower section with an icon-led four-point unnumbered spec list on the left and the cleaned transparent asset `client/public/images/home/mower-technology-transparent.png` floating directly on the right-side background on desktop and directly under the section heading on mobile, then a streamlined flatter flow into a three-card services overview for Autonomous Mowing, Edging, and Cleanup & Debris, an FAQ with larger emphasized answers, and the closing quote CTA without separate Why Electric, How It Works, Why Autoscape, Testimonials, or About surfaces)
 
 ## 3) Persistence Layer
 
@@ -53,7 +55,7 @@ Primary domains:
   - `server/prisma/migrations/20260415163000_weekly_only_service_frequency/migration.sql`
   - `server/prisma/migrations/20260416130000_approved_quote_email_delivery/migration.sql`
   - `server/prisma/migrations/20260421110000_stripe_quote_payments/migration.sql`
-  - `server/prisma/migrations/20260502090000_legal_acceptance_records/migration.sql`
+  - `server/prisma/migrations/20260501120000_admin_quote_creation_claim_flow/migration.sql`
 
 Canonical tables:
 
@@ -61,6 +63,7 @@ Canonical tables:
 - `lead_contacts`
 - `quotes`
 - `quote_versions` (append-only history)
+- `quote_id_reservations`
 - `approved_quote_email_deliveries`
 - `quote_payment_links`
 - `stripe_webhook_events`
@@ -68,7 +71,6 @@ Canonical tables:
 - `service_area_requests`
 - `attribution_touches`
 - `audit_logs`
-- `legal_acceptances`
 - `base_stations`
 - `idempotency_records`
 
@@ -83,7 +85,8 @@ Spatial storage:
 ### Quote
 
 - `POST /api/quote/draft` (idempotent)
-- `POST /api/quote/:quoteId/claim` (auth required)
+- `GET /api/quote-preview/:quoteId` (public Quote ID preview for verified awaiting-payment quotes)
+- `POST /api/quote/:quoteId/claim` (auth + completed phone required; associates `quotes.auth_user_id`)
 - `POST /api/quote/:quoteId/contact` (idempotent, auth required, optional notes payload only)
 - `GET /api/quote/:quoteId` (auth required, owner/admin only)
 - `GET /api/approved-quote-preview/:token` (public token, proxies the Mapbox satellite image for approved quote emails/payment pages)
@@ -97,15 +100,8 @@ Spatial storage:
 
 - `GET /api/account/quotes` (auth required; returns owned quotes plus customer status, verification timing, payment summary, and dashboard payment-page URL)
 - `GET /api/account/quotes/:quoteId` (auth required, owner scoped; returns quote detail plus conditional Stripe card-on-file metadata)
-- `POST /api/account/legal-acceptance` (auth required; records complete-profile Terms/Privacy acknowledgement)
+- `POST /api/account/quotes/:quoteId/billing-mode` (auth + phone required, owner scoped; switches `seasonal` / `per_session` before payment starts)
 - `POST /api/account/quotes/:quoteId/billing-portal` (auth required, owner scoped; opens Stripe-hosted card management when a Stripe customer billing context exists)
-
-Legal acceptance contract:
-
-- Required write surfaces send only `legalAcceptance: { accepted: true }`.
-- Server maps the action to canonical document slugs and document version `May 1, 2026`.
-- Recorded actions are `contact_privacy_ack`, `complete_profile_terms`, `quote_submit_terms`, `quote_claim_terms`, and `payment_checkout_terms`.
-- Records include optional lead/quote/auth user references, email, server timestamp, hashed IP, user agent, and metadata.
 
 Client-side quote draft resilience:
 
@@ -151,8 +147,10 @@ Quote pricing contract:
   - `seasonalTotalMin`, `seasonalTotalMax` (compatibility alias pair, now fixed to one total)
   - `fullSeasonTotal`, `seasonalDiscountedTotal`, `seasonalSavingsTotal`
   - `seasonalDiscountRate`, `billingMode`
+  - `globalDiscountRate`, `priceOverrideEnabled`, `overrideBasePerSessionTotal`
 - service frequency is weekly-only:
   - `weekly` => `20` visits from May to September
+- admin-created quote pricing supports global discount default `0%`, seasonal discount default `20%`, both clamped to `0-50%`; override mode stores the edited base per-visit amount and recalculates the visible per-visit/seasonal values from active discounts
 - migration `20260415163000_weekly_only_service_frequency` normalizes any stored non-weekly rows to weekly 20-visit totals before tightening the Prisma enum; older historical migrations are left intact for migration-history safety
 
 Customer profile sync contract:
@@ -161,11 +159,15 @@ Customer profile sync contract:
 - metadata shape:
   - `defaultAddress: string`
   - `addressHistory: string[]` (latest-first, deduped, max 10)
+  - `emailMarketingConsent?: boolean` (optional complete-profile email opt-in stored in Clerk unsafe metadata)
 - quote finalize performs a secondary address sync pass
+- quote claim/finalize propagates account email marketing opt-in into the lead `consentMarketing` field
 
 ### Contact
 
-- `POST /api/contact` (idempotent; requires Privacy Policy acknowledgement and supports optional email-marketing opt-in)
+- `POST /api/contact` (idempotent)
+- payload accepts optional `marketingConsent?: boolean`
+- contact-form opt-in persists to `Lead.consentMarketing`; omitted or false consent does not opt the lead into marketing
 
 ### Service Area
 
@@ -186,6 +188,8 @@ All admin endpoints are under `/api/admin/*` and return cursor pagination payloa
 
 - `GET /api/admin/health`
 - `GET /api/admin/quotes`
+- `POST /api/admin/quotes/reserve-id`
+- `POST /api/admin/quotes`
 - `PATCH /api/admin/quotes/:id/status`
 - `POST /api/admin/quotes/:id/revise`
 - `GET /api/admin/quotes/:id/editor`

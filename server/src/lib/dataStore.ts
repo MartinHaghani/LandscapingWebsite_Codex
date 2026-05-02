@@ -8,10 +8,11 @@ import union from '@turf/union';
 import type { Feature, MultiPolygon, Polygon } from 'geojson';
 import { validateAndMeasureGeometry } from './geometry.js';
 import { hashJson } from './hash.js';
-import type { LegalAcceptanceAction } from './legalAcceptance.js';
 import {
   computePerSessionTotal,
+  computeDiscountedQuotePricing,
   computeSessionRangePricing,
+  normalizeAdminDiscountRate,
   normalizeBillingMode,
   normalizeServiceFrequency,
   PRICING_CONSTANTS,
@@ -69,6 +70,27 @@ interface QuoteDraftInput {
   attribution?: AttributionInput;
 }
 
+interface AdminQuoteCreateInput {
+  quotePublicId?: string;
+  addressText: string;
+  location: {
+    lat: number;
+    lng: number;
+  };
+  polygon: QuoteGeometry;
+  polygonSourceJson: unknown;
+  pricingVersion: string;
+  currency: string;
+  serviceFrequency: ServiceFrequency;
+  billingMode: BillingMode;
+  globalDiscountRate?: number;
+  seasonalDiscountRate?: number;
+  priceOverrideEnabled?: boolean;
+  overrideBasePerSessionTotal?: number;
+  overrideReason?: string;
+  actor: ActorContext;
+}
+
 type PolygonKind = 'service' | 'obstacle';
 
 interface PolygonSourcePolygon {
@@ -91,8 +113,8 @@ interface QuoteContactInput {
   name: string;
   email: string;
   phone: string;
-  marketingConsent?: boolean;
   message?: string;
+  marketingConsent?: boolean;
   attribution?: AttributionInput;
 }
 
@@ -105,19 +127,6 @@ interface ContactFormInput {
   message: string;
   marketingConsent?: boolean;
   attribution?: AttributionInput;
-}
-
-interface RecordLegalAcceptanceInput {
-  action: LegalAcceptanceAction;
-  documentSlugs: readonly string[];
-  documentVersion: string;
-  leadId?: string | null;
-  quotePublicId?: string | null;
-  authUserId?: string | null;
-  email?: string | null;
-  ipHash?: string | null;
-  userAgent?: string | null;
-  metadata?: Record<string, unknown>;
 }
 
 interface ServiceAreaRequestInput {
@@ -146,6 +155,7 @@ interface QuotePublicRecord {
   id: string;
   createdAt: string;
   address: string;
+  polygonSource: PolygonSourcePayload | null;
   metrics: {
     areaM2: number;
     perimeterM: number;
@@ -161,6 +171,9 @@ interface QuotePublicRecord {
   seasonalDiscountedTotal: number;
   seasonalSavingsTotal: number;
   seasonalDiscountRate: number;
+  globalDiscountRate: number;
+  priceOverrideEnabled: boolean;
+  overrideBasePerSessionTotal: number | null;
   billingMode: BillingMode;
   quoteTotal: number;
   status: string;
@@ -296,8 +309,18 @@ interface CreateQuoteVersionInput {
   serviceFrequency: ServiceFrequency;
   perSessionTotal: number;
   finalTotal: number;
+  globalDiscountRate?: number;
+  seasonalDiscountRate?: number;
+  priceOverrideEnabled?: boolean;
+  overrideBasePerSessionTotal?: number;
   overrideReason?: string;
   actor: ActorContext;
+}
+
+interface UpdateQuoteBillingModeInput {
+  quotePublicId: string;
+  authUserId: string;
+  billingMode: BillingMode;
 }
 
 interface SubmitQuoteVersionInput {
@@ -535,7 +558,10 @@ interface MemoryQuote {
   seasonalTotalMin: number;
   seasonalTotalMax: number;
   billingMode: BillingMode;
+  globalDiscountRate: number;
   seasonalDiscountRate: number;
+  priceOverrideEnabled: boolean;
+  overrideBasePerSessionTotal: number | null;
   distanceToNearestStationKm: number;
   baseTotal: number;
   finalTotal: number;
@@ -574,6 +600,10 @@ interface MemoryQuoteVersion {
   perSessionTotal: number;
   seasonalTotalMin: number;
   seasonalTotalMax: number;
+  globalDiscountRate: number;
+  seasonalDiscountRate: number;
+  priceOverrideEnabled: boolean;
+  overrideBasePerSessionTotal: number | null;
   baseTotal: number;
   finalTotal: number;
   overrideAmount: number | null;
@@ -585,28 +615,12 @@ interface MemoryQuoteVersion {
 interface MemoryLeadContact {
   id: string;
   leadId: string;
-  channel: 'quote_finalize' | 'contact_form';
+  channel: 'quote_finalize' | 'quote_claim' | 'contact_form';
   name: string | null;
   email: string | null;
   phone: string | null;
   addressText: string | null;
   message: string | null;
-  createdAt: string;
-}
-
-interface MemoryLegalAcceptance {
-  id: string;
-  action: LegalAcceptanceAction;
-  documentSlugs: string[];
-  documentVersion: string;
-  leadId: string | null;
-  quoteId: string | null;
-  authUserId: string | null;
-  email: string | null;
-  ipHash: string | null;
-  userAgent: string | null;
-  metadata: Record<string, unknown> | null;
-  acceptedAt: string;
   createdAt: string;
 }
 
@@ -712,6 +726,15 @@ interface MemoryQuotePaymentLink {
   paidAt: string | null;
   createdAt: string;
   updatedAt: string;
+}
+
+interface MemoryQuoteIdReservation {
+  quoteId: string;
+  reservedBy: string;
+  expiresAt: string;
+  consumedQuoteId: string | null;
+  consumedAt: string | null;
+  createdAt: string;
 }
 
 interface MemoryStripeWebhookEvent {
@@ -891,6 +914,21 @@ const deriveBillingAmounts = (
   };
 };
 
+const getStoredGlobalDiscountRate = (value?: number | Prisma.Decimal | null) =>
+  typeof value === 'undefined' || value === null
+    ? PRICING_CONSTANTS.defaultGlobalDiscountRate
+    : normalizeAdminDiscountRate(parseDecimal(value), PRICING_CONSTANTS.defaultGlobalDiscountRate);
+
+const getStoredSeasonalDiscountRate = (value?: number | Prisma.Decimal | null) =>
+  typeof value === 'undefined' || value === null
+    ? PRICING_CONSTANTS.defaultSeasonalDiscountRate
+    : normalizeAdminDiscountRate(parseDecimal(value), PRICING_CONSTANTS.defaultSeasonalDiscountRate);
+
+const getPublicPolygonSource = (polygonSourceJson: unknown) => {
+  const parsed = normalizePolygonSource(polygonSourceJson);
+  return parsed ? clonePolygonSource(parsed) : null;
+};
+
 const toMoneyCents = (value: number) => Math.max(0, Math.round(roundMoney(value) * 100));
 
 const getPaymentModeFromBillingMode = (billingMode: BillingMode): QuotePaymentMode =>
@@ -960,6 +998,8 @@ const computeCalculatedPerSessionTotal = (
   perimeterM: number,
   distanceToNearestStationKm: number
 ) => computePerSessionTotal(areaM2, perimeterM, distanceToNearestStationKm);
+
+const createPublicQuoteId = () => `Q-${nanoid(8).toUpperCase()}`;
 
 const closePolygonRing = (points: [number, number][]) => {
   if (points.length < 3) {
@@ -1492,12 +1532,12 @@ export class DataStore {
     paymentLinks: [] as MemoryQuotePaymentLink[],
     stripeWebhookEvents: [] as MemoryStripeWebhookEvent[],
     contacts: [] as MemoryLeadContact[],
-    legalAcceptances: [] as MemoryLegalAcceptance[],
     requests: [] as MemoryServiceAreaRequest[],
     attributionTouches: [] as MemoryAttributionTouch[],
     quoteNotes: [] as MemoryQuoteNote[],
     auditLogs: [] as MemoryAuditLog[],
-    idempotency: new Map<string, MemoryIdempotencyRecord>()
+    idempotency: new Map<string, MemoryIdempotencyRecord>(),
+    quoteIdReservations: new Map<string, MemoryQuoteIdReservation>()
   };
 
   constructor(private readonly baseStations: BaseStationConfig[]) {}
@@ -1539,6 +1579,127 @@ export class DataStore {
         `
       );
     }
+  }
+
+  async reserveQuoteId(input: { actor: ActorContext; ttlMinutes?: number }) {
+    const expiresAt = new Date(Date.now() + (input.ttlMinutes ?? 60) * 60_000);
+
+    for (let attempt = 0; attempt < 8; attempt += 1) {
+      const quoteId = createPublicQuoteId();
+
+      if (!this.prisma) {
+        const quoteExists = [...this.memory.quotes.values()].some((quote) => quote.publicQuoteId === quoteId);
+        const reservationExists = this.memory.quoteIdReservations.has(quoteId);
+        if (quoteExists || reservationExists) {
+          continue;
+        }
+
+        const now = nowIso();
+        this.memory.quoteIdReservations.set(quoteId, {
+          quoteId,
+          reservedBy: input.actor.userId,
+          expiresAt: expiresAt.toISOString(),
+          consumedQuoteId: null,
+          consumedAt: null,
+          createdAt: now
+        });
+
+        return {
+          quoteId,
+          expiresAt: expiresAt.toISOString()
+        };
+      }
+
+      try {
+        await this.prisma.$executeRaw(
+          Prisma.sql`
+            INSERT INTO "quote_id_reservations" (
+              "quote_id",
+              "reserved_by",
+              "expires_at"
+            )
+            VALUES (
+              ${quoteId},
+              ${input.actor.userId},
+              ${expiresAt}
+            )
+          `
+        );
+
+        return {
+          quoteId,
+          expiresAt: expiresAt.toISOString()
+        };
+      } catch (error) {
+        if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002') {
+          continue;
+        }
+      }
+    }
+
+    throw new Error('QUOTE_ID_RESERVATION_FAILED');
+  }
+
+  private async getQuoteIdForCreate(input: { requestedQuoteId?: string; actor: ActorContext }) {
+    if (!input.requestedQuoteId) {
+      return createPublicQuoteId();
+    }
+
+    if (!this.prisma) {
+      const reservation = this.memory.quoteIdReservations.get(input.requestedQuoteId);
+      const reservedAvailable =
+        reservation &&
+        reservation.consumedQuoteId === null &&
+        new Date(reservation.expiresAt).getTime() > Date.now();
+      const quoteExists = [...this.memory.quotes.values()].some(
+        (quote) => quote.publicQuoteId === input.requestedQuoteId
+      );
+
+      if (quoteExists || !reservedAvailable) {
+        throw new Error('QUOTE_ID_RESERVATION_INVALID');
+      }
+
+      return input.requestedQuoteId;
+    }
+
+    const rows = await this.prisma.$queryRaw<Array<{ quote_id: string }>>(
+      Prisma.sql`
+        SELECT "quote_id"
+        FROM "quote_id_reservations"
+        WHERE
+          "quote_id" = ${input.requestedQuoteId}
+          AND "consumed_quote_id" IS NULL
+          AND "expires_at" > now()
+        LIMIT 1
+      `
+    );
+
+    if (rows.length === 0) {
+      throw new Error('QUOTE_ID_RESERVATION_INVALID');
+    }
+
+    return input.requestedQuoteId;
+  }
+
+  private async consumeQuoteIdReservation(input: { publicQuoteId: string; internalQuoteId: string }) {
+    if (!this.prisma) {
+      const reservation = this.memory.quoteIdReservations.get(input.publicQuoteId);
+      if (reservation) {
+        reservation.consumedQuoteId = input.internalQuoteId;
+        reservation.consumedAt = nowIso();
+      }
+      return;
+    }
+
+    await this.prisma.$executeRaw(
+      Prisma.sql`
+        UPDATE "quote_id_reservations"
+        SET
+          "consumed_quote_id" = ${input.internalQuoteId},
+          "consumed_at" = now()
+        WHERE "quote_id" = ${input.publicQuoteId}
+      `
+    );
   }
 
   private memoryKey(scope: IdempotencyScope, key: string) {
@@ -1725,141 +1886,6 @@ export class DataStore {
     });
   }
 
-  async recordLegalAcceptance(input: RecordLegalAcceptanceInput) {
-    const now = nowIso();
-    let quoteId: string | null = null;
-    let leadId = input.leadId ?? null;
-
-    if (input.quotePublicId) {
-      if (!this.prisma) {
-        const quote = [...this.memory.quotes.values()].find((item) => item.publicQuoteId === input.quotePublicId);
-        if (!quote) {
-          throw new Error('QUOTE_NOT_FOUND');
-        }
-        quoteId = quote.id;
-        leadId = leadId ?? quote.leadId;
-      } else {
-        const quote = await this.prisma.quote.findUnique({
-          where: {
-            publicQuoteId: input.quotePublicId
-          },
-          select: {
-            id: true,
-            leadId: true
-          }
-        });
-        if (!quote) {
-          throw new Error('QUOTE_NOT_FOUND');
-        }
-        quoteId = quote.id;
-        leadId = leadId ?? quote.leadId;
-      }
-    }
-
-    if (!leadId && input.email) {
-      if (!this.prisma) {
-        const lead = [...this.memory.leads.values()].find(
-          (item) => item.primaryEmail?.toLowerCase() === input.email?.toLowerCase()
-        );
-        leadId = lead?.id ?? null;
-      } else {
-        const lead = await this.prisma.lead.findFirst({
-          where: {
-            primaryEmail: input.email
-          },
-          select: {
-            id: true
-          }
-        });
-        leadId = lead?.id ?? null;
-      }
-    }
-
-    const id = nanoid(14);
-    const documentSlugs = [...input.documentSlugs];
-    const metadata = input.metadata ?? null;
-
-    if (!this.prisma) {
-      this.memory.legalAcceptances.push({
-        id,
-        action: input.action,
-        documentSlugs,
-        documentVersion: input.documentVersion,
-        leadId,
-        quoteId,
-        authUserId: input.authUserId ?? null,
-        email: input.email?.trim() || null,
-        ipHash: input.ipHash ?? null,
-        userAgent: input.userAgent?.slice(0, 300) ?? null,
-        metadata,
-        acceptedAt: now,
-        createdAt: now
-      });
-    } else {
-      await this.prisma.$executeRaw(
-        Prisma.sql`
-          INSERT INTO "legal_acceptances" (
-            "id",
-            "action",
-            "document_slugs",
-            "document_version",
-            "lead_id",
-            "quote_id",
-            "auth_user_id",
-            "email",
-            "ip_hash",
-            "user_agent",
-            "metadata",
-            "accepted_at",
-            "created_at"
-          )
-          VALUES (
-            ${id},
-            ${input.action}::"LegalAcceptanceAction",
-            ARRAY[${Prisma.join(documentSlugs)}]::text[],
-            ${input.documentVersion},
-            ${leadId},
-            ${quoteId},
-            ${input.authUserId ?? null},
-            ${input.email?.trim() || null},
-            ${input.ipHash ?? null},
-            ${input.userAgent?.slice(0, 300) ?? null},
-            ${JSON.stringify(metadata)}::jsonb,
-            now(),
-            now()
-          )
-        `
-      );
-    }
-
-    await this.writeAuditLog({
-      actor: {
-        userId: input.authUserId ?? 'system',
-        role: 'SYSTEM',
-        ipHash: input.ipHash ?? undefined,
-        userAgent: input.userAgent ?? undefined
-      },
-      action: 'legal.accepted',
-      entityType: 'legal_acceptance',
-      entityId: id,
-      changedFields: ['action', 'document_slugs', 'document_version'],
-      afterRedacted: {
-        action: input.action,
-        documentSlugs,
-        documentVersion: input.documentVersion,
-        leadId,
-        quotePublicId: input.quotePublicId ?? null,
-        email: maskEmail(input.email ?? null)
-      }
-    });
-
-    return {
-      id,
-      action: input.action,
-      acceptedAt: now
-    };
-  }
-
   private async attachLeadAttribution(
     leadId: string,
     attribution?: AttributionInput,
@@ -2043,7 +2069,7 @@ export class DataStore {
         if (!this.prisma) {
           const leadId = nanoid(14);
           const quoteId = nanoid(14);
-          const publicQuoteId = `Q-${nanoid(8).toUpperCase()}`;
+          const publicQuoteId = createPublicQuoteId();
           const now = nowIso();
 
           this.memory.leads.set(leadId, {
@@ -2082,7 +2108,10 @@ export class DataStore {
             seasonalTotalMin: sessionPricing.seasonalTotalMin,
             seasonalTotalMax: sessionPricing.seasonalTotalMax,
             billingMode,
+            globalDiscountRate: PRICING_CONSTANTS.defaultGlobalDiscountRate,
             seasonalDiscountRate,
+            priceOverrideEnabled: false,
+            overrideBasePerSessionTotal: null,
             distanceToNearestStationKm,
             baseTotal: PRICING_CONSTANTS.baseFee,
             finalTotal: sessionPricing.perSessionTotal,
@@ -2118,6 +2147,10 @@ export class DataStore {
             perSessionTotal: sessionPricing.perSessionTotal,
             seasonalTotalMin: sessionPricing.seasonalTotalMin,
             seasonalTotalMax: sessionPricing.seasonalTotalMax,
+            globalDiscountRate: PRICING_CONSTANTS.defaultGlobalDiscountRate,
+            seasonalDiscountRate,
+            priceOverrideEnabled: false,
+            overrideBasePerSessionTotal: null,
             baseTotal: PRICING_CONSTANTS.baseFee,
             finalTotal: sessionPricing.perSessionTotal,
             overrideAmount: null,
@@ -2159,7 +2192,7 @@ export class DataStore {
 
         const leadId = nanoid(14);
         const quoteId = nanoid(14);
-        const publicQuoteId = `Q-${nanoid(8).toUpperCase()}`;
+        const publicQuoteId = createPublicQuoteId();
         const polygonGeoJson = JSON.stringify(normalized);
 
         await this.prisma.$transaction(async (tx) => {
@@ -2235,7 +2268,10 @@ export class DataStore {
                 "seasonal_total_min",
                 "seasonal_total_max",
                 "billing_mode",
+                "global_discount_rate",
                 "seasonal_discount_rate",
+                "price_override_enabled",
+                "override_base_per_session_total",
                 "distance_to_nearest_station_km",
                 "base_total",
                 "final_total",
@@ -2268,7 +2304,10 @@ export class DataStore {
                 ${dbSessionPricing.seasonalTotalMin},
                 ${dbSessionPricing.seasonalTotalMax},
                 ${billingMode}::"BillingMode",
+                ${PRICING_CONSTANTS.defaultGlobalDiscountRate},
                 ${seasonalDiscountRate},
+                false,
+                NULL,
                 ${distanceToNearestStationKm},
                 ${PRICING_CONSTANTS.baseFee},
                 ${dbSessionPricing.perSessionTotal},
@@ -2301,6 +2340,10 @@ export class DataStore {
                 "per_session_total",
                 "seasonal_total_min",
                 "seasonal_total_max",
+                "global_discount_rate",
+                "seasonal_discount_rate",
+                "price_override_enabled",
+                "override_base_per_session_total",
                 "base_total",
                 "final_total",
                 "changed_by",
@@ -2324,6 +2367,10 @@ export class DataStore {
                 ${dbSessionPricing.perSessionTotal},
                 ${dbSessionPricing.seasonalTotalMin},
                 ${dbSessionPricing.seasonalTotalMax},
+                ${PRICING_CONSTANTS.defaultGlobalDiscountRate},
+                ${seasonalDiscountRate},
+                false,
+                NULL,
                 ${PRICING_CONSTANTS.baseFee},
                 ${dbSessionPricing.perSessionTotal},
                 'system',
@@ -2366,6 +2413,400 @@ export class DataStore {
     );
   }
 
+  async createAdminQuote(input: AdminQuoteCreateInput) {
+    const normalizedSource = normalizePolygonSource(input.polygonSourceJson);
+    if (!normalizedSource) {
+      throw new Error('QUOTE_EDITOR_SOURCE_INVALID');
+    }
+
+    const submittedGeometry = validateAndMeasureGeometry(input.polygon);
+    if (!isPolygonSourceConsistentWithGeometry(normalizedSource, submittedGeometry.normalizedGeometry)) {
+      throw new Error('QUOTE_EDITOR_SOURCE_INVALID');
+    }
+
+    const effectiveGeometry = polygonSourceToEffectiveGeometry(normalizedSource);
+    const measured = validateAndMeasureGeometry(effectiveGeometry);
+    const geometryCentroid = getCentroidFromGeometry(measured.normalizedGeometry);
+    if (geometryCentroid && centroidDistanceM(geometryCentroid, input.location) > 250_000) {
+      throw new Error('QUOTE_EDITOR_SOURCE_INVALID');
+    }
+
+    const publicQuoteId = await this.getQuoteIdForCreate({
+      requestedQuoteId: input.quotePublicId,
+      actor: input.actor
+    });
+    const billingMode = normalizeBillingMode(input.billingMode);
+    const distanceToNearestStationKm = getDistanceToNearestStationKm(
+      [input.location.lng, input.location.lat],
+      this.baseStations
+    );
+    const calculatedPerSessionTotal = computeCalculatedPerSessionTotal(
+      measured.areaM2,
+      measured.perimeterM,
+      distanceToNearestStationKm
+    );
+    const pricing = computeDiscountedQuotePricing({
+      calculatedPerSessionTotal,
+      serviceFrequency: input.serviceFrequency,
+      globalDiscountRate: input.globalDiscountRate,
+      seasonalDiscountRate: input.seasonalDiscountRate,
+      priceOverrideEnabled: input.priceOverrideEnabled === true,
+      overrideBasePerSessionTotal: input.overrideBasePerSessionTotal
+    });
+    const normalized = toMultiPolygonGeometry(measured.normalizedGeometry);
+    const centroid = getCentroidFromGeometry(normalized);
+    const recommendedPlan = getRecommendedPlanFromArea(measured.areaM2);
+    const overrideAmount = Math.max(0, roundMoney(calculatedPerSessionTotal - pricing.perSessionTotal));
+    const overrideReason = input.overrideReason?.trim() || null;
+
+    if (!this.prisma) {
+      const leadId = nanoid(14);
+      const quoteId = nanoid(14);
+      const now = nowIso();
+
+      this.memory.leads.set(leadId, {
+        id: leadId,
+        primaryName: null,
+        primaryEmail: null,
+        primaryPhone: null,
+        consentMarketing: false,
+        externalIds: null,
+        firstSeenAt: now,
+        lastSeenAt: now,
+        createdAt: now,
+        updatedAt: now
+      });
+
+      this.memory.quotes.set(quoteId, {
+        id: quoteId,
+        publicQuoteId,
+        leadId,
+        authUserId: null,
+        addressText: input.addressText,
+        location: input.location,
+        locationSource: 'address_geocode',
+        polygon: normalized,
+        polygonSourceJson: clonePolygonSource(normalizedSource),
+        polygonCentroid: centroid,
+        areaM2: measured.areaM2,
+        perimeterM: measured.perimeterM,
+        recommendedPlan,
+        pricingVersion: input.pricingVersion,
+        currency: input.currency,
+        serviceFrequency: pricing.serviceFrequency,
+        sessionsMin: pricing.sessionsMin,
+        sessionsMax: pricing.sessionsMax,
+        perSessionTotal: pricing.perSessionTotal,
+        seasonalTotalMin: pricing.seasonalTotalMin,
+        seasonalTotalMax: pricing.seasonalTotalMax,
+        billingMode,
+        globalDiscountRate: pricing.globalDiscountRate,
+        seasonalDiscountRate: pricing.seasonalDiscountRate,
+        priceOverrideEnabled: pricing.priceOverrideEnabled,
+        overrideBasePerSessionTotal: pricing.overrideBasePerSessionTotal,
+        distanceToNearestStationKm,
+        baseTotal: calculatedPerSessionTotal,
+        finalTotal: pricing.perSessionTotal,
+        overrideAmount,
+        overrideReason,
+        status: 'verified',
+        customerStatus: 'awaiting_payment',
+        contactPending: false,
+        assignedTo: input.actor.userId,
+        teamId: null,
+        submittedAt: now,
+        verifiedAt: now,
+        verifiedBy: input.actor.userId,
+        createdAt: now,
+        updatedAt: now
+      });
+
+      this.memory.quoteVersions.push({
+        id: nanoid(14),
+        quoteId,
+        versionNumber: 1,
+        changeType: 'initial',
+        actorType: 'admin',
+        polygon: normalized,
+        polygonSourceJson: clonePolygonSource(normalizedSource),
+        polygonCentroid: centroid,
+        areaM2: measured.areaM2,
+        perimeterM: measured.perimeterM,
+        recommendedPlan,
+        serviceFrequency: pricing.serviceFrequency,
+        sessionsMin: pricing.sessionsMin,
+        sessionsMax: pricing.sessionsMax,
+        perSessionTotal: pricing.perSessionTotal,
+        seasonalTotalMin: pricing.seasonalTotalMin,
+        seasonalTotalMax: pricing.seasonalTotalMax,
+        globalDiscountRate: pricing.globalDiscountRate,
+        seasonalDiscountRate: pricing.seasonalDiscountRate,
+        priceOverrideEnabled: pricing.priceOverrideEnabled,
+        overrideBasePerSessionTotal: pricing.overrideBasePerSessionTotal,
+        baseTotal: calculatedPerSessionTotal,
+        finalTotal: pricing.perSessionTotal,
+        overrideAmount,
+        overrideReason,
+        changedBy: input.actor.userId,
+        changedAt: now
+      });
+
+      await this.consumeQuoteIdReservation({ publicQuoteId, internalQuoteId: quoteId });
+
+      await this.writeAuditLog({
+        actor: input.actor,
+        action: 'quote.admin_created',
+        entityType: 'quote',
+        entityId: quoteId,
+        changedFields: ['status', 'customer_status', 'pricing', 'polygon'],
+        afterRedacted: {
+          quoteId: publicQuoteId,
+          status: 'verified',
+          customerStatus: 'awaiting_payment',
+          perSessionTotal: pricing.perSessionTotal,
+          globalDiscountRate: pricing.globalDiscountRate,
+          seasonalDiscountRate: pricing.seasonalDiscountRate
+        }
+      });
+
+      return {
+        quoteId: publicQuoteId,
+        status: 'verified',
+        customerStatus: 'awaiting_payment',
+        contactPending: false,
+        version: 1,
+        perSessionTotal: pricing.perSessionTotal,
+        seasonalTotalMax: pricing.seasonalTotalMax,
+        seasonalDiscountedTotal: pricing.seasonalDiscountedTotal,
+        globalDiscountRate: pricing.globalDiscountRate,
+        seasonalDiscountRate: pricing.seasonalDiscountRate
+      };
+    }
+
+    const leadId = nanoid(14);
+    const quoteId = nanoid(14);
+    const polygonGeoJson = JSON.stringify(normalized);
+    const polygonSourceJson = JSON.stringify(clonePolygonSource(normalizedSource));
+
+    await this.prisma.$transaction(async (tx) => {
+      await tx.lead.create({
+        data: {
+          id: leadId,
+          firstSeenAt: new Date(),
+          lastSeenAt: new Date()
+        }
+      });
+
+      const dbMetrics = await tx.$queryRaw<
+        Array<{ is_valid: boolean; area_m2: number; perimeter_m: number }>
+      >(
+        Prisma.sql`
+          WITH geom_input AS (
+            SELECT ST_SetSRID(ST_Multi(ST_GeomFromGeoJSON(${polygonGeoJson})), 4326)::geometry(MultiPolygon,4326) AS geom
+          )
+          SELECT
+            ST_IsValid(geom) AS is_valid,
+            ST_Area(geom::geography)::float8 AS area_m2,
+            ST_Perimeter(geom::geography)::float8 AS perimeter_m
+          FROM geom_input;
+        `
+      );
+
+      const measuredDb = dbMetrics[0];
+      if (!measuredDb || !measuredDb.is_valid) {
+        throw new Error('Polygon geometry is invalid.');
+      }
+
+      const areaDrift = Math.abs(measuredDb.area_m2 - measured.areaM2) / measuredDb.area_m2;
+      const perimeterDrift = Math.abs(measuredDb.perimeter_m - measured.perimeterM) / measuredDb.perimeter_m;
+      if (areaDrift > METRIC_DRIFT_TOLERANCE || perimeterDrift > METRIC_DRIFT_TOLERANCE) {
+        throw new Error('Submitted geometry metrics differ from server measurement.');
+      }
+
+      await tx.$executeRaw(
+        Prisma.sql`
+          INSERT INTO "quotes" (
+            "id",
+            "public_quote_id",
+            "lead_id",
+            "address_text",
+            "location_geog",
+            "location_source",
+            "polygon_geom",
+            "polygon_source_json",
+            "polygon_centroid_geog",
+            "area_m2",
+            "perimeter_m",
+            "recommended_plan",
+            "pricing_version",
+            "currency",
+            "service_frequency",
+            "sessions_min",
+            "sessions_max",
+            "per_session_total",
+            "seasonal_total_min",
+            "seasonal_total_max",
+            "billing_mode",
+            "global_discount_rate",
+            "seasonal_discount_rate",
+            "price_override_enabled",
+            "override_base_per_session_total",
+            "distance_to_nearest_station_km",
+            "base_total",
+            "final_total",
+            "override_amount",
+            "override_reason",
+            "status",
+            "customer_status",
+            "contact_pending",
+            "assigned_to",
+            "submitted_at",
+            "verified_at",
+            "verified_by",
+            "created_at",
+            "updated_at"
+          )
+          VALUES (
+            ${quoteId},
+            ${publicQuoteId},
+            ${leadId},
+            ${input.addressText},
+            ST_SetSRID(ST_MakePoint(${input.location.lng}, ${input.location.lat}), 4326)::geography,
+            'address_geocode'::"LocationSource",
+            ST_SetSRID(ST_Multi(ST_GeomFromGeoJSON(${polygonGeoJson})), 4326)::geometry(MultiPolygon,4326),
+            ${polygonSourceJson}::jsonb,
+            ST_Centroid(ST_SetSRID(ST_Multi(ST_GeomFromGeoJSON(${polygonGeoJson})), 4326))::geography,
+            ${measuredDb.area_m2},
+            ${measuredDb.perimeter_m},
+            ${recommendedPlan},
+            ${input.pricingVersion},
+            ${input.currency},
+            ${pricing.serviceFrequency}::"ServiceFrequency",
+            ${pricing.sessionsMin},
+            ${pricing.sessionsMax},
+            ${pricing.perSessionTotal},
+            ${pricing.seasonalTotalMin},
+            ${pricing.seasonalTotalMax},
+            ${billingMode}::"BillingMode",
+            ${pricing.globalDiscountRate},
+            ${pricing.seasonalDiscountRate},
+            ${pricing.priceOverrideEnabled},
+            ${pricing.overrideBasePerSessionTotal},
+            ${distanceToNearestStationKm},
+            ${calculatedPerSessionTotal},
+            ${pricing.perSessionTotal},
+            ${overrideAmount},
+            ${overrideReason},
+            'verified'::"QuoteStatus",
+            'awaiting_payment'::"CustomerStatus",
+            false,
+            ${input.actor.userId},
+            now(),
+            now(),
+            ${input.actor.userId},
+            now(),
+            now()
+          )
+        `
+      );
+
+      await tx.$executeRaw(
+        Prisma.sql`
+          INSERT INTO "quote_versions" (
+            "id",
+            "quote_id",
+            "version_number",
+            "change_type",
+            "actor_type",
+            "polygon_geom",
+            "polygon_source_json",
+            "polygon_centroid_geog",
+            "area_m2",
+            "perimeter_m",
+            "recommended_plan",
+            "service_frequency",
+            "sessions_min",
+            "sessions_max",
+            "per_session_total",
+            "seasonal_total_min",
+            "seasonal_total_max",
+            "global_discount_rate",
+            "seasonal_discount_rate",
+            "price_override_enabled",
+            "override_base_per_session_total",
+            "base_total",
+            "final_total",
+            "override_amount",
+            "override_reason",
+            "changed_by",
+            "changed_at"
+          )
+          SELECT
+            ${nanoid(14)},
+            q."id",
+            1,
+            'initial'::"QuoteVersionChangeType",
+            'admin'::"QuoteVersionActorType",
+            q."polygon_geom",
+            q."polygon_source_json",
+            q."polygon_centroid_geog",
+            q."area_m2",
+            q."perimeter_m",
+            q."recommended_plan",
+            q."service_frequency",
+            q."sessions_min",
+            q."sessions_max",
+            q."per_session_total",
+            q."seasonal_total_min",
+            q."seasonal_total_max",
+            q."global_discount_rate",
+            q."seasonal_discount_rate",
+            q."price_override_enabled",
+            q."override_base_per_session_total",
+            q."base_total",
+            q."final_total",
+            q."override_amount",
+            q."override_reason",
+            ${input.actor.userId},
+            now()
+          FROM "quotes" q
+          WHERE q."id" = ${quoteId}
+        `
+      );
+    });
+
+    await this.consumeQuoteIdReservation({ publicQuoteId, internalQuoteId: quoteId });
+
+    await this.writeAuditLog({
+      actor: input.actor,
+      action: 'quote.admin_created',
+      entityType: 'quote',
+      entityId: quoteId,
+      changedFields: ['status', 'customer_status', 'pricing', 'polygon'],
+      afterRedacted: {
+        quoteId: publicQuoteId,
+        status: 'verified',
+        customerStatus: 'awaiting_payment',
+        perSessionTotal: pricing.perSessionTotal,
+        globalDiscountRate: pricing.globalDiscountRate,
+        seasonalDiscountRate: pricing.seasonalDiscountRate
+      }
+    });
+
+    return {
+      quoteId: publicQuoteId,
+      status: 'verified',
+      customerStatus: 'awaiting_payment',
+      contactPending: false,
+      version: 1,
+      perSessionTotal: pricing.perSessionTotal,
+      seasonalTotalMax: pricing.seasonalTotalMax,
+      seasonalDiscountedTotal: pricing.seasonalDiscountedTotal,
+      globalDiscountRate: pricing.globalDiscountRate,
+      seasonalDiscountRate: pricing.seasonalDiscountRate
+    };
+  }
+
   async finalizeQuoteContact(input: QuoteContactInput) {
     return this.withDbIdempotency(
       'quote_contact',
@@ -2376,8 +2817,8 @@ export class DataStore {
         name: input.name,
         email: input.email,
         phone: input.phone,
-        marketingConsent: input.marketingConsent ?? false,
         message: input.message,
+        marketingConsent: input.marketingConsent === true,
         attribution: cleanAttribution(input.attribution)
       },
       async () => {
@@ -2404,7 +2845,7 @@ export class DataStore {
           lead.primaryName = input.name;
           lead.primaryEmail = input.email;
           lead.primaryPhone = input.phone;
-          lead.consentMarketing = input.marketingConsent ? true : lead.consentMarketing;
+          lead.consentMarketing = lead.consentMarketing || input.marketingConsent === true;
           lead.lastSeenAt = nowIso();
           lead.updatedAt = nowIso();
 
@@ -2503,7 +2944,7 @@ export class DataStore {
               primaryName: input.name,
               primaryEmail: input.email,
               primaryPhone: input.phone,
-              consentMarketing: input.marketingConsent ? true : undefined,
+              consentMarketing: input.marketingConsent === true ? true : undefined,
               lastSeenAt: new Date()
             }
           });
@@ -2619,7 +3060,7 @@ export class DataStore {
         phone: input.phone,
         addressText: input.addressText,
         message: input.message,
-        marketingConsent: input.marketingConsent ?? false,
+        marketingConsent: input.marketingConsent === true,
         attribution: cleanAttribution(input.attribution)
       },
       async () => {
@@ -2637,7 +3078,7 @@ export class DataStore {
                 primaryName: input.name,
                 primaryEmail: input.email,
                 primaryPhone: input.phone?.trim() || null,
-                consentMarketing: input.marketingConsent ?? false,
+                consentMarketing: input.marketingConsent === true,
                 externalIds: null,
                 firstSeenAt: now,
                 lastSeenAt: now,
@@ -2651,7 +3092,7 @@ export class DataStore {
           lead.primaryName = input.name;
           lead.primaryEmail = input.email;
           lead.primaryPhone = input.phone?.trim() || lead.primaryPhone;
-          lead.consentMarketing = input.marketingConsent ? true : lead.consentMarketing;
+          lead.consentMarketing = lead.consentMarketing || input.marketingConsent === true;
           lead.lastSeenAt = now;
           lead.updatedAt = now;
 
@@ -2714,7 +3155,7 @@ export class DataStore {
             data: {
               primaryName: input.name,
               primaryPhone: input.phone?.trim() || existingLead.primaryPhone,
-              consentMarketing: input.marketingConsent ? true : existingLead.consentMarketing,
+              consentMarketing: existingLead.consentMarketing || input.marketingConsent === true,
               lastSeenAt: now
             }
           });
@@ -2725,7 +3166,7 @@ export class DataStore {
               primaryName: input.name,
               primaryEmail: input.email,
               primaryPhone: input.phone?.trim() || null,
-              consentMarketing: input.marketingConsent ?? false,
+              consentMarketing: input.marketingConsent === true,
               firstSeenAt: now,
               lastSeenAt: now
             }
@@ -2893,6 +3334,9 @@ export class DataStore {
   async claimQuoteOwnership(input: {
     quotePublicId: string;
     authUserId: string;
+    name?: string | null;
+    email?: string | null;
+    phone?: string | null;
     marketingConsent?: boolean;
   }) {
     if (!this.prisma) {
@@ -2908,10 +3352,31 @@ export class DataStore {
       const claimed = quote.authUserId === null;
       quote.authUserId = input.authUserId;
       quote.updatedAt = nowIso();
-      const lead = this.memory.leads.get(quote.leadId);
-      if (lead && input.marketingConsent) {
-        lead.consentMarketing = true;
-        lead.updatedAt = nowIso();
+
+      if (claimed) {
+        const lead = this.memory.leads.get(quote.leadId);
+        if (lead) {
+          lead.primaryName = input.name ?? lead.primaryName;
+          lead.primaryEmail = input.email ?? lead.primaryEmail;
+          lead.primaryPhone = input.phone ?? lead.primaryPhone;
+          lead.consentMarketing = lead.consentMarketing || input.marketingConsent === true;
+          lead.lastSeenAt = nowIso();
+          lead.updatedAt = nowIso();
+        }
+
+        if (input.email && input.phone) {
+          this.memory.contacts.push({
+            id: nanoid(14),
+            leadId: quote.leadId,
+            channel: 'quote_claim',
+            name: input.name ?? null,
+            email: input.email,
+            phone: input.phone,
+            addressText: quote.addressText,
+            message: null,
+            createdAt: nowIso()
+          });
+        }
       }
 
       return {
@@ -2950,24 +3415,32 @@ export class DataStore {
           }
         });
 
-        if (input.marketingConsent) {
-          await tx.lead.update({
-            where: {
-              id: quote.leadId
-            },
+        await tx.lead.update({
+          where: {
+            id: quote.leadId
+          },
+          data: {
+            primaryName: input.name ?? undefined,
+            primaryEmail: input.email ?? undefined,
+            primaryPhone: input.phone ?? undefined,
+            consentMarketing: input.marketingConsent === true ? true : undefined,
+            lastSeenAt: new Date()
+          }
+        });
+
+        if (input.email && input.phone) {
+          await tx.leadContact.create({
             data: {
-              consentMarketing: true
+              id: nanoid(14),
+              leadId: quote.leadId,
+              channel: 'quote_claim',
+              name: input.name ?? null,
+              email: input.email,
+              phone: input.phone,
+              addressText: quote.addressText,
+              message: null
             }
           });
-        }
-      });
-    } else if (input.marketingConsent) {
-      await this.prisma.lead.update({
-        where: {
-          id: quote.leadId
-        },
-        data: {
-          consentMarketing: true
         }
       });
     }
@@ -3026,6 +3499,7 @@ export class DataStore {
         id: quote.publicQuoteId,
         createdAt: quote.createdAt,
         address: quote.addressText,
+        polygonSource: getPublicPolygonSource(quote.polygonSourceJson),
         metrics: {
           areaM2: quote.areaM2,
           perimeterM: quote.perimeterM
@@ -3041,6 +3515,9 @@ export class DataStore {
         seasonalDiscountedTotal: billing.seasonalDiscountedTotal,
         seasonalSavingsTotal: billing.seasonalSavingsTotal,
         seasonalDiscountRate: billing.seasonalDiscountRate,
+        globalDiscountRate: getStoredGlobalDiscountRate(quote.globalDiscountRate),
+        priceOverrideEnabled: quote.priceOverrideEnabled ?? false,
+        overrideBasePerSessionTotal: quote.overrideBasePerSessionTotal ?? null,
         billingMode: normalizeBillingMode(quote.billingMode),
         quoteTotal: quote.finalTotal,
         status: quote.status,
@@ -3097,6 +3574,7 @@ export class DataStore {
       id: quote.publicQuoteId,
       createdAt: quote.createdAt.toISOString(),
       address: quote.addressText,
+      polygonSource: getPublicPolygonSource(quote.polygonSourceJson),
       metrics: {
         areaM2: parseDecimal(quote.areaM2),
         perimeterM: parseDecimal(quote.perimeterM)
@@ -3112,6 +3590,9 @@ export class DataStore {
       seasonalDiscountedTotal: billing.seasonalDiscountedTotal,
       seasonalSavingsTotal: billing.seasonalSavingsTotal,
       seasonalDiscountRate: billing.seasonalDiscountRate,
+      globalDiscountRate: getStoredGlobalDiscountRate(quote.globalDiscountRate),
+      priceOverrideEnabled: quote.priceOverrideEnabled ?? false,
+      overrideBasePerSessionTotal: quote.overrideBasePerSessionTotal ? parseDecimal(quote.overrideBasePerSessionTotal) : null,
       billingMode: normalizeBillingMode(quote.billingMode),
       quoteTotal: parseDecimal(quote.finalTotal),
       status: quote.status,
@@ -3136,6 +3617,19 @@ export class DataStore {
           })
         : null
     };
+  }
+
+  async getPublicQuotePreviewByPublicId(quotePublicId: string): Promise<QuotePublicRecord | null> {
+    const quote = await this.getQuoteByPublicId(quotePublicId, { isAdmin: true });
+    if (!quote) {
+      return null;
+    }
+
+    if (quote.status !== 'verified' || quote.customerStatus !== 'awaiting_payment') {
+      throw new Error('QUOTE_PREVIEW_NOT_AVAILABLE');
+    }
+
+    return quote;
   }
 
   async listAccountQuotes(input: ListAccountQuotesInput): Promise<PaginatedResponse<Record<string, unknown>>> {
@@ -4653,6 +5147,10 @@ export class DataStore {
             perSessionTotal: version.perSessionTotal,
             seasonalTotalMin: version.seasonalTotalMin,
             seasonalTotalMax: version.seasonalTotalMax,
+            globalDiscountRate: version.globalDiscountRate ?? PRICING_CONSTANTS.defaultGlobalDiscountRate,
+            seasonalDiscountRate: version.seasonalDiscountRate ?? PRICING_CONSTANTS.defaultSeasonalDiscountRate,
+            priceOverrideEnabled: version.priceOverrideEnabled ?? false,
+            overrideBasePerSessionTotal: version.overrideBasePerSessionTotal ?? null,
             finalTotal: version.finalTotal,
             overrideReason: version.overrideReason,
             areaM2: version.areaM2,
@@ -4697,6 +5195,10 @@ export class DataStore {
           serviceFrequency: quote.serviceFrequency,
           perSessionTotal: quote.perSessionTotal,
           finalTotal: quote.finalTotal,
+          globalDiscountRate: quote.globalDiscountRate ?? PRICING_CONSTANTS.defaultGlobalDiscountRate,
+          seasonalDiscountRate: quote.seasonalDiscountRate ?? PRICING_CONSTANTS.defaultSeasonalDiscountRate,
+          priceOverrideEnabled: quote.priceOverrideEnabled ?? false,
+          overrideBasePerSessionTotal: quote.overrideBasePerSessionTotal ?? null,
           overrideReason: quote.overrideReason
         },
         calculated: {
@@ -4814,9 +5316,13 @@ export class DataStore {
         sessionsMin: version.sessionsMin,
         sessionsMax: version.sessionsMax,
         perSessionTotal: parseDecimal(version.perSessionTotal),
-        seasonalTotalMin: parseDecimal(version.seasonalTotalMin),
-        seasonalTotalMax: parseDecimal(version.seasonalTotalMax),
-        finalTotal: parseDecimal(version.finalTotal),
+          seasonalTotalMin: parseDecimal(version.seasonalTotalMin),
+          seasonalTotalMax: parseDecimal(version.seasonalTotalMax),
+          globalDiscountRate: getStoredGlobalDiscountRate(version.globalDiscountRate),
+          seasonalDiscountRate: getStoredSeasonalDiscountRate(version.seasonalDiscountRate),
+          priceOverrideEnabled: version.priceOverrideEnabled ?? false,
+          overrideBasePerSessionTotal: version.overrideBasePerSessionTotal ? parseDecimal(version.overrideBasePerSessionTotal) : null,
+          finalTotal: parseDecimal(version.finalTotal),
         overrideReason: version.overrideReason,
         areaM2: parseDecimal(version.areaM2),
         perimeterM: parseDecimal(version.perimeterM),
@@ -4858,6 +5364,10 @@ export class DataStore {
         serviceFrequency: normalizeServiceFrequency(quote.serviceFrequency),
         perSessionTotal: parseDecimal(quote.perSessionTotal),
         finalTotal: parseDecimal(quote.finalTotal),
+        globalDiscountRate: getStoredGlobalDiscountRate(quote.globalDiscountRate),
+        seasonalDiscountRate: getStoredSeasonalDiscountRate(quote.seasonalDiscountRate),
+        priceOverrideEnabled: quote.priceOverrideEnabled ?? false,
+        overrideBasePerSessionTotal: quote.overrideBasePerSessionTotal ? parseDecimal(quote.overrideBasePerSessionTotal) : null,
         overrideReason: quote.overrideReason
       },
       calculated: {
@@ -4929,7 +5439,24 @@ export class DataStore {
     const normalizedGeometry = toMultiPolygonGeometry(measured.normalizedGeometry);
     const centroid = getCentroidFromGeometry(normalizedGeometry);
     const recommendedPlan = getRecommendedPlanFromArea(measured.areaM2);
-    const sessionPricing = computeSessionRangePricing(input.perSessionTotal, input.serviceFrequency);
+    const globalDiscountRate = normalizeAdminDiscountRate(
+      input.globalDiscountRate,
+      PRICING_CONSTANTS.defaultGlobalDiscountRate
+    );
+    const seasonalDiscountRate = normalizeAdminDiscountRate(
+      input.seasonalDiscountRate,
+      PRICING_CONSTANTS.defaultSeasonalDiscountRate
+    );
+    const priceOverrideEnabled = input.priceOverrideEnabled === true;
+    const overrideBasePerSessionTotal =
+      priceOverrideEnabled && typeof input.overrideBasePerSessionTotal === 'number'
+        ? roundMoney(input.overrideBasePerSessionTotal)
+        : null;
+    const sessionPricing = computeSessionRangePricing(
+      input.perSessionTotal,
+      input.serviceFrequency,
+      seasonalDiscountRate
+    );
     const finalTotal = roundMoney(input.finalTotal);
 
     if (!this.prisma) {
@@ -4969,6 +5496,10 @@ export class DataStore {
       quote.perSessionTotal = sessionPricing.perSessionTotal;
       quote.seasonalTotalMin = sessionPricing.seasonalTotalMin;
       quote.seasonalTotalMax = sessionPricing.seasonalTotalMax;
+      quote.globalDiscountRate = globalDiscountRate;
+      quote.seasonalDiscountRate = seasonalDiscountRate;
+      quote.priceOverrideEnabled = priceOverrideEnabled;
+      quote.overrideBasePerSessionTotal = overrideBasePerSessionTotal;
       quote.finalTotal = finalTotal;
       quote.overrideAmount = overrideAmount;
       quote.overrideReason = input.overrideReason ?? null;
@@ -4998,6 +5529,10 @@ export class DataStore {
         perSessionTotal: sessionPricing.perSessionTotal,
         seasonalTotalMin: sessionPricing.seasonalTotalMin,
         seasonalTotalMax: sessionPricing.seasonalTotalMax,
+        globalDiscountRate,
+        seasonalDiscountRate,
+        priceOverrideEnabled,
+        overrideBasePerSessionTotal,
         baseTotal: quote.baseTotal,
         finalTotal,
         overrideAmount,
@@ -5126,6 +5661,10 @@ export class DataStore {
             "per_session_total" = ${sessionPricing.perSessionTotal},
             "seasonal_total_min" = ${sessionPricing.seasonalTotalMin},
             "seasonal_total_max" = ${sessionPricing.seasonalTotalMax},
+            "global_discount_rate" = ${globalDiscountRate},
+            "seasonal_discount_rate" = ${seasonalDiscountRate},
+            "price_override_enabled" = ${priceOverrideEnabled},
+            "override_base_per_session_total" = ${overrideBasePerSessionTotal},
             "final_total" = ${finalTotal},
             "override_amount" = ${overrideAmount},
             "override_reason" = ${input.overrideReason ?? null},
@@ -5155,6 +5694,10 @@ export class DataStore {
             "per_session_total",
             "seasonal_total_min",
             "seasonal_total_max",
+            "global_discount_rate",
+            "seasonal_discount_rate",
+            "price_override_enabled",
+            "override_base_per_session_total",
             "base_total",
             "final_total",
             "override_amount",
@@ -5180,6 +5723,10 @@ export class DataStore {
             q."per_session_total",
             q."seasonal_total_min",
             q."seasonal_total_max",
+            q."global_discount_rate",
+            q."seasonal_discount_rate",
+            q."price_override_enabled",
+            q."override_base_per_session_total",
             q."base_total",
             q."final_total",
             q."override_amount",
@@ -5269,6 +5816,10 @@ export class DataStore {
       quote.perSessionTotal = selectedVersion.perSessionTotal;
       quote.seasonalTotalMin = selectedVersion.seasonalTotalMin;
       quote.seasonalTotalMax = selectedVersion.seasonalTotalMax;
+      quote.globalDiscountRate = selectedVersion.globalDiscountRate ?? PRICING_CONSTANTS.defaultGlobalDiscountRate;
+      quote.seasonalDiscountRate = selectedVersion.seasonalDiscountRate ?? PRICING_CONSTANTS.defaultSeasonalDiscountRate;
+      quote.priceOverrideEnabled = selectedVersion.priceOverrideEnabled ?? false;
+      quote.overrideBasePerSessionTotal = selectedVersion.overrideBasePerSessionTotal ?? null;
       quote.baseTotal = selectedVersion.baseTotal;
       quote.finalTotal = selectedVersion.finalTotal;
       quote.overrideAmount = selectedVersion.overrideAmount;
@@ -5302,6 +5853,10 @@ export class DataStore {
         perSessionTotal: selectedVersion.perSessionTotal,
         seasonalTotalMin: selectedVersion.seasonalTotalMin,
         seasonalTotalMax: selectedVersion.seasonalTotalMax,
+        globalDiscountRate: selectedVersion.globalDiscountRate ?? PRICING_CONSTANTS.defaultGlobalDiscountRate,
+        seasonalDiscountRate: selectedVersion.seasonalDiscountRate ?? PRICING_CONSTANTS.defaultSeasonalDiscountRate,
+        priceOverrideEnabled: selectedVersion.priceOverrideEnabled ?? false,
+        overrideBasePerSessionTotal: selectedVersion.overrideBasePerSessionTotal ?? null,
         baseTotal: selectedVersion.baseTotal,
         finalTotal: selectedVersion.finalTotal,
         overrideAmount: selectedVersion.overrideAmount,
@@ -5401,6 +5956,10 @@ export class DataStore {
             "per_session_total" = v."per_session_total",
             "seasonal_total_min" = v."seasonal_total_min",
             "seasonal_total_max" = v."seasonal_total_max",
+            "global_discount_rate" = v."global_discount_rate",
+            "seasonal_discount_rate" = v."seasonal_discount_rate",
+            "price_override_enabled" = v."price_override_enabled",
+            "override_base_per_session_total" = v."override_base_per_session_total",
             "base_total" = v."base_total",
             "final_total" = v."final_total",
             "override_amount" = v."override_amount",
@@ -5438,6 +5997,10 @@ export class DataStore {
             "per_session_total",
             "seasonal_total_min",
             "seasonal_total_max",
+            "global_discount_rate",
+            "seasonal_discount_rate",
+            "price_override_enabled",
+            "override_base_per_session_total",
             "base_total",
             "final_total",
             "override_amount",
@@ -5463,6 +6026,10 @@ export class DataStore {
             v."per_session_total",
             v."seasonal_total_min",
             v."seasonal_total_max",
+            v."global_discount_rate",
+            v."seasonal_discount_rate",
+            v."price_override_enabled",
+            v."override_base_per_session_total",
             v."base_total",
             v."final_total",
             v."override_amount",
@@ -5514,6 +6081,133 @@ export class DataStore {
       verifiedBy: input.actor.userId,
       selectedVersion: input.versionNumber
     };
+  }
+
+  async updateQuoteBillingMode(input: UpdateQuoteBillingModeInput) {
+    const billingMode = normalizeBillingMode(input.billingMode);
+
+    if (!this.prisma) {
+      const quote = [...this.memory.quotes.values()].find((item) => item.publicQuoteId === input.quotePublicId);
+      if (!quote) {
+        throw new Error('QUOTE_NOT_FOUND');
+      }
+      if (quote.authUserId !== input.authUserId) {
+        throw new Error('QUOTE_FORBIDDEN');
+      }
+      if (quote.status !== 'verified' || quote.customerStatus !== 'awaiting_payment') {
+        throw new Error('QUOTE_PAYMENT_NOT_ALLOWED');
+      }
+
+      const startedPayment = this.memory.paymentLinks.some(
+        (link) =>
+          link.quoteId === quote.id &&
+          ['paid', 'subscription_scheduled', 'subscription_active'].includes(link.status)
+      );
+      if (startedPayment) {
+        throw new Error('QUOTE_PAYMENT_ALREADY_STARTED');
+      }
+
+      quote.billingMode = billingMode;
+      quote.updatedAt = nowIso();
+      this.memory.paymentLinks
+        .filter((link) => link.quoteId === quote.id && !link.tokenRevokedAt && link.status !== 'paid')
+        .forEach((link) => {
+          link.tokenRevokedAt = nowIso();
+          link.updatedAt = nowIso();
+        });
+
+      return {
+        quoteId: quote.publicQuoteId,
+        billingMode: quote.billingMode
+      };
+    }
+
+    const quote = await this.prisma.quote.findUnique({
+      where: {
+        publicQuoteId: input.quotePublicId
+      },
+      include: {
+        paymentLinks: true
+      }
+    });
+    if (!quote) {
+      throw new Error('QUOTE_NOT_FOUND');
+    }
+    if (quote.authUserId !== input.authUserId) {
+      throw new Error('QUOTE_FORBIDDEN');
+    }
+    if (quote.status !== 'verified' || quote.customerStatus !== 'awaiting_payment') {
+      throw new Error('QUOTE_PAYMENT_NOT_ALLOWED');
+    }
+
+    const startedPayment = quote.paymentLinks.some((link) =>
+      ['paid', 'subscription_scheduled', 'subscription_active'].includes(link.status)
+    );
+    if (startedPayment) {
+      throw new Error('QUOTE_PAYMENT_ALREADY_STARTED');
+    }
+
+    await this.prisma.$transaction(async (tx) => {
+      await tx.quote.update({
+        where: {
+          id: quote.id
+        },
+        data: {
+          billingMode
+        }
+      });
+
+      await tx.$executeRaw(
+        Prisma.sql`
+          UPDATE "quote_payment_links"
+          SET
+            "token_revoked_at" = now(),
+            "updated_at" = now()
+          WHERE
+            "quote_id" = ${quote.id}
+            AND "token_revoked_at" IS NULL
+            AND "status" <> 'paid'::"QuotePaymentStatus"
+        `
+      );
+    });
+
+    return {
+      quoteId: quote.publicQuoteId,
+      billingMode
+    };
+  }
+
+  async getLatestQuoteVersionNumber(quotePublicId: string) {
+    if (!this.prisma) {
+      const quote = [...this.memory.quotes.values()].find((item) => item.publicQuoteId === quotePublicId);
+      if (!quote) {
+        throw new Error('QUOTE_NOT_FOUND');
+      }
+      const latestVersion = this.memory.quoteVersions
+        .filter((version) => version.quoteId === quote.id)
+        .sort((left, right) => right.versionNumber - left.versionNumber)[0];
+      return latestVersion?.versionNumber ?? 1;
+    }
+
+    const quote = await this.prisma.quote.findUnique({
+      where: {
+        publicQuoteId: quotePublicId
+      }
+    });
+    if (!quote) {
+      throw new Error('QUOTE_NOT_FOUND');
+    }
+
+    const latestVersion = await this.prisma.quoteVersion.findFirst({
+      where: {
+        quoteId: quote.id
+      },
+      orderBy: {
+        versionNumber: 'desc'
+      }
+    });
+
+    return latestVersion?.versionNumber ?? 1;
   }
 
   async createQuotePaymentLink(input: CreateQuotePaymentLinkInput) {
@@ -6887,6 +7581,10 @@ export class DataStore {
         perSessionTotal: quote.perSessionTotal,
         seasonalTotalMin: quote.seasonalTotalMin,
         seasonalTotalMax: quote.seasonalTotalMax,
+        globalDiscountRate: quote.globalDiscountRate ?? PRICING_CONSTANTS.defaultGlobalDiscountRate,
+        seasonalDiscountRate: quote.seasonalDiscountRate ?? PRICING_CONSTANTS.defaultSeasonalDiscountRate,
+        priceOverrideEnabled: quote.priceOverrideEnabled ?? false,
+        overrideBasePerSessionTotal: quote.overrideBasePerSessionTotal ?? null,
         baseTotal: quote.baseTotal,
         finalTotal,
         overrideAmount: quote.overrideAmount,
@@ -7034,6 +7732,10 @@ export class DataStore {
             "per_session_total",
             "seasonal_total_min",
             "seasonal_total_max",
+            "global_discount_rate",
+            "seasonal_discount_rate",
+            "price_override_enabled",
+            "override_base_per_session_total",
             "base_total",
             "final_total",
             "override_amount",
@@ -7059,6 +7761,10 @@ export class DataStore {
             ${sessionPricing.perSessionTotal},
             ${sessionPricing.seasonalTotalMin},
             ${sessionPricing.seasonalTotalMax},
+            q."global_discount_rate",
+            q."seasonal_discount_rate",
+            q."price_override_enabled",
+            q."override_base_per_session_total",
             q."base_total",
             ${finalTotal},
             ${input.overrideAmount ?? null},

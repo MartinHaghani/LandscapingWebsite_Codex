@@ -404,6 +404,10 @@ export const QuoteEditorPage = ({ getToken, quoteId, onBack }: QuoteEditorPagePr
         serviceFrequency: SERVICE_FREQUENCY,
         perSessionTotal: Number(perSessionTotalText),
         finalTotal: Number(finalTotalText),
+        globalDiscountRate: editor?.editable.globalDiscountRate,
+        seasonalDiscountRate: editor?.editable.seasonalDiscountRate,
+        priceOverrideEnabled: editor?.editable.priceOverrideEnabled,
+        overrideBasePerSessionTotal: editor?.editable.overrideBasePerSessionTotal ?? undefined,
         overrideReason: overrideReason.trim() || undefined
       });
 

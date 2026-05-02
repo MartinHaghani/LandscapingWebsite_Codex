@@ -78,7 +78,7 @@ Decision:
 Implementation:
 
 - `leads` = identity container
-- `lead_contacts` = communication events (`contact_form`, `quote_finalize`)
+- `lead_contacts` = communication events (`contact_form`, `quote_finalize`, `quote_claim`)
 - `quotes` = transactional object + workflow state
 
 ## 7) Isolated Hosted Environments
@@ -138,18 +138,6 @@ Implementation:
 - `changed_fields` + redacted before/after by default
 - full snapshots reserved for high-risk events (e.g., revisions)
 - correlation metadata (`request_id`, `correlation_id`, `ip_hash`, `user_agent`)
-
-## 10a) Action-Local Legal Acceptance
-
-Decision:
-
-- Keep legal discovery focused on the action being taken instead of adding footer/nav legal clutter.
-
-Implementation:
-
-- `/legal` and `/legal/:slug` expose editable Markdown legal drafts.
-- Required checkboxes sit beside contact, complete-profile, quote submit, quote claim, and payment checkout actions.
-- Client sends only `legalAcceptance: { accepted: true }`; server records the canonical action, document slugs, document version, timestamp, hashed IP, user agent, and related lead/quote/account identifiers in `legal_acceptances`.
 
 ## 11) Role-Based PII and Export Controls
 
@@ -222,7 +210,22 @@ Implementation:
   - request table
 - quote CSV export moves out of the top bar into a less prominent bottom-page action
 
-## 15) Launch-Ready Public Content
+## 15) Admin Quote Creation + Quote ID Claim
+
+Decision:
+
+- Let staff create a polished, payable quote without entering customer contact details, then let the customer claim it by Quote ID.
+
+Implementation:
+
+- `/quotes/new` is a standalone admin workbench with a black/white/light-neutral base, Autoscape green primary actions, a large satellite map workspace, a sticky stats/pricing panel, and a compact top bar centered on the reserved `Q-...` ID.
+- The creator reserves Quote IDs before save, exposes `Copy ID`, generic `/claim-quote`, and direct `/claim-quote?quoteId=...` actions, and saves directly to `status=verified` / `customer_status=awaiting_payment` with `auth_user_id=null`.
+- Stats are grouped into geometry, pricing, validation, override, and customer-handoff sections so admin users can scan area, perimeter, per-visit price, full season, seasonal discount, discounted seasonal total, service-area warnings, and blocking geometry errors quickly.
+- Service-area results warn but do not block admin quote creation; self-intersection, empty geometry, and missing valid lawn geometry block save.
+- `/claim-quote` intentionally allows Quote ID-only preview before sign-up. Claiming and payment require Clerk auth plus completed phone, then billing mode selection before Stripe Checkout.
+- Visual style uses restrained borders/shadows, 8px-radius operational surfaces, red only for blocking geometry errors, amber for out-of-area/admin warnings, and green for primary/save/valid states.
+
+## 16) Launch-Ready Public Content
 
 Decision:
 
@@ -235,12 +238,14 @@ Implementation:
 - desktop signed-out navigation uses a slim divider between `Sign In` and `Sign Up` instead of punctuation
 - services page uses five shared-style inline SVG illustrations and removes the old mixed photo/placeholder card treatment, including removal of `Multi-Zone Scheduling`
 - footer uses real contact links (`tel:` + `mailto:`), quick navigation links, and a compact variant for quote/auth/payment funnel routes
+- footer variants now expose core legal links and `/legal` indexes all launch legal documents rendered from Markdown source
+- contact, quote submit, complete-profile, claim-quote, and payment checkout surfaces include nearby legal links matched to the action
 - mobile navigation includes in-header menu with quote CTA
 - metadata updates in `client/index.html` improve social preview and launch polish
 - `client/index.html` also loads the public Google Ads tag `AW-17991079326`; the admin shell stays separate from public advertising measurement
 - successful public quote draft submissions fire the Google Ads `Submit lead form` conversion after server acceptance, using the quote ID as the transaction ID so repeat fires can be deduplicated
 
-## 16) Quote Draft Recovery UX
+## 17) Quote Draft Recovery UX
 
 Decision:
 
@@ -260,7 +265,7 @@ Implementation:
   - clear all geometry (map controls)
   - reset saved draft (address + map panels)
 
-## 17) Unified Clerk Authentication
+## 18) Unified Clerk Authentication
 
 Decision:
 
@@ -275,6 +280,7 @@ Implementation:
   - shared `autoscapeClerkAppearance` themes Clerk cards, buttons, inputs, and account profile UI with Autoscape colors
   - required phone captured through in-app `/complete-profile/*`
   - phone persisted to `unsafeMetadata.autoscapeProfile.phone`
+  - optional email marketing consent persisted to `unsafeMetadata.autoscapeProfile.emailMarketingConsent`
   - users missing phone are routed to `/complete-profile/*` before dashboard/confirmation
 - admin app:
   - Clerk sign-in required before rendering admin shell
@@ -282,8 +288,9 @@ Implementation:
 - server:
   - verifies bearer JWT via Clerk issuer/JWKS
   - derives customer profile identity (name/email/phone) for quote finalize actions
+  - propagates account email-marketing opt-in to lead `consentMarketing` during quote claim/finalize
 
-## 18) Progress-First Quote Entry
+## 19) Progress-First Quote Entry
 
 Decision:
 
@@ -295,6 +302,7 @@ Implementation:
 - top-of-page step chrome is a compact-on-mobile non-interactive three-step rail for `Enter address`, `Map your lawn`, and `Review quote`
 - rail states show `Current step`, `Complete`, and `Up next` instead of button-like cards
 - address step stacks the input and continue button on mobile, and the map step uses a thin low-contrast address pill instead of a larger step header/instruction card
+- clicked address suggestions and highlighted Enter selections immediately run the service-area gate from the selected suggestion data, with a pending state to prevent duplicate coverage checks
 - after a fresh successful address-to-map transition, the map step reveals a centered guide modal shell 1 second after the map finishes loading
 - guide step 1 now plays a looping miniature of the real draw-lawn workspace, including the live toolbar styling, no mini address pill, the polished popup-house SVG as the live background, and a visible cursor
 - the tutorial now traces the front down lawn zone inside the same framed viewport treatment used by step 2, first as one loose curvy freehand outline and then with a shared 1.6-second camera transform while cursor movement and vertex dragging stay at normal guide speed, before drawing the top-left lawn so both left-side zones are complete
@@ -302,17 +310,19 @@ Implementation:
 - guide step 2 now starts from those two finished left-side lawns, draws only the right-side backyard zone as a separate service polygon, keeps the non-selected polygons on the lighter live-map styling, and uses the same 1.6-second camera transform timing without slowing cursor/edit phases while teaching one missing garden-notch point plus one explicit direct toolbar-Delete click/removal of an extra redundant point on the selected right-side polygon
 - guide step 3 now keeps the same popup-house SVG background and completed three-zone lawn state from step 2, clicks `Draw obstacle`, traces a selected red obstacle polygon around the front tree in the bottom-left lawn, then holds that finished obstacle scene for 2 seconds before looping again
 - selected guide vertices now use a live-tool-style marker treatment with a larger green core, pale green border, white outer ring, and soft halo so add, move, and delete selections are obvious
-- the guide shell now uses a cleaner editorial panel with fewer nested rounded boxes: one white modal, a slowly fading unified demo-and-caption media unit with no divider or white caption box between SVG and text, a right-sized demo stage whose camera layer aligns with the map-body clip window so the SVG starts centered and the bottom stays visible, a tighter centered caption strip directly under the demo, equal-width toolbar buttons, and progress pills in a flat navigation row between Back and Next
+- the guide shell now uses a cleaner editorial panel with fewer nested rounded boxes: one white modal, shorter responsive mobile demo heights, a slowly fading unified demo-and-caption media unit with no divider or white caption box between SVG and text, a right-sized desktop demo stage whose camera layer aligns with the map-body clip window so the SVG starts centered and the bottom stays visible, a tighter centered caption strip directly under the demo, equal-width toolbar buttons, and progress pills in a flat navigation row between Back and Next
 - the animated SVG guide stages now fade in softly when they appear, fade back out as each loop finishes, and use a slower fade-based transition between slides so resets feel less abrupt
 - on the third slide, the right-side nav control changes from `Next` to a green `Done` button that slowly fades the popup back into the quote tool instead of dismissing the guide session
 - the popup-house SVG now uses brighter greens and warmer accent materials so the background feels more vivid and less dull
 - the caption strip is now step-aware: step 1 fades from `Draw loosely around your lawn.` to `Move the points to match your lawn.`, step 2 moves through `Draw each separate lawn area on its own.`, `Add extra points`, and `Delete extra points`, and step 3 shows `Use Draw obstacle for gardens, pools, and other no-mow areas.`
 - guide dismissal is scoped to the current mapped-address session; restored local drafts do not auto-open it
-- map step removes the embedded quote summary and uses a full-width map-first layout with a floating top-right `Guide` plus `Done` action cluster
-- review step removes the progress rail and uses a two-section quote-ready layout: one top `Back to Map` action, a desktop top row with address-first property details and a right-side fitted map preview with quiet whole-number area/perimeter metadata, then a full-width lower payment-plan section with accessible side-by-side radio plan cards under `Choose how to pay`
+- map step removes the embedded quote summary and uses a full-width map-first layout with a floating top-right `Guide` plus `Done` action cluster on desktop and a compact two-row mobile top dock that keeps `Done` visible above `Lawn`, `Obstacle`, `Delete`, and `Clear`
+- the detailed under-map metrics/unit/draft summary card is desktop-only so mobile keeps the tool focused on mapping and blocking status messages above the map
+- review step removes the progress rail and uses a two-section quote-ready layout: one top `Back to Map` action, a desktop top row with address-first property details, top season/per-visit price cards separated by an `or` divider, and a desktop-only right-side fitted map preview with quiet whole-number area/perimeter metadata, then a full-width lower payment-plan section with accessible radio plan cards separated by an `or` divider under `Choose how to pay`
+- summary savings are kept inside the season plan card instead of a separate savings tile so the mobile review stays tighter
 - review step moves the main CTA to a single page-bottom `Submit Quote` button
 
-## 19) Freehand Quote Mapping
+## 20) Freehand Quote Mapping
 
 Decision:
 
@@ -344,7 +354,7 @@ Implementation:
 - legacy point-list `schemaVersion: 1` editor payloads are intentionally unsupported after the cutover
 - development/test data can be wiped with `npm --prefix server run cutover:freehand-reset-dev-data` before rollout
 
-## 20) Home Hero Visual Language
+## 21) Home Hero Visual Language
 
 Decision:
 
@@ -354,6 +364,7 @@ Implementation:
 
 - transparent hero module with no backdrop box or opaque background fill
 - hero uses a true desktop 50/50 split with the content block on the left and the lawn graphic on the right
+- on mobile, the lawn graphic is reordered under `Precise Cuts, Lower Costs` and before the CTA buttons
 - CTA group keeps a small `No sign-up required.` helper line directly beneath the buttons
 - one curated parcel silhouette anchors the hero, with a mower that first learns the perimeter walls, then follows a generated 11-pass horizontal boustrophedon infill with rounded U-turns before fading out and restarting
 - parcel geometry is a fixed luxury-plan drawing made from four straight runs plus four true circular arcs, with displayed labels derived from the same geometry constants
@@ -363,8 +374,11 @@ Implementation:
 - a slightly heavier white outline and restrained under-shadow keep the parcel crisp over the page background
 - the mower status cycles through `learning your lawn...`, `Generating path`, and `Mowing...` inside a compact glass-like capsule stacked immediately beneath the lawn, centered against the full lawn graphic width, with width that follows the active label and a ticker-flip transition for state changes
 - no separate stats strip sits beneath the hero; the lawn animation and under-lawn status capsule carry the right-side emphasis on their own
+- mobile ordering keeps product visuals early without changing desktop layout:
+  - home hero renders one mobile-only lawn graphic directly between the value line and CTA buttons
+  - mower section reuses one mower artwork block and renders it directly under the `Meet our lawnmowers` heading on mobile, while desktop keeps the text/image two-column split
 
-## 21) Quote Ownership + Account Dashboard
+## 22) Quote Ownership + Account Dashboard
 
 Decision:
 
@@ -399,7 +413,7 @@ Implementation:
 - seasonal payments present one final upfront amount; per-session payments present weekly billing terms, May 1/start-at-checkout timing, the approved visit cap, and the September 30 outer stop
 - `/dashboard/quotes/:quoteId/payment` uses the same approved payment visual language as an authenticated checkout surface for signed-in customers, with the amount/status/checkout action prioritized on mobile
 
-## 22) Warm-Light Premium Public Refresh
+## 23) Warm-Light Premium Public Refresh
 
 Decision:
 
@@ -416,7 +430,7 @@ Implementation:
 - service-area coverage falls back to the default Vaughan station when no base-station env is provided, so deployment without station env still exposes non-empty approximate coverage
 - instant-quote mapping keeps satellite basemap default for property precision, with warm-light control and review panels
 
-## 23) Home Page Pricing Comparison
+## 24) Home Page Pricing Comparison
 
 Decision:
 
@@ -438,7 +452,7 @@ Implementation:
 - on desktop, the shared comparison panel stretches to match the sample context box height
 - footer copy keeps only the benchmark source and final-quote caveats close to the comparison in smaller grey supporting text, and the two price columns stay visually adjacent on mobile
 
-## 24) Streamlined Home Page Narrative
+## 25) Streamlined Home Page Narrative
 
 Decision:
 
@@ -450,7 +464,7 @@ Implementation:
 - removed the standalone `Why Electric`, `How It Works`, `Why Autoscape`, and `Testimonials` sections
 - removed the separate `/about` page and its navbar link so the public marketing surface is limited to home, services, contact, and the quote flow
 
-## 25) Home Page Lawnmower Section
+## 26) Home Page Lawnmower Section
 
 Decision:
 
@@ -471,3 +485,19 @@ Implementation:
 - the sensor point uses sensor fusion language
 - each spec uses a consistent line-style green icon: horizontal ruler, signal/sensor, flask/experiment, and safety shield
 - section remains informational only, with no CTA, and removes the boxed artwork treatment so the transparent mower sits directly in the page background with only restrained ambient shadow
+
+## 27) Legal Launch Surface
+
+Decision:
+
+- Ship editable legal drafts as website content while keeping legal/business unknowns visible for attorney review.
+
+Implementation:
+
+- Markdown sources live in `client/src/content/legal/`
+- `client/src/pages/LegalPage.tsx` renders `/legal` and `/legal/:slug` through raw Vite imports, avoiding a Markdown dependency for this pass
+- launch documents cover privacy, terms, cookies, payments/refunds, landscaping/service disclaimers, automation, SMS/email communications, accessibility, acceptable use, third-party services, service area, and estimate/booking terms
+- no media release terms were added because the app does not expose photo upload, testimonials, public reviews, before/after galleries, or customer media publishing
+- footer legal links are present in full and compact footer variants
+- action-adjacent legal notices are added to contact, quote submit, complete-profile, claim-quote, and payment checkout surfaces
+- cookie banner behavior was intentionally not added because no consent framework exists in the app yet; the legal evidence report flags cookie consent strategy for business/legal review

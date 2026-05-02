@@ -2,6 +2,7 @@ import { SignIn, UserButton, useAuth, useUser } from '@clerk/clerk-react';
 import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { RequestsMap } from './components/RequestsMap';
+import { QuoteCreatorPage } from './pages/QuoteCreatorPage';
 import { QuoteEditorPage } from './pages/QuoteEditorPage';
 import {
   adminApi,
@@ -277,7 +278,8 @@ const App = () => {
   const [attributionSortDir, setAttributionSortDir] = useState<'asc' | 'desc'>('desc');
   const quoteEditorMatch = location.pathname.match(/^\/quotes\/([^/]+)\/edit$/);
   const editorQuoteId = quoteEditorMatch ? decodeURIComponent(quoteEditorMatch[1]) : null;
-  const activeTabForUi: TabKey = editorQuoteId ? 'quotes' : tab;
+  const isQuoteCreator = location.pathname === '/quotes/new';
+  const activeTabForUi: TabKey = editorQuoteId || isQuoteCreator ? 'quotes' : tab;
 
   const loadHealth = async (activeSession: AuthTokenProvider) => {
     try {
@@ -577,26 +579,56 @@ const App = () => {
       </aside>
 
       <section className="main-panel">
-        <header className="topbar">
-          <div>
-            <h2>{editorQuoteId ? 'Quote Editor' : tabs.find((item) => item.key === activeTabForUi)?.label}</h2>
-            <p className="hint">
-              PII: {health?.capabilities.viewPiiFull ? 'full' : 'masked'} | Attribution:{' '}
-              {health?.capabilities.viewAttribution ? 'enabled' : 'disabled'}
-            </p>
-          </div>
-        </header>
+        {!isQuoteCreator ? (
+          <>
+            <header className="topbar">
+              <div>
+                <h2>{editorQuoteId ? 'Quote Editor' : tabs.find((item) => item.key === activeTabForUi)?.label}</h2>
+                <p className="hint">
+                  PII: {health?.capabilities.viewPiiFull ? 'full' : 'masked'} | Attribution:{' '}
+                  {health?.capabilities.viewAttribution ? 'enabled' : 'disabled'}
+                </p>
+              </div>
+              {activeTabForUi === 'quotes' && !editorQuoteId ? (
+                <div className="topbar-actions">
+                  <button
+                    type="button"
+                    className="button primary"
+                    onClick={() => {
+                      setTab('quotes');
+                      navigate('/quotes/new');
+                    }}
+                  >
+                    New Quote
+                  </button>
+                </div>
+              ) : null}
+            </header>
 
-        <section className="metrics-grid">
-          <MetricCard label="Pending" value={stats.pending} />
-          <MetricCard label="In Review" value={stats.inReview} />
-          <MetricCard label="Verified (Awaiting Payment)" value={stats.verifiedAwaitingPayment} />
-          <MetricCard label="Open area requests" value={stats.requestsOpen} />
-        </section>
+            <section className="metrics-grid">
+              <MetricCard label="Pending" value={stats.pending} />
+              <MetricCard label="In Review" value={stats.inReview} />
+              <MetricCard label="Verified (Awaiting Payment)" value={stats.verifiedAwaitingPayment} />
+              <MetricCard label="Open area requests" value={stats.requestsOpen} />
+            </section>
+          </>
+        ) : null}
 
         {error ? <p className="error-banner">{error}</p> : null}
 
-        {editorQuoteId ? (
+        {isQuoteCreator ? (
+          <QuoteCreatorPage
+            getToken={session}
+            onBack={() => {
+              setTab('quotes');
+              navigate('/');
+            }}
+            onOpenQuote={(nextQuoteId) => {
+              setTab('quotes');
+              navigate(`/quotes/${encodeURIComponent(nextQuoteId)}/edit`);
+            }}
+          />
+        ) : editorQuoteId ? (
           <QuoteEditorPage
             getToken={session}
             quoteId={editorQuoteId}
