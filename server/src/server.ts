@@ -520,6 +520,9 @@ const getFirstConfiguredClientOrigin = (rawOrigins: string[]) =>
 const appendQueryParam = (targetUrl: string, queryParam: string) =>
   `${targetUrl}${targetUrl.includes('?') ? '&' : '?'}${queryParam}`;
 
+// Stripe Checkout stores success/cancel URLs per session, so pre-cutover sessions keep the old return page.
+const paymentCompleteCheckoutReturnUrlCutoverMs = Date.UTC(2026, 4, 2, 18, 33, 0);
+
 const isLoopbackOrigin = (origin: string) => {
   try {
     const url = new URL(origin);
@@ -888,6 +891,14 @@ export const createServer = (options: CreateServerOptions = {}) => {
 
   const isReusableCheckout = (paymentLink: NonNullable<Awaited<ReturnType<typeof dataStore.getPaymentLinkByTokenHash>>>) => {
     if (!paymentLink.stripeCheckoutUrl || !paymentLink.stripeCheckoutExpiresAt) {
+      return false;
+    }
+
+    const checkoutRecordedAtMs = new Date(paymentLink.updatedAt).getTime();
+    if (
+      Number.isFinite(checkoutRecordedAtMs) &&
+      checkoutRecordedAtMs < paymentCompleteCheckoutReturnUrlCutoverMs
+    ) {
       return false;
     }
 

@@ -253,7 +253,7 @@ Admin endpoints under `/api/admin/*` include:
   - `POST /api/stripe/webhook`
   - seasonal quotes use one-time Checkout for the approved discounted seasonal total
   - per-visit quotes use weekly subscription Checkout, use a May 1 billing-cycle anchor before season or charge at checkout during season, cap billing at `sessionsMax`, and stop no later than September 30
-  - Checkout success URLs send customers to `/payment-complete`; cancellation URLs return to `/pay/:token` or `/dashboard/quotes/:quoteId/payment`
+  - Checkout success URLs send customers to `/payment-complete`; cancellation URLs return to `/pay/:token` or `/dashboard/quotes/:quoteId/payment`; pre-rollout unexpired Checkout Sessions are not reused because Stripe stores return URLs on the session
   - paid Stripe invoice IDs are stored so duplicate invoice events cannot advance the visit counter twice
 - quote notes and legacy revision endpoint (`/api/admin/quotes/:id/revise`)
 - service-area requests, leads, contacts, audit logs

@@ -221,7 +221,7 @@
 4. Seasonal quotes use one-time Checkout for the approved discounted seasonal total.
 5. Per-session quotes use weekly subscription Checkout; if paid before May 1, the subscription uses a May 1 billing-cycle anchor with no proration, otherwise the first charge starts at checkout.
 6. Per-session billing is capped at the approved `sessionsMax` count and no later than September 30.
-7. Successful Stripe Checkout redirects to `/payment-complete`, which says `Thank you for choosing Autoscape! We start mowing the same week.` Public-link and dashboard checkout share that destination; canceled Checkout returns to the originating payment page.
+7. Successful Stripe Checkout redirects to `/payment-complete`, which says `Thank you for choosing Autoscape! We start mowing the same week.` Public-link and dashboard checkout share that destination; canceled Checkout returns to the originating payment page. Existing unexpired Checkout Sessions recorded before this route rollout are not reused, because Stripe stores success URLs on the session when it is created.
 8. Stripe webhooks, not success redirects, update payment state. Duplicate webhook events are ignored idempotently, and duplicate paid invoice IDs do not advance the visit counter twice.
 9. Staging Checkout has the required API Stripe env configured and still needs to be smoke-tested end to end.
 
