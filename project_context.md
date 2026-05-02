@@ -130,12 +130,12 @@ Admin app (separate Vite frontend) supports:
 - polished route-based quote creator (`/quotes/new`) for anonymous admin-created quotes:
   - reserves and displays the real six-character easy Quote ID before save
   - provides `Copy ID`, generic `/claim-quote`, and direct `/claim-quote?quoteId=...` actions
-  - uses the same Satellite Streets draw/edit controls, building/house-number map context, geodesic metric helpers, and server remeasurement contract as quote review
+  - uses the same Satellite Streets draw/edit controls, building outline map context, geodesic metric helpers, and server remeasurement contract as quote review
   - saves directly to `quotes` as `status=verified`, `customer_status=awaiting_payment`, `contact_pending=false`, with `auth_user_id=null` until customer claim
   - version 1 is stored in `quote_versions` with `actor_type=admin`
   - global discount defaults to 0%, seasonal discount defaults to 20%, both clamp to 0-50%, and override mode stores the edited base per-visit amount plus optional reason
 - route-based quote editor (`/quotes/:quoteId/edit`) with full polygon tools and editable quote controls
-  - Mapbox Satellite Streets basemap for property-context editing, including building outlines and house-number labels where Mapbox has coverage
+  - Mapbox Satellite Streets basemap for property-context editing, including building outlines where Mapbox has coverage
   - stored customer polygons render immediately on editor load
   - editor mirrors the public quote map styling and controls, including the same freehand draw workflow, vertex dragging, outline-click vertex insertion, delete/clear behavior, shared draw-end simplifier, and v2 polygon-source contract as the public quote tool
 - append-only version flow:

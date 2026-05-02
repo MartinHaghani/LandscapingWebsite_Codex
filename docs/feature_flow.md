@@ -202,7 +202,7 @@
 ### Admin-Created Quote Claim
 
 1. Admin opens `/quotes/new`, reserves a real six-character Quote ID through `POST /api/admin/quotes/reserve-id`, and sees that ID before saving.
-2. Admin selects an address, draws lawn and obstacle polygons on the Satellite Streets map, watches area/perimeter/lawn/obstacle/vertex stats update live, and sees warning-only service-area feedback. Building outlines and house-number labels appear where Mapbox has coverage; they are not treated as legal parcel lines.
+2. Admin selects an address, draws lawn and obstacle polygons on the Satellite Streets map, watches area/perimeter/lawn/obstacle/vertex stats update live, and sees warning-only service-area feedback. Building outlines appear where Mapbox has coverage; house-number labels are not forced because Mapbox address points can be incomplete or street/interpolation-positioned.
 3. Admin pricing uses the canonical formula, a global discount defaulting to `0%`, a seasonal discount defaulting to `20%`, and optional override mode where editing either per-visit or discounted seasonal price recalculates the other value from 20 weekly visits.
 4. Admin saves through `POST /api/admin/quotes`; the server remeasures geometry, rejects invalid/self-intersecting geometry, consumes the reserved ID, writes `quotes.auth_user_id=null`, `status=verified`, `customer_status=awaiting_payment`, `contact_pending=false`, and creates quote version 1 with `actor_type=admin`.
 5. Admin copies either `/claim-quote` or `/claim-quote?quoteId=ABC123` and gives it to the customer.
