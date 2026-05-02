@@ -7,7 +7,7 @@ const BASE_FEE = 20;
 const AREA_RATE = 0.05;
 const PERIMETER_RATE = 0.1;
 const DISTANCE_RATE = 1;
-const MINIMUM_PER_SESSION = 50;
+const MINIMUM_PER_SESSION = 45;
 
 const WEEKLY_SESSION_WINDOW = { min: 20, max: 20 } as const;
 

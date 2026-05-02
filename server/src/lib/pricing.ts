@@ -25,7 +25,9 @@ export const PRICING_CONSTANTS = {
   perimeterRate: 0.1,
   distanceRate: 1,
   minimumPerSessionPrice: 45,
-  defaultSeasonalDiscountRate: 0.2
+  defaultSeasonalDiscountRate: 0.2,
+  defaultGlobalDiscountRate: 0,
+  maxAdminDiscountRate: 0.5
 } as const;
 
 export const SESSION_WINDOWS: Record<ServiceFrequency, SessionWindow> = {
@@ -36,6 +38,7 @@ const toFiniteNumber = (value: number, fallback = 0) =>
   Number.isFinite(value) ? value : fallback;
 const roundMoney = (value: number) => Number(toFiniteNumber(value).toFixed(2));
 const roundRate = (value: number) => Number(toFiniteNumber(value).toFixed(4));
+const clampRate = (value: number, max = 1) => roundRate(Math.min(max, Math.max(0, value)));
 
 export const normalizeServiceFrequency = (_value?: string | null): ServiceFrequency => 'weekly';
 
@@ -61,11 +64,11 @@ export const computePerSessionTotal = (
 export const computeSessionRangePricing = (
   perSessionTotal: number,
   serviceFrequency: ServiceFrequency = 'weekly',
-  seasonalDiscountRate = PRICING_CONSTANTS.defaultSeasonalDiscountRate
+  seasonalDiscountRate: number = PRICING_CONSTANTS.defaultSeasonalDiscountRate
 ): SessionRangePricing => {
   const normalizedPerSession = Math.max(0, roundMoney(perSessionTotal));
   const sessionWindow = SESSION_WINDOWS[serviceFrequency] ?? SESSION_WINDOWS.weekly;
-  const normalizedDiscountRate = roundRate(Math.min(1, Math.max(0, seasonalDiscountRate)));
+  const normalizedDiscountRate = clampRate(seasonalDiscountRate);
   const fullSeasonTotal = roundMoney(normalizedPerSession * sessionWindow.max);
   const seasonalDiscountedTotal = roundMoney(fullSeasonTotal * (1 - normalizedDiscountRate));
   const seasonalSavingsTotal = roundMoney(fullSeasonTotal - seasonalDiscountedTotal);
@@ -81,5 +84,52 @@ export const computeSessionRangePricing = (
     seasonalSavingsTotal,
     seasonalTotalMin: fullSeasonTotal,
     seasonalTotalMax: fullSeasonTotal
+  };
+};
+
+export const normalizeAdminDiscountRate = (value: number | undefined | null, fallback: number = 0) =>
+  clampRate(toFiniteNumber(value ?? fallback, fallback), PRICING_CONSTANTS.maxAdminDiscountRate);
+
+export const computeDiscountedQuotePricing = ({
+  calculatedPerSessionTotal,
+  serviceFrequency = 'weekly',
+  globalDiscountRate = PRICING_CONSTANTS.defaultGlobalDiscountRate,
+  seasonalDiscountRate = PRICING_CONSTANTS.defaultSeasonalDiscountRate,
+  priceOverrideEnabled = false,
+  overrideBasePerSessionTotal
+}: {
+  calculatedPerSessionTotal: number;
+  serviceFrequency?: ServiceFrequency;
+  globalDiscountRate?: number | null;
+  seasonalDiscountRate?: number | null;
+  priceOverrideEnabled?: boolean;
+  overrideBasePerSessionTotal?: number | null;
+}) => {
+  const normalizedGlobalDiscountRate = normalizeAdminDiscountRate(
+    globalDiscountRate,
+    PRICING_CONSTANTS.defaultGlobalDiscountRate
+  );
+  const normalizedSeasonalDiscountRate = normalizeAdminDiscountRate(
+    seasonalDiscountRate,
+    PRICING_CONSTANTS.defaultSeasonalDiscountRate
+  );
+  const basePerSessionTotal =
+    priceOverrideEnabled && typeof overrideBasePerSessionTotal === 'number'
+      ? Math.max(0, roundMoney(overrideBasePerSessionTotal))
+      : Math.max(0, roundMoney(calculatedPerSessionTotal));
+  const discountedPerSessionTotal = roundMoney(basePerSessionTotal * (1 - normalizedGlobalDiscountRate));
+  const sessionPricing = computeSessionRangePricing(
+    discountedPerSessionTotal,
+    serviceFrequency,
+    normalizedSeasonalDiscountRate
+  );
+
+  return {
+    ...sessionPricing,
+    basePerSessionTotal,
+    globalDiscountRate: normalizedGlobalDiscountRate,
+    seasonalDiscountRate: normalizedSeasonalDiscountRate,
+    priceOverrideEnabled,
+    overrideBasePerSessionTotal: priceOverrideEnabled ? basePerSessionTotal : null
   };
 };

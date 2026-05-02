@@ -106,6 +106,10 @@ export interface AdminQuoteVersionItem {
   perSessionTotal: number;
   seasonalTotalMin: number;
   seasonalTotalMax: number;
+  globalDiscountRate: number;
+  seasonalDiscountRate: number;
+  priceOverrideEnabled: boolean;
+  overrideBasePerSessionTotal: number | null;
   finalTotal: number;
   overrideReason: string | null;
   areaM2: number;
@@ -134,6 +138,10 @@ export interface AdminQuoteEditorResponse {
     serviceFrequency: 'weekly';
     perSessionTotal: number;
     finalTotal: number;
+    globalDiscountRate: number;
+    seasonalDiscountRate: number;
+    priceOverrideEnabled: boolean;
+    overrideBasePerSessionTotal: number | null;
     overrideReason: string | null;
   };
   calculated: {
@@ -274,6 +282,14 @@ export interface AdminAttributionSummaryRow {
   count: number;
 }
 
+export interface AdminServiceAreaCheckResponse {
+  inServiceArea: boolean;
+  distanceToNearestStationKm?: number;
+  approximate: boolean;
+  disclaimer: string;
+  updatedAt: string;
+}
+
 export interface QuoteListParams {
   cursor?: string;
   limit?: number;
@@ -371,6 +387,13 @@ export const adminApi = {
     appendParam(query, 'sortDir', params.sortDir);
 
     return request<CursorResponse<AdminQuoteItem>>(`/api/admin/quotes?${query.toString()}`, getToken);
+  },
+
+  checkServiceArea(getToken: AuthTokenProvider, payload: { lat: number; lng: number }) {
+    return request<AdminServiceAreaCheckResponse>('/api/service-area/check', getToken, {
+      method: 'POST',
+      body: JSON.stringify(payload)
+    });
   },
 
   listRequests(getToken: AuthTokenProvider, params: RequestListParams) {
@@ -476,6 +499,10 @@ export const adminApi = {
       serviceFrequency: 'weekly';
       perSessionTotal: number;
       finalTotal: number;
+      globalDiscountRate?: number;
+      seasonalDiscountRate?: number;
+      priceOverrideEnabled?: boolean;
+      overrideBasePerSessionTotal?: number;
       overrideReason?: string;
     }
   ) {
@@ -527,6 +554,57 @@ export const adminApi = {
       };
     }>(`/api/admin/quotes/${encodeURIComponent(quoteId)}/approval-email/resend`, getToken, {
       method: 'POST'
+    });
+  },
+
+  reserveQuoteId(getToken: AuthTokenProvider) {
+    return request<{
+      quoteId: string;
+      expiresAt: string;
+    }>('/api/admin/quotes/reserve-id', getToken, {
+      method: 'POST'
+    });
+  },
+
+  createAdminQuote(
+    getToken: AuthTokenProvider,
+    payload: {
+      quoteId?: string;
+      address: string;
+      location: {
+        lat: number;
+        lng: number;
+      };
+      polygon: {
+        type: 'Polygon' | 'MultiPolygon';
+        coordinates: unknown;
+      };
+      polygonSource: AdminPolygonSource;
+      billingMode: 'seasonal' | 'per_session';
+      globalDiscountRate: number;
+      seasonalDiscountRate: number;
+      priceOverrideEnabled: boolean;
+      overrideBasePerSessionTotal?: number;
+      overrideReason?: string;
+      serviceFrequency: 'weekly';
+      pricingVersion: string;
+      currency: string;
+    }
+  ) {
+    return request<{
+      quoteId: string;
+      status: string;
+      customerStatus: string;
+      contactPending: boolean;
+      version: number;
+      perSessionTotal: number;
+      seasonalTotalMax: number;
+      seasonalDiscountedTotal: number;
+      globalDiscountRate: number;
+      seasonalDiscountRate: number;
+    }>('/api/admin/quotes', getToken, {
+      method: 'POST',
+      body: JSON.stringify(payload)
     });
   },
 

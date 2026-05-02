@@ -4,7 +4,7 @@ import { featureCollection, polygon } from '@turf/helpers';
 import kinks from '@turf/kinks';
 import union from '@turf/union';
 import type { Feature, MultiPolygon, Polygon } from 'geojson';
-import type { EditablePolygon, LngLat } from './quoteEditorTypes';
+import type { EditablePolygon, LngLat, QuoteGeometry } from './quoteEditorTypes';
 import { closeRing } from './quoteEditorGeometry';
 
 const EARTH_RADIUS_M = 6_371_008.8;
@@ -52,6 +52,20 @@ const geometryPerimeterM = (geometry: Polygon | MultiPolygon) => {
 
 const hasThreeDistinctPoints = (points: LngLat[]) => new Set(points.map((point) => point.join(','))).size >= 3;
 
+const toQuoteGeometry = (geometry: Polygon | MultiPolygon): QuoteGeometry => {
+  if (geometry.type === 'Polygon') {
+    return {
+      type: 'Polygon',
+      coordinates: geometry.coordinates as LngLat[][]
+    };
+  }
+
+  return {
+    type: 'MultiPolygon',
+    coordinates: geometry.coordinates as LngLat[][][]
+  };
+};
+
 const mergePolygons = (features: Feature<Polygon>[]): Feature<Polygon | MultiPolygon> | null => {
   if (features.length === 0) {
     return null;
@@ -82,6 +96,7 @@ export interface MultiPolygonMetrics {
   validPolygonCount: number;
   selfIntersecting: boolean;
   effectiveGeometryEmpty: boolean;
+  geometry: QuoteGeometry | null;
 }
 
 export const computeMultiPolygonMetrics = (polygons: EditablePolygon[]): MultiPolygonMetrics => {
@@ -136,7 +151,8 @@ export const computeMultiPolygonMetrics = (polygons: EditablePolygon[]): MultiPo
       validObstaclePolygonCount,
       validPolygonCount: validServicePolygonCount + validObstaclePolygonCount,
       selfIntersecting,
-      effectiveGeometryEmpty: false
+      effectiveGeometryEmpty: false,
+      geometry: null
     };
   }
 
@@ -156,7 +172,8 @@ export const computeMultiPolygonMetrics = (polygons: EditablePolygon[]): MultiPo
       validObstaclePolygonCount,
       validPolygonCount: validServicePolygonCount + validObstaclePolygonCount,
       selfIntersecting,
-      effectiveGeometryEmpty: true
+      effectiveGeometryEmpty: true,
+      geometry: null
     };
   }
 
@@ -172,6 +189,7 @@ export const computeMultiPolygonMetrics = (polygons: EditablePolygon[]): MultiPo
     validObstaclePolygonCount,
     validPolygonCount: validServicePolygonCount + validObstaclePolygonCount,
     selfIntersecting,
-    effectiveGeometryEmpty: false
+    effectiveGeometryEmpty: false,
+    geometry: toQuoteGeometry(geometry as Polygon | MultiPolygon)
   };
 };

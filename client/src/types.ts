@@ -85,6 +85,7 @@ export interface QuoteLookupResponse {
   id: string;
   createdAt: string;
   address: string;
+  polygonSource?: QuotePolygonSource | null;
   metrics: {
     areaM2: number;
     perimeterM: number;
@@ -100,6 +101,9 @@ export interface QuoteLookupResponse {
   seasonalDiscountedTotal?: number;
   seasonalSavingsTotal?: number;
   seasonalDiscountRate?: number;
+  globalDiscountRate?: number;
+  priceOverrideEnabled?: boolean;
+  overrideBasePerSessionTotal?: number | null;
   billingMode?: BillingMode;
   quoteTotal: number;
   status: string;

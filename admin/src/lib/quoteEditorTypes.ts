@@ -14,6 +14,16 @@ export interface PolygonEditorState {
   activePolygonId: string | null;
 }
 
+export type QuoteGeometry =
+  | {
+      type: 'Polygon';
+      coordinates: LngLat[][];
+    }
+  | {
+      type: 'MultiPolygon';
+      coordinates: LngLat[][][];
+    };
+
 export type SelectionTarget =
   | { kind: 'none' }
   | { kind: 'polygon'; polygonId: string }

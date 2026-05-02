@@ -8,7 +8,6 @@ Autoscape is a multi-app monorepo for:
 - public shell branding uses the horizontal Autoscape PNG mark at `client/public/images/brand/autoscape-horizontal-brand.png`
 - public shell loads the Google Ads tag `AW-17991079326` from `client/index.html`
 - successful public `Submit Quote` draft saves fire the Google Ads `Submit lead form` conversion `AW-17991079326/FqIMCOHXqYIcEJ6r6IJD`
-- public legal documents live at `/legal` and `/legal/:slug`; they are linked only beside actions that require acknowledgement, not in the footer.
 
 ## Documentation Map
 
@@ -76,6 +75,7 @@ STRIPE_WEBHOOK_SECRET=whsec_replace_me
 
 # admin/.env
 VITE_API_BASE_URL=http://localhost:4000
+VITE_PUBLIC_APP_BASE_URL=http://localhost:5173
 VITE_MAPBOX_TOKEN=pk.your_mapbox_public_token
 VITE_CLERK_PUBLISHABLE_KEY=pk_test_replace_me
 ```
@@ -131,18 +131,21 @@ Current live status: `autoscape-staging` is active in Toronto with `autoscape-st
 - Services page uses CTA-only handoff to `/instant-quote`.
 - Services page now presents five inline premium-vector service illustrations for Autonomous Mowing, Smart Edging, Cleanup & Debris, Seasonal Maintenance, and Performance Reporting.
 - Marketing pages now use launch-ready production copy (no placeholder content), warm-light visual tokens, and readability-first spacing/contrast across the home, services, and contact surfaces, with mobile navigation, a cleaner signed-out header divider, route-aware full/compact footer variants, footer quick links, and a contact page that promotes compact direct phone/email actions beside the message form.
-- Home hero now uses a balanced desktop split: left-side headline and CTA group with `No sign-up required.`, a mobile-stacked CTA row on narrow screens, and a right-side animated transparent lawn parcel with a looping three-state sequence: perimeter `learning your lawn...`, 2-second `Generating path`, then `Mowing...` along an 11-pass rounded boustrophedon infill path with denser direction arrows, direct mowing spawn on the first scanline, and a ticker-flip status capsule sized to the active label and centered under the full lawn graphic.
-- Home page now keeps a tighter top-of-page flow: hero, pricing comparison, mower technology section, three-card services overview with Autonomous Mowing, Edging, and Cleanup & Debris, FAQ, and final quote CTA, with flatter post-hero sections, an unboxed larger sample lawn price check with extra intro spacing, a narrower row-label column, a seasonal `20% off` corner badge, icon-led mower specs, larger FAQ answers with bolded key phrases, and the older Why Electric, How It Works, Why Autoscape, and Testimonials sections removed.
+- Public legal pages are served from `/legal` and `/legal/:slug`, using Markdown sources in `client/src/content/legal/` plus a small raw-Markdown renderer. Footer links expose Privacy, Terms, Cookies, Payments, and the full legal index across both full and compact footer variants.
+- Contact, quote submit, complete-profile, claim-quote, and approved-payment checkout actions now include nearby Privacy/Terms/Payment or Estimate Terms links. The contact form and complete-profile account intake include an optional unchecked email-marketing opt-in; SMS marketing remains inactive at launch.
+- Home hero now uses a balanced desktop split: left-side headline and CTA group with `No sign-up required.`, a mobile-stacked CTA row on narrow screens, and a right-side animated transparent lawn parcel with a looping three-state sequence: perimeter `learning your lawn...`, 2-second `Generating path`, then `Mowing...` along an 11-pass rounded boustrophedon infill path with denser direction arrows, direct mowing spawn on the first scanline, and a ticker-flip status capsule sized to the active label and centered under the full lawn graphic. On mobile, the lawn graphic appears directly under `Precise Cuts, Lower Costs` and before the CTA buttons.
+- Home page now keeps a tighter top-of-page flow: hero, pricing comparison, mower technology section, three-card services overview with Autonomous Mowing, Edging, and Cleanup & Debris, FAQ, and final quote CTA, with flatter post-hero sections, an unboxed larger sample lawn price check with extra intro spacing, a narrower row-label column, a seasonal `20% off` corner badge, icon-led mower specs, larger FAQ answers with bolded key phrases, and the older Why Electric, How It Works, Why Autoscape, and Testimonials sections removed. On mobile, the mower asset appears directly beneath the `Meet our lawnmowers` heading before the highlight list.
 - Instant Quote flow is now draft-first:
   - intro chrome uses a badge-only heading and a compact-on-mobile three-step progress rail instead of marketing helper copy
-  - address entry stacks the address input and continue button on mobile, and the map step uses a thin address pill instead of a large step header card
+  - address entry stacks the address input and continue button on mobile, clicked suggestions and highlighted Enter selections immediately run the coverage gate before continuing, and a pending state prevents duplicate coverage checks
+  - the map step uses a thin address pill instead of a large step header card
   - geometry capture is persistent freehand drawing, not point-by-point vertex placement
     - `Draw lawn` and `Draw obstacle` toggle into `Stop drawing`
     - completed strokes automatically exit draw mode instead of staying latched on
     - draw-end simplification now distance-normalizes freehand strokes, caps vertex density by distance, and removes redundant wobble on straight edges while preserving sharp corners and intentional curves
     - overlapping start/end loop-closure cleanup now collapses freehand close-loop overlap into one clean join corner
     - clicking near the outline of the currently selected polygon inserts a vertex at that exact edge position and selects it immediately
-    - undo/redo live in a separate arrow-only control box at the top-left of the map
+    - undo/redo live in a separate arrow-only control box at the top-left of the map on desktop and in the first row of the compact mobile top dock
     - delete + clear-all stay grouped together, and `Clear all` requires inline confirmation
     - freehand-created polygons remain vertex-editable for cleanup after the stroke is finished
     - map edits no longer auto-reframe/zoom the viewport after each geometry change
@@ -154,7 +157,8 @@ Current live status: `autoscape-staging` is active in Toronto with `autoscape-st
   - quote outputs include per-visit, full-season, and discounted seasonal totals
   - billing modes: `seasonal` (default, 20% discount) and `per_session`
   - quote drawing map keeps satellite basemap by default, with warm-light control panels for readability
-  - `/instant-quote` is now a map-first builder page with a stronger floating top-right action cluster containing `Guide` and `Done`
+  - `/instant-quote` is now a map-first builder page with a stronger floating top-right action cluster containing `Guide` and `Done`; mobile uses a two-row top dock with undo/redo plus compact `Guide`/`Done` above `Lawn`, `Obstacle`, `Delete`, and `Clear`
+  - the under-map area/perimeter/lawn/obstacle/unit/draft summary card is hidden on mobile and kept on desktop
   - after a fresh successful address-to-map transition, the map now reveals a centered guide modal shell 1 second after the map finishes loading
     - guide step 1 now uses the polished top-down house SVG as the live popup background instead of the old inline illustration
     - the tutorial first focuses on the front down lawn zone inside the same framed viewport treatment used by step 2 so the background stays consistent between slides: it clicks `Draw lawn`, traces one loose curvy hand-drawn outline, finalizes that stroke through the shared freehand finalizer, then lets the camera glide with a shared 1.6-second transform while cursor movement and vertex dragging stay at normal guide speed
@@ -162,7 +166,7 @@ Current live status: `autoscape-staging` is active in Toronto with `autoscape-st
     - guide step 2 now starts from those two completed left-side lawns, draws only the right-side backyard zone, and keeps previously finished polygons unselected with the same fill/outline styling used in the live quote map
     - step 2 intentionally finalizes the backyard with one missing garden-notch corner and one extra redundant point, then uses the same 1.6-second camera transform timing without slowing cursor/edit phases to show edge insertion, dragging the inserted point into the exact notch, moving directly to the toolbar `Delete` button, showing a stronger click pulse, removing the extra point, and easing back out before ending on a corrected three-zone lawn state
     - guide step 3 now keeps the same popup-house SVG background and the carried-over three-zone lawn, clicks `Draw obstacle`, draws a selected red obstacle polygon around the front tree in the bottom-left lawn, then holds that finished scene for 2 seconds before looping again
-    - the guide shell now uses a cleaner editorial popup treatment with one white panel, a right-sized demo viewport whose camera layer is offset to match the map-body clip window so the SVG starts centered and the bottom stays visible, equal-width toolbar buttons, a slowly fading unified demo-and-caption media unit with no divider or white caption box between the SVG and text, a tighter centered caption strip directly under the demo, and a flat navigation row with centered segmented progress
+    - the guide shell now uses a cleaner editorial popup treatment with one white panel, responsive shorter mobile demo heights, a right-sized desktop demo viewport whose camera layer is offset to match the map-body clip window so the SVG starts centered and the bottom stays visible, equal-width toolbar buttons, a slowly fading unified demo-and-caption media unit with no divider or white caption box between the SVG and text, a tighter centered caption strip directly under the demo, and a flat navigation row with centered segmented progress
     - the animated SVG steps now use a gentle loop-edge fade so the demo appears softly, fades back out as each loop finishes, and crossfades more smoothly between guide slides
     - on the third slide, the right-side nav control changes from `Next` to a green `Done` button that slowly fades the popup back into the quote tool instead of dismissing the guide session
     - the popup-house SVG background now uses a fresher brighter palette so the lawn, deck, garden, and trees read with more energy and contrast
@@ -170,8 +174,7 @@ Current live status: `autoscape-staging` is active in Toronto with `autoscape-st
     - a manual `Guide` help button beside `Done` reopens the guide at step 1 even after the automatic guide has been dismissed
     - dismissing the guide keeps it closed for the current mapped address session and it reappears only after the next successful address load
     - restored local drafts do not auto-open the guide
-  - `/instant-quote/summary` now removes the step progress rail and uses a two-section quote-ready review layout: a top `Back to Map` action, a desktop top row with address-first quote details on the left and a fitted map preview plus quiet whole-number area/perimeter metadata on the right, then a full-width lower payment-plan section with accessible radio plan cards under `Choose how to pay`
-  - quote submit requires a recorded legal acceptance for Terms, Privacy, Estimate/Booking Terms, Service Disclaimer, AI/Automation Disclaimer, and Service Area Disclaimer
+  - `/instant-quote/summary` now removes the step progress rail and uses a two-section quote-ready review layout: a top `Back to Map` action, a desktop top row with address-first quote details on the left, top price cards separated by an `or` divider, and a fitted desktop-only map preview plus quiet whole-number area/perimeter metadata on the right, then a full-width lower payment-plan section with accessible radio plan cards separated by an `or` divider under `Choose how to pay`; the seasonal savings chip sits inside the season plan card instead of its own summary card
   - address suggestions support keyboard navigation (`ArrowUp/ArrowDown/Enter/Escape`)
   - browser-local draft persistence auto-saves address, step state, polygons, units, and billing mode
     - local draft storage key/version is `autoscape.quoteDraft.v2`
@@ -187,11 +190,17 @@ Current live status: `autoscape-staging` is active in Toronto with `autoscape-st
   3. Draft handoff continues to `/quote-confirmation/:quoteId` (legacy `/quote-contact/:quoteId` links redirect here)
   4. Signed-in draft saves quote address to Clerk account metadata (`addressHistory`, latest as `defaultAddress`)
   5. `POST /api/quote/:quoteId/claim` links quote to authenticated account
-  6. `/quote-confirmation/:quoteId` handles sign-in, required phone gating, and required claim/payment-policy acknowledgement before review handoff
+  6. `/quote-confirmation/:quoteId` handles sign-in and required phone gating before review handoff
   7. `POST /api/quote/:quoteId/contact` finalizes contact + sets status `in_review` (`customer_status=pending`)
   8. Confirmation page `/quote-confirmation/:quoteId`
+- Admin-created quote claim flow:
+  - admins can open `/quotes/new`, reserve a real `Q-...` ID before save, draw lawn/obstacle geometry on the same satellite quote map, and save an anonymous payable quote directly as `status=verified`, `customer_status=awaiting_payment`, `contact_pending=false`
+  - admin-created quotes stay in the existing `quotes` table with `auth_user_id=null` until the customer claims them; version 1 is stored in `quote_versions` with `actor_type=admin`
+  - `/claim-quote` accepts manual Quote ID entry, and `/claim-quote?quoteId=Q-...` preloads the preview; customers can see quote stats/pricing before signing up
+  - claiming now requires an authenticated account with completed phone, then attaches `quotes.auth_user_id`, records a `quote_claim` contact event when contact data is available, lets the customer choose `seasonal` or `per_session`, and sends them to `/dashboard/quotes/:quoteId/payment`
 - Customer dashboard:
-  - `/complete-profile/*` captures required phone number, optional email-marketing opt-in, and required Terms/Privacy acknowledgement for any auth method
+  - `/complete-profile/*` captures required phone number for any auth method
+    - it also stores optional email marketing opt-in at `unsafeMetadata.autoscapeProfile.emailMarketingConsent`, which the API propagates to lead records during quote claim/finalize
   - `/dashboard` is now an action-first customer home with mobile-first CTA placement, a primary quote state, lifecycle timeline, May-September schedule note, support panel, conditional quote history, and conditional card-on-file panel
   - `/dashboard/account/*` renders Clerk profile/security/password management with the shared Autoscape Clerk appearance inside the dashboard area
   - `/dashboard/quotes/:quoteId` for owned quote detail with grouped mobile-readable quote summaries
@@ -202,7 +211,7 @@ Current live status: `autoscape-staging` is active in Toronto with `autoscape-st
   - `GET /api/payment-links/:token` returns sanitized quote/payment details without requiring Clerk sign-in
   - `POST /api/payment-links/:token/checkout` creates or reuses a Stripe Checkout Session
   - signed-in customers can also use `POST /api/account/quotes/:quoteId/payment/checkout` from the dashboard
-  - public and dashboard checkout endpoints require recorded acceptance of Terms, Payment Policy, and Estimate/Booking Terms before opening Stripe Checkout
+  - customers can switch billing before payment starts with `POST /api/account/quotes/:quoteId/billing-mode`
   - `POST /api/account/quotes/:quoteId/billing-portal` opens Stripe-hosted card management for owners when Stripe has customer billing context, and account quote detail now includes conditional card-on-file metadata
 - Out-of-area page auto-captures expansion demand via `POST /api/service-area/request`.
 
@@ -218,6 +227,7 @@ Current live status: `autoscape-staging` is active in Toronto with `autoscape-st
 Admin endpoints under `/api/admin/*` include:
 
 - quotes inbox (`/quotes`) with cursor pagination
+- new polished admin quote creator (`/quotes/new`) with reserved Quote ID, copyable generic/direct claim links, Mapbox address search, warning-only service-area check, live area/perimeter/lawn/obstacle/vertex stats, global + seasonal discounts, and admin price override mode
 - quote editor (`/quotes/:quoteId/edit`) with full polygon tools, calculated vs actual quote panel, and version history
   - Mapbox satellite basemap in editor for property verification context
   - persisted quote polygons hydrate immediately when editor opens
@@ -225,6 +235,8 @@ Admin endpoints under `/api/admin/*` include:
   - approved quotes show latest Stripe payment state and related Stripe object IDs for admin support
 - service-area request map payload (`/service-area-requests/map`) for heatmap/cluster rendering
 - quote versioning APIs:
+  - `POST /api/admin/quotes/reserve-id`
+  - `POST /api/admin/quotes`
   - `GET /api/admin/quotes/:id/editor`
   - `POST /api/admin/quotes/:id/versions`
   - `POST /api/admin/quotes/:id/versions/:versionNumber/submit`

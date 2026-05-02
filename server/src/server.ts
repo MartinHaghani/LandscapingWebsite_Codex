@@ -13,14 +13,13 @@ import {
   getApprovedQuotePreviewMapboxAccessToken
 } from './lib/approvedQuotePreview.js';
 import {
-  accountLegalAcceptancePayloadSchema,
   adminQuoteNoteSchema,
+  adminQuoteCreateSchema,
   adminQuoteRevisionSchema,
   adminQuoteStatusSchema,
   adminQuoteVersionCreateSchema,
+  accountQuoteBillingModeSchema,
   contactPayloadSchema,
-  paymentCheckoutPayloadSchema,
-  quoteClaimPayloadSchema,
   quoteDraftPayloadSchema,
   quoteContactPayloadSchema,
   serviceAreaCheckSchema,
@@ -28,11 +27,6 @@ import {
 } from './lib/schemas.js';
 import { createDataStore } from './lib/dataStore.js';
 import type { QuotePaymentStatus } from './lib/dataStore.js';
-import {
-  LEGAL_ACCEPTANCE_DOCUMENTS,
-  LEGAL_DOCUMENT_VERSION,
-  type LegalAcceptanceAction
-} from './lib/legalAcceptance.js';
 import {
   createStripePaymentProvider,
   StripePaymentConfigurationError,
@@ -360,6 +354,26 @@ const mapStoreError = (error: unknown): { statusCode: number; message: string } 
         statusCode: 409,
         message: 'Payment is only available for approved quotes awaiting payment.'
       };
+    case 'QUOTE_PAYMENT_ALREADY_STARTED':
+      return {
+        statusCode: 409,
+        message: 'This quote has already started payment.'
+      };
+    case 'QUOTE_PREVIEW_NOT_AVAILABLE':
+      return {
+        statusCode: 409,
+        message: 'This quote is not ready to be claimed yet.'
+      };
+    case 'QUOTE_ID_RESERVATION_INVALID':
+      return {
+        statusCode: 409,
+        message: 'Reserved quote ID is missing, expired, or already used.'
+      };
+    case 'QUOTE_ID_RESERVATION_FAILED':
+      return {
+        statusCode: 500,
+        message: 'Unable to reserve a quote ID.'
+      };
     case 'QUOTE_BILLING_PORTAL_NOT_AVAILABLE':
       return {
         statusCode: 409,
@@ -591,36 +605,6 @@ export const createServer = (options: CreateServerOptions = {}) => {
 
     return `${apiBaseUrl}/api/approved-quote-preview`;
   };
-
-  const getUserAgent = (req: http.IncomingMessage) => {
-    const header = req.headers['user-agent'];
-    const value = Array.isArray(header) ? header[0] : header;
-    return value?.slice(0, 300) ?? null;
-  };
-
-  const recordLegalAcceptance = async (
-    req: http.IncomingMessage,
-    input: {
-      action: LegalAcceptanceAction;
-      leadId?: string | null;
-      quotePublicId?: string | null;
-      authUserId?: string | null;
-      email?: string | null;
-      metadata?: Record<string, unknown>;
-    }
-  ) =>
-    dataStore.recordLegalAcceptance({
-      action: input.action,
-      documentSlugs: LEGAL_ACCEPTANCE_DOCUMENTS[input.action],
-      documentVersion: LEGAL_DOCUMENT_VERSION,
-      leadId: input.leadId,
-      quotePublicId: input.quotePublicId,
-      authUserId: input.authUserId,
-      email: input.email,
-      ipHash: hashIp(getClientIp(req)),
-      userAgent: getUserAgent(req),
-      metadata: input.metadata
-    });
 
   const buildConfiguredPreviewImageBaseUrl = () =>
     configuredApiBaseUrl ? `${configuredApiBaseUrl}/api/approved-quote-preview` : null;
@@ -1139,9 +1123,11 @@ export const createServer = (options: CreateServerOptions = {}) => {
         pathname === '/api/quote/draft' ||
         pathname.match(/^\/api\/quote\/[^/]+\/contact$/) ||
         pathname.match(/^\/api\/quote\/[^/]+\/claim$/) ||
+        pathname.match(/^\/api\/account\/quotes\/[^/]+\/billing-mode$/) ||
         pathname.match(/^\/api\/payment-links\/[^/]+\/checkout$/) ||
         pathname.match(/^\/api\/account\/quotes\/[^/]+\/payment\/checkout$/) ||
-        pathname === '/api/account/legal-acceptance' ||
+        pathname === '/api/admin/quotes' ||
+        pathname === '/api/admin/quotes/reserve-id' ||
         pathname === '/api/contact' ||
         pathname === '/api/service-area/request')
     ) {
@@ -1231,13 +1217,6 @@ export const createServer = (options: CreateServerOptions = {}) => {
     const paymentLinkCheckoutToken = getPathMatch(pathname, /^\/api\/payment-links\/([^/]+)\/checkout$/);
     if (method === 'POST' && paymentLinkCheckoutToken) {
       try {
-        const body = await readJson(req);
-        const parsed = paymentCheckoutPayloadSchema.safeParse(body);
-        if (!parsed.success) {
-          json(res, 400, { error: 'Legal acceptance is required.', details: parsed.error.flatten() });
-          return;
-        }
-
         const paymentLink = await resolvePaymentLink(req, paymentLinkCheckoutToken);
         if (!paymentLink) {
           json(res, 404, { error: 'Payment link not found.' });
@@ -1258,18 +1237,6 @@ export const createServer = (options: CreateServerOptions = {}) => {
           return;
         }
 
-        await recordLegalAcceptance(req, {
-          action: 'payment_checkout_terms',
-          quotePublicId: paymentLink.publicQuoteId,
-          email: paymentLink.customerEmail,
-          metadata: {
-            surface: 'public_payment',
-            paymentLinkId: paymentLink.id,
-            mode: paymentLink.mode,
-            status: paymentLink.status
-          }
-        });
-
         if (isReusableCheckout(paymentLink)) {
           json(res, 200, {
             checkoutUrl: paymentLink.stripeCheckoutUrl,
@@ -1288,14 +1255,6 @@ export const createServer = (options: CreateServerOptions = {}) => {
         json(res, 200, await createCheckoutForPaymentLink(paymentLink, publicPaymentPageUrl));
         return;
       } catch (error) {
-        if (error instanceof SyntaxError) {
-          json(res, 400, { error: 'Invalid JSON body.' });
-          return;
-        }
-        if (error instanceof Error && error.message === 'Payload too large.') {
-          json(res, 413, { error: 'Payload too large.' });
-          return;
-        }
         if (error instanceof StripePaymentConfigurationError) {
           json(res, 503, { error: error.message });
           return;
@@ -1443,17 +1402,6 @@ export const createServer = (options: CreateServerOptions = {}) => {
           attribution: parsed.data.attribution
         });
 
-        if (!result.replayed) {
-          await recordLegalAcceptance(req, {
-            action: 'contact_privacy_ack',
-            email: parsed.data.email,
-            metadata: {
-              surface: 'contact_form',
-              contactId: result.body.id
-            }
-          });
-        }
-
         json(res, result.statusCode, {
           ...result.body,
           replayed: result.replayed
@@ -1528,20 +1476,6 @@ export const createServer = (options: CreateServerOptions = {}) => {
           });
         }
 
-        if (!result.replayed) {
-          await recordLegalAcceptance(req, {
-            action: 'quote_submit_terms',
-            quotePublicId: result.body.quoteId,
-            authUserId: customerIdentity?.userId,
-            email: customerIdentity?.email,
-            metadata: {
-              surface: 'instant_quote_summary',
-              billingMode: payload.billingMode ?? 'seasonal',
-              serviceFrequency: payload.serviceFrequency ?? 'weekly'
-            }
-          });
-        }
-
         json(res, result.statusCode, {
           ...result.body,
           replayed: result.replayed
@@ -1570,29 +1504,15 @@ export const createServer = (options: CreateServerOptions = {}) => {
         if (!customerIdentity) {
           throw new Error('AUTH_REQUIRED');
         }
-
-        const body = await readJson(req);
-        const parsed = quoteClaimPayloadSchema.safeParse(body);
-        if (!parsed.success) {
-          json(res, 400, { error: 'Legal acceptance is required.', details: parsed.error.flatten() });
-          return;
-        }
+        assertCustomerPhoneProfile(customerIdentity);
 
         const result = await dataStore.claimQuoteOwnership({
           quotePublicId: quoteClaimId,
           authUserId: customerIdentity.userId,
-          marketingConsent: customerIdentity.emailMarketingConsent
-        });
-
-        await recordLegalAcceptance(req, {
-          action: 'quote_claim_terms',
-          quotePublicId: quoteClaimId,
-          authUserId: customerIdentity.userId,
+          name: customerIdentity.name,
           email: customerIdentity.email,
-          metadata: {
-            surface: 'quote_confirmation',
-            claimed: result.body.claimed
-          }
+          phone: customerIdentity.phone,
+          marketingConsent: customerIdentity.emailMarketingConsent === true
         });
 
         json(res, result.statusCode, {
@@ -1600,14 +1520,6 @@ export const createServer = (options: CreateServerOptions = {}) => {
         });
         return;
       } catch (error) {
-        if (error instanceof SyntaxError) {
-          json(res, 400, { error: 'Invalid JSON body.' });
-          return;
-        }
-        if (error instanceof Error && error.message === 'Payload too large.') {
-          json(res, 413, { error: 'Payload too large.' });
-          return;
-        }
         const mapped = mapStoreError(error);
         json(res, mapped.statusCode, { error: mapped.message });
         return;
@@ -1644,8 +1556,8 @@ export const createServer = (options: CreateServerOptions = {}) => {
           name: customerIdentity.name ?? 'Autoscape Customer',
           email: customerIdentity.email,
           phone: customerIdentity.phone,
-          marketingConsent: customerIdentity.emailMarketingConsent,
           message: parsed.data.message,
+          marketingConsent: customerIdentity.emailMarketingConsent === true,
           attribution: parsed.data.attribution
         });
 
@@ -1672,47 +1584,6 @@ export const createServer = (options: CreateServerOptions = {}) => {
           ...result.body,
           replayed: result.replayed
         });
-        return;
-      } catch (error) {
-        if (error instanceof SyntaxError) {
-          json(res, 400, { error: 'Invalid JSON body.' });
-          return;
-        }
-        if (error instanceof Error && error.message === 'Payload too large.') {
-          json(res, 413, { error: 'Payload too large.' });
-          return;
-        }
-
-        const mapped = mapStoreError(error);
-        json(res, mapped.statusCode, { error: mapped.message });
-        return;
-      }
-    }
-
-    if (method === 'POST' && pathname === '/api/account/legal-acceptance') {
-      try {
-        const customerIdentity = await customerIdentityResolver(req);
-        if (!customerIdentity) {
-          throw new Error('AUTH_REQUIRED');
-        }
-
-        const body = await readJson(req);
-        const parsed = accountLegalAcceptancePayloadSchema.safeParse(body);
-        if (!parsed.success) {
-          json(res, 400, { error: 'Legal acceptance is required.', details: parsed.error.flatten() });
-          return;
-        }
-
-        await recordLegalAcceptance(req, {
-          action: 'complete_profile_terms',
-          authUserId: customerIdentity.userId,
-          email: customerIdentity.email,
-          metadata: {
-            surface: 'complete_profile'
-          }
-        });
-
-        json(res, 200, { ok: true });
         return;
       } catch (error) {
         if (error instanceof SyntaxError) {
@@ -1773,14 +1644,7 @@ export const createServer = (options: CreateServerOptions = {}) => {
         }
         assertCustomerPhoneProfile(customerIdentity);
 
-        const body = await readJson(req);
-        const parsed = paymentCheckoutPayloadSchema.safeParse(body);
-        if (!parsed.success) {
-          json(res, 400, { error: 'Legal acceptance is required.', details: parsed.error.flatten() });
-          return;
-        }
-
-        const paymentLink = await dataStore.getPaymentLinkByQuotePublicId({
+        let paymentLink = await dataStore.getPaymentLinkByQuotePublicId({
           quotePublicId: accountQuotePaymentCheckoutId,
           access: {
             authUserId: customerIdentity.userId,
@@ -1788,9 +1652,45 @@ export const createServer = (options: CreateServerOptions = {}) => {
           },
           previewImageBaseUrl: buildPreviewImageBaseUrl(req)
         });
+
         if (!paymentLink) {
-          json(res, 404, { error: 'Payment link not found for this quote.' });
-          return;
+          const quote = await dataStore.getQuoteByPublicId(accountQuotePaymentCheckoutId, {
+            authUserId: customerIdentity.userId,
+            isAdmin: false
+          });
+          if (!quote) {
+            json(res, 404, { error: 'Quote not found.' });
+            return;
+          }
+          if (quote.status !== 'verified' || quote.customerStatus !== 'awaiting_payment') {
+            throw new Error('QUOTE_PAYMENT_NOT_ALLOWED');
+          }
+
+          const approvedVersionNumber = await dataStore.getLatestQuoteVersionNumber(accountQuotePaymentCheckoutId);
+          const paymentToken = createPaymentToken();
+          await dataStore.createQuotePaymentLink({
+            quotePublicId: accountQuotePaymentCheckoutId,
+            approvedVersionNumber,
+            tokenHash: hashPaymentToken(paymentToken),
+            actor: {
+              userId: customerIdentity.userId,
+              role: 'SYSTEM'
+            }
+          });
+
+          paymentLink = await dataStore.getPaymentLinkByQuotePublicId({
+            quotePublicId: accountQuotePaymentCheckoutId,
+            access: {
+              authUserId: customerIdentity.userId,
+              isAdmin: false
+            },
+            previewImageBaseUrl: buildPreviewImageBaseUrl(req)
+          });
+
+          if (!paymentLink) {
+            json(res, 404, { error: 'Payment link not found for this quote.' });
+            return;
+          }
         }
 
         if (paymentLink.tokenRevokedAt) {
@@ -1807,19 +1707,6 @@ export const createServer = (options: CreateServerOptions = {}) => {
           return;
         }
 
-        await recordLegalAcceptance(req, {
-          action: 'payment_checkout_terms',
-          quotePublicId: accountQuotePaymentCheckoutId,
-          authUserId: customerIdentity.userId,
-          email: customerIdentity.email,
-          metadata: {
-            surface: 'dashboard_payment',
-            paymentLinkId: paymentLink.id,
-            mode: paymentLink.mode,
-            status: paymentLink.status
-          }
-        });
-
         const dashboardPaymentPageUrl = buildPaymentPageUrl(req, accountQuotePaymentCheckoutId);
         if (!dashboardPaymentPageUrl) {
           json(res, 500, { error: 'Public application URL is not configured for payments.' });
@@ -1829,14 +1716,6 @@ export const createServer = (options: CreateServerOptions = {}) => {
         json(res, 200, await createCheckoutForPaymentLink(paymentLink, dashboardPaymentPageUrl));
         return;
       } catch (error) {
-        if (error instanceof SyntaxError) {
-          json(res, 400, { error: 'Invalid JSON body.' });
-          return;
-        }
-        if (error instanceof Error && error.message === 'Payload too large.') {
-          json(res, 413, { error: 'Payload too large.' });
-          return;
-        }
         if (error instanceof StripePaymentConfigurationError) {
           json(res, 503, { error: error.message });
           return;
@@ -1887,6 +1766,44 @@ export const createServer = (options: CreateServerOptions = {}) => {
           return;
         }
 
+        const mapped = mapStoreError(error);
+        json(res, mapped.statusCode, { error: mapped.message });
+        return;
+      }
+    }
+
+    const accountQuoteBillingModeId = getPathMatch(pathname, /^\/api\/account\/quotes\/([^/]+)\/billing-mode$/);
+    if (method === 'POST' && accountQuoteBillingModeId) {
+      try {
+        const customerIdentity = await customerIdentityResolver(req);
+        if (!customerIdentity) {
+          throw new Error('AUTH_REQUIRED');
+        }
+        assertCustomerPhoneProfile(customerIdentity);
+
+        const body = await readJson(req);
+        const parsed = accountQuoteBillingModeSchema.safeParse(body);
+        if (!parsed.success) {
+          json(res, 400, {
+            error: 'Invalid billing mode payload.',
+            details: parsed.error.flatten()
+          });
+          return;
+        }
+
+        const result = await dataStore.updateQuoteBillingMode({
+          quotePublicId: accountQuoteBillingModeId,
+          authUserId: customerIdentity.userId,
+          billingMode: parsed.data.billingMode
+        });
+
+        json(res, 200, result);
+        return;
+      } catch (error) {
+        if (error instanceof SyntaxError) {
+          json(res, 400, { error: 'Invalid JSON body.' });
+          return;
+        }
         const mapped = mapStoreError(error);
         json(res, mapped.statusCode, { error: mapped.message });
         return;
@@ -1951,6 +1868,24 @@ export const createServer = (options: CreateServerOptions = {}) => {
           ...quote,
           billing
         });
+        return;
+      } catch (error) {
+        const mapped = mapStoreError(error);
+        json(res, mapped.statusCode, { error: mapped.message });
+        return;
+      }
+    }
+
+    const quotePreviewId = getPathMatch(pathname, /^\/api\/quote-preview\/([^/]+)$/);
+    if (method === 'GET' && quotePreviewId) {
+      try {
+        const quote = await dataStore.getPublicQuotePreviewByPublicId(quotePreviewId);
+        if (!quote) {
+          json(res, 404, { error: 'Quote not found.' });
+          return;
+        }
+
+        json(res, 200, quote);
         return;
       } catch (error) {
         const mapped = mapStoreError(error);
@@ -2087,6 +2022,63 @@ export const createServer = (options: CreateServerOptions = {}) => {
               exportMarketingSafe: hasCapability(identity.role, 'EXPORT_MARKETING_SAFE')
             }
           });
+          return;
+        }
+
+        if (method === 'POST' && pathname === '/api/admin/quotes/reserve-id') {
+          if (!canMutateQuotes) {
+            json(res, 403, { error: 'Forbidden.' });
+            return;
+          }
+
+          const result = await dataStore.reserveQuoteId({ actor });
+          json(res, 201, result);
+          return;
+        }
+
+        if (method === 'POST' && pathname === '/api/admin/quotes') {
+          if (!canMutateQuotes) {
+            json(res, 403, { error: 'Forbidden.' });
+            return;
+          }
+
+          const body = await readJson(req);
+          const parsed = adminQuoteCreateSchema.safeParse(body);
+
+          if (!parsed.success) {
+            json(res, 400, {
+              error: 'Invalid admin quote payload.',
+              details: parsed.error.flatten()
+            });
+            return;
+          }
+
+          const result = await dataStore.createAdminQuote({
+            quotePublicId: parsed.data.quoteId,
+            addressText: parsed.data.address,
+            location: parsed.data.location,
+            polygon: parsed.data.polygon,
+            polygonSourceJson: {
+              ...parsed.data.polygonSource,
+              activePolygonId: parsed.data.polygonSource.activePolygonId ?? null,
+              polygons: parsed.data.polygonSource.polygons.map((polygon) => ({
+                ...polygon,
+                rawStrokePoints: polygon.rawStrokePoints ?? null
+              }))
+            },
+            pricingVersion: parsed.data.pricingVersion ?? 'v1',
+            currency: parsed.data.currency ?? 'CAD',
+            serviceFrequency: parsed.data.serviceFrequency ?? 'weekly',
+            billingMode: parsed.data.billingMode ?? 'seasonal',
+            globalDiscountRate: parsed.data.globalDiscountRate,
+            seasonalDiscountRate: parsed.data.seasonalDiscountRate,
+            priceOverrideEnabled: parsed.data.priceOverrideEnabled,
+            overrideBasePerSessionTotal: parsed.data.overrideBasePerSessionTotal,
+            overrideReason: parsed.data.overrideReason,
+            actor
+          });
+
+          json(res, 201, result);
           return;
         }
 
@@ -2449,6 +2441,10 @@ export const createServer = (options: CreateServerOptions = {}) => {
             serviceFrequency: parsed.data.serviceFrequency ?? 'weekly',
             perSessionTotal: parsed.data.perSessionTotal,
             finalTotal: parsed.data.finalTotal,
+            globalDiscountRate: parsed.data.globalDiscountRate,
+            seasonalDiscountRate: parsed.data.seasonalDiscountRate,
+            priceOverrideEnabled: parsed.data.priceOverrideEnabled,
+            overrideBasePerSessionTotal: parsed.data.overrideBasePerSessionTotal,
             overrideReason: parsed.data.overrideReason,
             actor
           });
