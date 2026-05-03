@@ -1,6 +1,6 @@
 # Third-Party Services Disclosure
 
-Last updated: May 1, 2026
+Last updated: May 3, 2026
 
 This Third-Party Services Disclosure summarizes external services detected in the Autoscape codebase and documentation. Autoscape is operated by 1001283716 ONTARIO INC., operating as Autoscape.
 
@@ -20,9 +20,11 @@ Stripe provides Checkout, payment sessions, subscriptions for weekly per-visit b
 
 Resend provides approved-quote transactional email delivery when configured.
 
-Google Ads and Google tag provide advertising attribution and quote submission conversion measurement.
+Google Ads, Google Ads API, and Google tag provide advertising attribution, quote submission conversion measurement, and ad-spend/performance imports.
 
 PostgreSQL, Prisma, and application hosting infrastructure store and operate quotes, leads, contacts, service-area requests, audit logs, attribution records, payment records, and account-linked quote data.
+
+Authorized internal database and AI-assisted analysis tools may access first-party database data through controlled read-only credentials for marketing and operations analysis.
 
 DigitalOcean staging hosting and GoDaddy domain/DNS records are referenced in the project documentation.
 
@@ -35,6 +37,8 @@ Depending on the workflow, third parties may process:
 - Quote ID, quote metrics, pricing, billing mode, payment status, and payment metadata.
 - Email message content for approved quotes.
 - Advertising identifiers, UTM parameters, referrer, browser, device type, and conversion events.
+- Google Ads spend and performance metrics such as campaign, ad group, ad, device, network, impressions, clicks, cost, conversions, and conversion value.
+- First-party analytics events and sessions used for internal funnel analysis and reporting.
 - Technical data such as IP address, user agent, cookies, and session identifiers.
 
 ## Cross-Border Processing
@@ -46,4 +50,3 @@ Cross-border and vendor contract review: [NEEDS BUSINESS REVIEW: confirm product
 ## Third-Party Links
 
 Payment, authentication, maps, and provider-hosted pages may be governed by third-party terms and privacy notices. Autoscape is not responsible for third-party services outside its reasonable control.
-

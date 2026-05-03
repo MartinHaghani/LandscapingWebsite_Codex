@@ -6,6 +6,7 @@ import { QuoteCreatorPage } from './pages/QuoteCreatorPage';
 import { QuoteEditorPage } from './pages/QuoteEditorPage';
 import {
   adminApi,
+  type AdminAnalyticsHealth,
   type AdminAttributionSummaryRow,
   type AdminAuditItem,
   type AdminContactItem,
@@ -233,6 +234,7 @@ const App = () => {
   const [loadingAudit, setLoadingAudit] = useState(false);
 
   const [attributionSummary, setAttributionSummary] = useState<AdminAttributionSummaryRow[]>([]);
+  const [analyticsHealth, setAnalyticsHealth] = useState<AdminAnalyticsHealth | null>(null);
   const [loadingAttribution, setLoadingAttribution] = useState(false);
 
   const [quoteFilters, setQuoteFilters] = useState<QuoteListParams>({
@@ -415,8 +417,12 @@ const App = () => {
     setError(null);
 
     try {
-      const response = await adminApi.getAttributionSummary(activeSession);
+      const [response, health] = await Promise.all([
+        adminApi.getAttributionSummary(activeSession),
+        adminApi.getAnalyticsHealth(activeSession)
+      ]);
       setAttributionSummary(response.items);
+      setAnalyticsHealth(health);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Unable to load attribution summary.');
     } finally {
@@ -458,6 +464,7 @@ const App = () => {
       setLeads([]);
       setAuditLogs([]);
       setAttributionSummary([]);
+      setAnalyticsHealth(null);
       return;
     }
 
@@ -1143,6 +1150,43 @@ const App = () => {
 
         {tab === 'attribution' ? (
           <section className="panel">
+            {analyticsHealth ? (
+              <div className="metrics-grid">
+                <MetricCard label="Events (24h)" value={analyticsHealth.eventsLast24h} />
+                <MetricCard label="Sessions (24h)" value={analyticsHealth.sessionsLast24h} />
+                <MetricCard
+                  label="Google Ads Import"
+                  value={analyticsHealth.latestGoogleAdsImport?.status ?? 'none'}
+                />
+                <MetricCard
+                  label="Import Rows"
+                  value={analyticsHealth.latestGoogleAdsImport?.rowCount ?? 0}
+                />
+                <MetricCard
+                  label="DQ Issues"
+                  value={
+                    analyticsHealth.dataQuality.missingSessionEventCount +
+                    analyticsHealth.dataQuality.missingAttributionSubmittedQuoteCount +
+                    analyticsHealth.dataQuality.paidQuotesMissingAttributionCount +
+                    analyticsHealth.dataQuality.lifecycleEventsMissingQuoteCount +
+                    analyticsHealth.dataQuality.impossibleFunnelOrderCount +
+                    analyticsHealth.dataQuality.utmCasingDriftCount
+                  }
+                />
+                <MetricCard
+                  label="Failed Imports"
+                  value={analyticsHealth.dataQuality.failedAdSpendImportCount7d}
+                />
+              </div>
+            ) : null}
+
+            {analyticsHealth?.latestGoogleAdsImport?.errorMessage ? (
+              <p className="error-banner">{analyticsHealth.latestGoogleAdsImport.errorMessage}</p>
+            ) : null}
+            {analyticsHealth?.dataQuality.suddenDailyEventVolumeDrop ? (
+              <p className="error-banner">Analytics event volume dropped sharply yesterday.</p>
+            ) : null}
+
             <Toolbar
               search={attributionSearch}
               onSearchChange={setAttributionSearch}

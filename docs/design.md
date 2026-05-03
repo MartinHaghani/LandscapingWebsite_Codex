@@ -503,3 +503,28 @@ Implementation:
 - footer legal links are present in full and compact footer variants
 - action-adjacent legal notices are added to contact, quote submit, complete-profile, claim-quote, and payment checkout surfaces
 - cookie banner behavior was intentionally not added because no consent framework exists in the app yet; the legal evidence report flags cookie consent strategy for business/legal review
+
+## 28) First-Party Marketing Intelligence
+
+Decision:
+
+- Make Autoscape's own Postgres database the marketing source of truth instead of treating ad-manager feedback as the only analytics destination.
+
+Implementation:
+
+- public client captures anonymous sessions, page/CTA/contact/quote/payment events, UTMs, Google Ads click IDs, ValueTrack fields, device/browser fields, consent snapshot, and experiment properties through `client/src/lib/analytics.ts`
+- `POST /api/analytics/events` accepts only allowlisted events and dedupes by `eventId`
+- server quote, admin, and payment paths emit authoritative lifecycle milestones for draft creation, claim, finalize, admin approval/rejection, checkout start, and paid outcomes
+- Google Ads spend ingestion uses the Google Ads API directly into `ad_platform_daily_metrics`, with import runs logged in `ad_spend_import_runs`
+- reporting views provide the preferred semantic layer for marketing analysis:
+  - `marketing_funnel_daily`
+  - `campaign_performance_daily`
+  - `source_landing_page_performance`
+  - `quote_dropoff_sessions`
+  - `experiment_performance_daily`
+  - `geo_demand_summary`
+  - `lead_quality_summary`
+  - `paid_customer_attribution`
+- external database-agent access is a production Postgres read-only role, not an app-admin role; it has full internal PII visibility for analysis but no write or DDL privileges
+- Google Ads receives sanitized conversion milestones only; raw addresses, contact details, exact lat/lng, and geometry remain first-party unless enhanced-conversion consent/legal review explicitly expands that boundary
+- pricing constants, geometry validation, and quote measurement remain outside marketing-agent autonomy and require explicit human review before any change

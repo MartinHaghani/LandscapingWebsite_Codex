@@ -250,9 +250,17 @@ APPROVED_QUOTE_EMAIL_REPLY_TO=contact@autoscape.ca
 MAPBOX_STATIC_ACCESS_TOKEN=<mapbox static image token>
 STRIPE_SECRET_KEY=<staging Stripe test secret key>
 STRIPE_WEBHOOK_SECRET=<staging Stripe webhook signing secret>
+GOOGLE_ADS_DEVELOPER_TOKEN=<staging or shared Google Ads developer token>
+GOOGLE_ADS_CLIENT_ID=<Google Ads OAuth client id>
+GOOGLE_ADS_CLIENT_SECRET=<Google Ads OAuth client secret>
+GOOGLE_ADS_REFRESH_TOKEN=<Google Ads OAuth refresh token>
+GOOGLE_ADS_CUSTOMER_ID=<Google Ads customer id without dashes>
+GOOGLE_ADS_LOGIN_CUSTOMER_ID=<optional manager account id without dashes>
 ```
 
 Set `DATABASE_URL` on the `migrate` job as the same staging database URL/bindable variable.
+
+Schedule `npm --prefix server run ads:import-google -- --days=30` as a daily production/staging job only after the Google Ads API credentials above are configured.
 
 ## 6) External Service Setup
 
@@ -349,6 +357,12 @@ RESEND_API_KEY=<production Resend key>
 MAPBOX_STATIC_ACCESS_TOKEN=<production static Mapbox token>
 STRIPE_SECRET_KEY=<production Stripe live secret key>
 STRIPE_WEBHOOK_SECRET=<production Stripe webhook signing secret>
+GOOGLE_ADS_DEVELOPER_TOKEN=<production Google Ads developer token>
+GOOGLE_ADS_CLIENT_ID=<Google Ads OAuth client id>
+GOOGLE_ADS_CLIENT_SECRET=<Google Ads OAuth client secret>
+GOOGLE_ADS_REFRESH_TOKEN=<Google Ads OAuth refresh token>
+GOOGLE_ADS_CUSTOMER_ID=<Google Ads customer id without dashes>
+GOOGLE_ADS_LOGIN_CUSTOMER_ID=<optional manager account id without dashes>
 ```
 
 Production frontend build env differences:

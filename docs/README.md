@@ -5,9 +5,11 @@
 - [`feature_flow.md`](./feature_flow.md): user journeys for Instant Quote and Contact, including edge-case handling.
 - [`design.md`](./design.md): design decisions and rationale (accuracy, pricing, storage, validation model).
 - [`deployment.md`](./deployment.md): DigitalOcean staging/production setup, current live status, env vars, DNS, smoke tests, and rollback.
+- [`marketing_agent_data_dictionary.md`](./marketing_agent_data_dictionary.md): canonical marketing tables, views, joins, metrics, event definitions, PII fields, and agent output guidance.
+- [`marketing_agent_readonly_role.sql`](./marketing_agent_readonly_role.sql): manual production Postgres read-only role template for external database-agent access.
 - [`legal_evidence_report.md`](./legal_evidence_report.md): legal document paths, codebase evidence, third-party/data-flow findings, and owner/attorney review items.
 - [`coding_standards.md`](./coding_standards.md): TypeScript, linting, formatting, test, and doc-update expectations.
 - [`changelog.md`](./changelog.md): commit history snapshot generated from git log.
 - [`troubleshooting.md`](./troubleshooting.md): runbook for local port drift, stale frontend servers, and verification steps.
 
-Current deployment note: staging is active and authenticated quote/admin smoke tests pass through redeploy persistence, approval-email resend, and Stripe sandbox Checkout/webhook payment confirmation. Production remains blocked until production environment values and launch confirmation are ready.
+Current deployment note: staging is active and authenticated quote/admin smoke tests pass through redeploy persistence, approval-email resend, and Stripe sandbox Checkout/webhook payment confirmation. Production is active with separate managed Postgres/PostGIS storage, live service env values, production migrations applied, and HTTPS smoke checks passing.

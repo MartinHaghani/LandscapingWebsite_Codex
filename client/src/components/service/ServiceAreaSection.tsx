@@ -2,6 +2,7 @@ import { lazy, Suspense, useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import type { ServiceAreaResponse } from '../../types';
 import { api, ApiError } from '../../lib/api';
+import { trackAnalyticsEvent } from '../../lib/analytics';
 import { Button } from '../ui/Button';
 import { Card } from '../ui/Card';
 
@@ -67,7 +68,18 @@ export const ServiceAreaSection = () => {
             </p>
           </div>
 
-          <Link to="/instant-quote" className="w-full md:w-auto">
+          <Link
+            to="/instant-quote"
+            className="w-full md:w-auto"
+            onClick={() =>
+              trackAnalyticsEvent('cta.clicked', {
+                properties: {
+                  component: 'services_area',
+                  destination: '/instant-quote'
+                }
+              })
+            }
+          >
             <Button className="w-full px-8 py-4 text-base font-bold md:w-auto">Check my address</Button>
           </Link>
         </div>

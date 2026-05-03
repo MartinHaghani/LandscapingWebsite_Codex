@@ -13,6 +13,7 @@ Primary domains:
 1. Quote capture and verification workflow
 2. Service-area display/check/request workflow
 3. Admin operations and attribution analytics
+4. First-party marketing analytics, ad-spend ingestion, and agent-ready reporting
 
 ## 2) Runtime and Entry Points
 
@@ -28,6 +29,10 @@ Primary domains:
 - Public legal routes: `/legal` and `/legal/:slug` render Markdown drafts from `client/src/content/legal/` through `client/src/pages/LegalPage.tsx`; footer/form/payment links are wired to these routes.
 - Public HTML shell: `client/index.html` includes the Google Ads tag `AW-17991079326`; `admin/index.html` is intentionally separate and untagged.
 - Google Ads conversion helper: `client/src/lib/googleAds.ts` sends the `Submit lead form` conversion `AW-17991079326/FqIMCOHXqYIcEJ6r6IJD` only after successful public quote draft creation.
+- First-party analytics SDK: `client/src/lib/analytics.ts` owns anonymous/session IDs, attribution parsing, consent snapshot capture, event batching, and unload `sendBeacon` flushing.
+- Analytics API: `POST /api/analytics/events` in `server/src/server.ts` accepts allowlisted batched events and dedupes with client-provided `eventId` values.
+- Analytics admin health: `GET /api/admin/analytics/health` returns recent event/session volume and latest Google Ads import status for roles with `VIEW_ATTRIBUTION`.
+- Google Ads spend importer: `server/src/lib/googleAdsImport.ts` + `server/src/scripts/importGoogleAdsSpend.ts`, exposed as `npm --prefix server run ads:import-google -- --days=30`.
 - Contact page: `client/src/pages/ContactPage.tsx` (warm-light two-column contact surface with compact direct phone/email actions and the existing idempotent message form)
 - Services gallery: `client/src/pages/ServicesPage.tsx` + `client/src/components/service/ServiceIllustrations.tsx` (coverage-first entry page with a shorter mobile service-area map and five shared-style inline SVG service scenes)
 - Instant quote builder: `client/src/pages/InstantQuotePage.tsx` + `client/src/components/quote/QuoteMapDrawingToolbar.tsx` (badge-only header + compact-on-mobile non-interactive three-step progress rail, mobile-stacked address input/submit controls, address suggestion click/highlighted-Enter auto-continue through the coverage gate using the selected suggestion data directly with duplicate-check protection, full-width map builder, delayed map-guide modal shell for fresh address loads, cleaner editorial guide chrome with one white panel, responsive shorter mobile demo heights, a slowly fading unified demo-and-caption media unit, no divider or white caption box between SVG and guide text, a right-sized desktop demo viewport with the camera layer aligned to the map-body clip window so the SVG starts centered and the bottom remains visible, a tighter centered caption strip directly under the demo, equal-width toolbar buttons above the artwork, separate bottom navigation/progress chrome, looping first-step miniature draw-lawn demo using the refreshed brighter popup-house SVG background to draw both left-side lawn zones inside the same framed viewport treatment used by step 2, with a shared 1.6-second camera transform that does not slow cursor/edit phases, plus loop-edge fades that soften the demo restart, animated second-step SVG lesson that carries those two completed left-side lawns forward while drawing and correcting the right-side backyard zone with the same decoupled camera transform timing, matching framed background treatment, shorter `Add extra points` / `Delete extra points` captions, and the same loop-edge fade behavior, animated third-step SVG obstacle lesson that keeps that same house background and finished lawn state while clicking `Draw obstacle`, tracing a selected red obstacle polygon around the front tree in the bottom-left lawn, holding the completed obstacle scene for 2 seconds before looping again, and swapping the last-slide nav control from `Next` to a green `Done` button that slowly fades the popup back into the tool, desktop floating `Guide` plus `Done` action cluster, compact two-row mobile map dock, desktop-only under-map metrics/unit/draft summary, local draft autosave, and review handoff)
@@ -57,6 +62,7 @@ Primary domains:
   - `server/prisma/migrations/20260416130000_approved_quote_email_delivery/migration.sql`
   - `server/prisma/migrations/20260421110000_stripe_quote_payments/migration.sql`
   - `server/prisma/migrations/20260501120000_admin_quote_creation_claim_flow/migration.sql`
+  - `server/prisma/migrations/20260503120000_marketing_analytics/migration.sql`
 
 Canonical tables:
 
@@ -71,9 +77,24 @@ Canonical tables:
 - `quote_notes`
 - `service_area_requests`
 - `attribution_touches`
+- `analytics_sessions`
+- `analytics_events`
+- `ad_platform_daily_metrics`
+- `ad_spend_import_runs`
 - `audit_logs`
 - `base_stations`
 - `idempotency_records`
+
+Marketing reporting views:
+
+- `marketing_funnel_daily`
+- `campaign_performance_daily`
+- `source_landing_page_performance`
+- `quote_dropoff_sessions`
+- `experiment_performance_daily`
+- `geo_demand_summary`
+- `lead_quality_summary`
+- `paid_customer_attribution`
 
 Spatial storage:
 
@@ -178,6 +199,15 @@ Customer profile sync contract:
 - `POST /api/service-area/request` (idempotent)
 - Service-area generation uses server-side base-station config and falls back to the default Vaughan station when no base-station env is provided, including production.
 
+### Analytics
+
+- `POST /api/analytics/events`
+- Payload is a batch containing one session snapshot and one or more allowlisted events.
+- `eventId` is unique and used for idempotency; retries return duplicate counts instead of creating duplicate rows.
+- Events copy attribution from the session at receipt time so later URL/session changes do not erase the conversion context.
+- Browser capture may include Google Ads click IDs, UTMs, ValueTrack fields, route/step, experiment name, variant, exposure ID, and generic JSON event properties.
+- Internal quote, customer, address, exact coordinates, and geometry records stay in first-party tables and are not forwarded to ad platforms by this endpoint.
+
 Idempotency behavior:
 
 - request hash stored by `(scope, idempotency_key)`
@@ -205,6 +235,7 @@ All admin endpoints are under `/api/admin/*` and return cursor pagination payloa
 - `GET /api/admin/contacts`
 - `GET /api/admin/audit-logs`
 - `GET /api/admin/attribution/summary`
+- `GET /api/admin/analytics/health`
 - `GET /api/admin/exports/quotes.csv`
 
 Response envelope for list endpoints:
@@ -288,9 +319,18 @@ Development cutover:
 - One `first_touch` per lead.
 - One active `last_touch` per lead.
 - One `submit_snapshot` per submitted quote.
+- Analytics sessions keep click IDs, UTMs, landing/referrer, and Google ValueTrack fields independently of lead attribution touches.
+- Reporting views define first-touch, last-touch, submit-snapshot, and paid-customer joins once for agent use.
+- Google Ads spend rows are keyed by platform/account/date/campaign/ad group/ad/device/network and are upserted so trailing-window imports can revise delayed metrics.
 - Reporting defaults:
   - acquisition: `first_touch`
   - conversion: `submit_snapshot`
+
+Agent semantic layer:
+
+- `docs/marketing_agent_data_dictionary.md` defines canonical joins, metrics, event meanings, attribution caveats, PII fields, and brief-answer defaults for external database agents.
+- `docs/marketing_agent_readonly_role.sql` is a manual DBA template for a production read-only Postgres role with full PII visibility, `SELECT` grants, connection limits, timeouts, and read-only transactions.
+- The agent should prefer the reporting views before raw table analysis and should not recommend pricing or geometry changes without explicit human review.
 
 ## 8) Security and PII Controls
 
@@ -340,6 +380,8 @@ PII masking:
 
 - MARKETING responses mask name/email/phone
 - CSV export for MARKETING is masked by default
+- External database-agent access is separate from admin RBAC. It is a database role, not an app role, and is intentionally `SELECT` only with full internal PII visibility for on-demand analysis.
+- Ad-platform exports are separate from first-party analytics. Raw address, contact information, exact lat/lng, and geometry are not sent to Google Ads unless a separate enhanced-conversion consent/legal review approves that expansion.
 
 ## 9) Service-Area Privacy Hardening
 

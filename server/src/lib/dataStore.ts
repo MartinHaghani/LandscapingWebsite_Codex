@@ -8,6 +8,12 @@ import union from '@turf/union';
 import type { Feature, MultiPolygon, Polygon } from 'geojson';
 import { validateAndMeasureGeometry } from './geometry.js';
 import { hashJson } from './hash.js';
+import type {
+  AnalyticsAttributionInput,
+  AnalyticsEventBatchInput,
+  AnalyticsEventName,
+  AnalyticsProperties
+} from './analytics.js';
 import {
   computePerSessionTotal,
   computeDiscountedQuotePricing,
@@ -34,10 +40,20 @@ export interface AttributionInput {
   utmCampaign?: string;
   utmTerm?: string;
   utmContent?: string;
+  utmId?: string;
   landingPath?: string;
+  landingUrl?: string;
   referrer?: string;
+  googleCampaignId?: string;
+  googleAdGroupId?: string;
+  googleAdId?: string;
+  googleKeyword?: string;
+  googleMatchType?: string;
+  googleDevice?: string;
+  googleNetwork?: string;
   deviceType?: string;
   browser?: string;
+  userAgent?: string;
   geoCity?: string;
 }
 
@@ -274,6 +290,64 @@ interface ListAuditLogsInput {
 
 interface AttributionSummaryInput {
   launchAt?: Date;
+}
+
+export interface AdPlatformDailyMetricInput {
+  platform: 'google_ads';
+  accountId: string;
+  date: string;
+  campaignId: string | null;
+  campaignName: string | null;
+  adGroupId: string | null;
+  adGroupName: string | null;
+  adId: string | null;
+  adName: string | null;
+  device: string | null;
+  network: string | null;
+  impressions: number;
+  clicks: number;
+  costMicros: bigint | number;
+  conversions: number;
+  conversionValueMicros: bigint | number;
+}
+
+export interface AdSpendImportRunInput {
+  provider: 'google_ads';
+  status: 'running' | 'succeeded' | 'failed';
+  dateFrom: string;
+  dateTo: string;
+  rowCount?: number;
+  errorMessage?: string | null;
+  requestIds?: string[];
+  startedAt?: string;
+  finishedAt?: string | null;
+}
+
+export interface AnalyticsHealthSummary {
+  generatedAt: string;
+  eventsLast24h: number;
+  sessionsLast24h: number;
+  duplicateEventCount: number;
+  missingSessionEventCount: number;
+  dataQuality: {
+    missingSessionEventCount: number;
+    missingAttributionSubmittedQuoteCount: number;
+    paidQuotesMissingAttributionCount: number;
+    lifecycleEventsMissingQuoteCount: number;
+    impossibleFunnelOrderCount: number;
+    utmCasingDriftCount: number;
+    suddenDailyEventVolumeDrop: boolean;
+    failedAdSpendImportCount7d: number;
+  };
+  latestGoogleAdsImport: {
+    status: string;
+    startedAt: string;
+    finishedAt: string | null;
+    dateFrom: string;
+    dateTo: string;
+    rowCount: number;
+    errorMessage: string | null;
+  } | null;
 }
 
 interface UpdateQuoteStatusInput {
@@ -645,6 +719,58 @@ interface MemoryAttributionTouch {
   touchType: 'first_touch' | 'last_touch' | 'session_touch' | 'submit_snapshot';
   attribution: AttributionInput;
   createdAt: string;
+}
+
+interface MemoryAnalyticsSession {
+  id: string;
+  anonymousId: string;
+  startedAt: string;
+  lastSeenAt: string;
+  attribution: AnalyticsAttributionInput;
+  consent: {
+    functional: boolean;
+    analytics: boolean;
+    marketing: boolean;
+  };
+}
+
+interface MemoryAnalyticsEvent {
+  eventId: string;
+  sessionId: string | null;
+  anonymousId: string | null;
+  leadId: string | null;
+  quoteId: string | null;
+  eventName: AnalyticsEventName;
+  route: string;
+  step: string | null;
+  properties: AnalyticsProperties;
+  attribution: AnalyticsAttributionInput;
+  consent: {
+    functional: boolean;
+    analytics: boolean;
+    marketing: boolean;
+  };
+  createdAt: string;
+  receivedAt: string;
+}
+
+interface MemoryAdPlatformDailyMetric extends Omit<AdPlatformDailyMetricInput, 'costMicros' | 'conversionValueMicros'> {
+  costMicros: bigint;
+  conversionValueMicros: bigint;
+  importedAt: string;
+}
+
+interface MemoryAdSpendImportRun {
+  id: string;
+  provider: 'google_ads';
+  status: 'running' | 'succeeded' | 'failed';
+  dateFrom: string;
+  dateTo: string;
+  rowCount: number;
+  errorMessage: string | null;
+  requestIds: string[];
+  startedAt: string;
+  finishedAt: string | null;
 }
 
 interface MemoryQuoteNote {
@@ -1481,6 +1607,31 @@ const cleanAttribution = (attribution?: AttributionInput): AttributionInput => (
   geoCity: attribution?.geoCity?.trim()
 });
 
+const cleanAnalyticsAttribution = (attribution?: AnalyticsAttributionInput): AnalyticsAttributionInput => ({
+  gclid: attribution?.gclid?.trim(),
+  gbraid: attribution?.gbraid?.trim(),
+  wbraid: attribution?.wbraid?.trim(),
+  utmSource: attribution?.utmSource?.trim(),
+  utmMedium: attribution?.utmMedium?.trim(),
+  utmCampaign: attribution?.utmCampaign?.trim(),
+  utmTerm: attribution?.utmTerm?.trim(),
+  utmContent: attribution?.utmContent?.trim(),
+  utmId: attribution?.utmId?.trim(),
+  landingPath: attribution?.landingPath?.trim(),
+  landingUrl: attribution?.landingUrl?.trim(),
+  referrer: attribution?.referrer?.trim(),
+  googleCampaignId: attribution?.googleCampaignId?.trim(),
+  googleAdGroupId: attribution?.googleAdGroupId?.trim(),
+  googleAdId: attribution?.googleAdId?.trim(),
+  googleKeyword: attribution?.googleKeyword?.trim(),
+  googleMatchType: attribution?.googleMatchType?.trim(),
+  googleDevice: attribution?.googleDevice?.trim(),
+  googleNetwork: attribution?.googleNetwork?.trim(),
+  deviceType: attribution?.deviceType?.trim(),
+  browser: attribution?.browser?.trim(),
+  userAgent: attribution?.userAgent?.trim()
+});
+
 const nowIso = () => new Date().toISOString();
 
 const getLatestMemoryApprovedQuoteEmailDelivery = (
@@ -1536,6 +1687,11 @@ export class DataStore {
     contacts: [] as MemoryLeadContact[],
     requests: [] as MemoryServiceAreaRequest[],
     attributionTouches: [] as MemoryAttributionTouch[],
+    analyticsSessions: new Map<string, MemoryAnalyticsSession>(),
+    analyticsEvents: new Map<string, MemoryAnalyticsEvent>(),
+    duplicateAnalyticsEventCount: 0,
+    adPlatformDailyMetrics: new Map<string, MemoryAdPlatformDailyMetric>(),
+    adSpendImportRuns: [] as MemoryAdSpendImportRun[],
     quoteNotes: [] as MemoryQuoteNote[],
     auditLogs: [] as MemoryAuditLog[],
     idempotency: new Map<string, MemoryIdempotencyRecord>(),
@@ -2009,6 +2165,290 @@ export class DataStore {
     }
   }
 
+  async recordAnalyticsEvents(input: AnalyticsEventBatchInput) {
+    const cleanedAttribution = cleanAnalyticsAttribution(input.session.attribution);
+    const receivedAt = nowIso();
+
+    if (!this.prisma) {
+      this.memory.analyticsSessions.set(input.session.id, {
+        id: input.session.id,
+        anonymousId: input.session.anonymousId,
+        startedAt: input.session.startedAt,
+        lastSeenAt: input.session.lastSeenAt,
+        attribution: cleanedAttribution,
+        consent: input.session.consent
+      });
+
+      let accepted = 0;
+      let duplicates = 0;
+
+      input.events.forEach((event) => {
+        if (this.memory.analyticsEvents.has(event.eventId)) {
+          duplicates += 1;
+          this.memory.duplicateAnalyticsEventCount += 1;
+          return;
+        }
+
+        this.memory.analyticsEvents.set(event.eventId, {
+          eventId: event.eventId,
+          sessionId: input.session.id,
+          anonymousId: input.session.anonymousId,
+          leadId: event.leadId ?? null,
+          quoteId: event.quoteId ?? null,
+          eventName: event.eventName,
+          route: event.route,
+          step: event.step ?? null,
+          properties: event.properties ?? {},
+          attribution: cleanedAttribution,
+          consent: input.session.consent,
+          createdAt: event.createdAt,
+          receivedAt
+        });
+        accepted += 1;
+      });
+
+      return {
+        accepted,
+        duplicates,
+        rejected: 0
+      };
+    }
+
+    await this.prisma.$executeRaw(
+      Prisma.sql`
+        INSERT INTO "analytics_sessions" (
+          "id",
+          "anonymous_id",
+          "started_at",
+          "last_seen_at",
+          "landing_path",
+          "landing_url",
+          "referrer",
+          "gclid",
+          "gbraid",
+          "wbraid",
+          "utm_source",
+          "utm_medium",
+          "utm_campaign",
+          "utm_term",
+          "utm_content",
+          "utm_id",
+          "google_campaign_id",
+          "google_ad_group_id",
+          "google_ad_id",
+          "google_keyword",
+          "google_match_type",
+          "google_device",
+          "google_network",
+          "device_type",
+          "browser",
+          "user_agent",
+          "functional_consent",
+          "analytics_consent",
+          "marketing_consent"
+        )
+        VALUES (
+          ${input.session.id},
+          ${input.session.anonymousId},
+          ${new Date(input.session.startedAt)},
+          ${new Date(input.session.lastSeenAt)},
+          ${cleanedAttribution.landingPath ?? null},
+          ${cleanedAttribution.landingUrl ?? null},
+          ${cleanedAttribution.referrer ?? null},
+          ${cleanedAttribution.gclid ?? null},
+          ${cleanedAttribution.gbraid ?? null},
+          ${cleanedAttribution.wbraid ?? null},
+          ${cleanedAttribution.utmSource ?? null},
+          ${cleanedAttribution.utmMedium ?? null},
+          ${cleanedAttribution.utmCampaign ?? null},
+          ${cleanedAttribution.utmTerm ?? null},
+          ${cleanedAttribution.utmContent ?? null},
+          ${cleanedAttribution.utmId ?? null},
+          ${cleanedAttribution.googleCampaignId ?? null},
+          ${cleanedAttribution.googleAdGroupId ?? null},
+          ${cleanedAttribution.googleAdId ?? null},
+          ${cleanedAttribution.googleKeyword ?? null},
+          ${cleanedAttribution.googleMatchType ?? null},
+          ${cleanedAttribution.googleDevice ?? null},
+          ${cleanedAttribution.googleNetwork ?? null},
+          ${cleanedAttribution.deviceType ?? null},
+          ${cleanedAttribution.browser ?? null},
+          ${cleanedAttribution.userAgent ?? null},
+          ${input.session.consent.functional},
+          ${input.session.consent.analytics},
+          ${input.session.consent.marketing}
+        )
+        ON CONFLICT ("id") DO UPDATE SET
+          "last_seen_at" = GREATEST("analytics_sessions"."last_seen_at", EXCLUDED."last_seen_at"),
+          "gclid" = COALESCE(EXCLUDED."gclid", "analytics_sessions"."gclid"),
+          "gbraid" = COALESCE(EXCLUDED."gbraid", "analytics_sessions"."gbraid"),
+          "wbraid" = COALESCE(EXCLUDED."wbraid", "analytics_sessions"."wbraid"),
+          "utm_source" = COALESCE(EXCLUDED."utm_source", "analytics_sessions"."utm_source"),
+          "utm_medium" = COALESCE(EXCLUDED."utm_medium", "analytics_sessions"."utm_medium"),
+          "utm_campaign" = COALESCE(EXCLUDED."utm_campaign", "analytics_sessions"."utm_campaign"),
+          "utm_term" = COALESCE(EXCLUDED."utm_term", "analytics_sessions"."utm_term"),
+          "utm_content" = COALESCE(EXCLUDED."utm_content", "analytics_sessions"."utm_content"),
+          "utm_id" = COALESCE(EXCLUDED."utm_id", "analytics_sessions"."utm_id"),
+          "google_campaign_id" = COALESCE(EXCLUDED."google_campaign_id", "analytics_sessions"."google_campaign_id"),
+          "google_ad_group_id" = COALESCE(EXCLUDED."google_ad_group_id", "analytics_sessions"."google_ad_group_id"),
+          "google_ad_id" = COALESCE(EXCLUDED."google_ad_id", "analytics_sessions"."google_ad_id"),
+          "google_keyword" = COALESCE(EXCLUDED."google_keyword", "analytics_sessions"."google_keyword"),
+          "google_match_type" = COALESCE(EXCLUDED."google_match_type", "analytics_sessions"."google_match_type"),
+          "google_device" = COALESCE(EXCLUDED."google_device", "analytics_sessions"."google_device"),
+          "google_network" = COALESCE(EXCLUDED."google_network", "analytics_sessions"."google_network"),
+          "functional_consent" = EXCLUDED."functional_consent",
+          "analytics_consent" = EXCLUDED."analytics_consent",
+          "marketing_consent" = EXCLUDED."marketing_consent"
+      `
+    );
+
+    let accepted = 0;
+    let duplicates = 0;
+
+    for (const event of input.events) {
+      const inserted = await this.prisma.$queryRaw<Array<{ event_id: string }>>(
+        Prisma.sql`
+          INSERT INTO "analytics_events" (
+            "event_id",
+            "session_id",
+            "anonymous_id",
+            "lead_id",
+            "quote_id",
+            "event_name",
+            "route",
+            "step",
+            "properties_json",
+            "gclid",
+            "gbraid",
+            "wbraid",
+            "utm_source",
+            "utm_medium",
+            "utm_campaign",
+            "utm_term",
+            "utm_content",
+            "utm_id",
+            "landing_path",
+            "landing_url",
+            "referrer",
+            "google_campaign_id",
+            "google_ad_group_id",
+            "google_ad_id",
+            "google_keyword",
+            "google_match_type",
+            "google_device",
+            "google_network",
+            "device_type",
+            "browser",
+            "user_agent",
+            "functional_consent",
+            "analytics_consent",
+            "marketing_consent",
+            "created_at",
+            "received_at"
+          )
+          VALUES (
+            ${event.eventId},
+            ${input.session.id},
+            ${input.session.anonymousId},
+            ${event.leadId ?? null},
+            ${event.quoteId ?? null},
+            ${event.eventName},
+            ${event.route},
+            ${event.step ?? null},
+            ${JSON.stringify(event.properties ?? {})}::jsonb,
+            ${cleanedAttribution.gclid ?? null},
+            ${cleanedAttribution.gbraid ?? null},
+            ${cleanedAttribution.wbraid ?? null},
+            ${cleanedAttribution.utmSource ?? null},
+            ${cleanedAttribution.utmMedium ?? null},
+            ${cleanedAttribution.utmCampaign ?? null},
+            ${cleanedAttribution.utmTerm ?? null},
+            ${cleanedAttribution.utmContent ?? null},
+            ${cleanedAttribution.utmId ?? null},
+            ${cleanedAttribution.landingPath ?? null},
+            ${cleanedAttribution.landingUrl ?? null},
+            ${cleanedAttribution.referrer ?? null},
+            ${cleanedAttribution.googleCampaignId ?? null},
+            ${cleanedAttribution.googleAdGroupId ?? null},
+            ${cleanedAttribution.googleAdId ?? null},
+            ${cleanedAttribution.googleKeyword ?? null},
+            ${cleanedAttribution.googleMatchType ?? null},
+            ${cleanedAttribution.googleDevice ?? null},
+            ${cleanedAttribution.googleNetwork ?? null},
+            ${cleanedAttribution.deviceType ?? null},
+            ${cleanedAttribution.browser ?? null},
+            ${cleanedAttribution.userAgent ?? null},
+            ${input.session.consent.functional},
+            ${input.session.consent.analytics},
+            ${input.session.consent.marketing},
+            ${new Date(event.createdAt)},
+            ${new Date(receivedAt)}
+          )
+          ON CONFLICT ("event_id") DO NOTHING
+          RETURNING "event_id"
+        `
+      );
+
+      if (inserted.length > 0) {
+        accepted += 1;
+      } else {
+        duplicates += 1;
+      }
+    }
+
+    return {
+      accepted,
+      duplicates,
+      rejected: 0
+    };
+  }
+
+  async recordInternalAnalyticsEvent(input: {
+    eventName: AnalyticsEventName;
+    quoteId?: string | null;
+    leadId?: string | null;
+    route?: string;
+    step?: string;
+    properties?: AnalyticsProperties;
+    eventId?: string;
+    createdAt?: string;
+  }) {
+    const createdAt = input.createdAt ?? nowIso();
+    const eventId =
+      input.eventId ??
+      `server-${input.eventName}-${input.quoteId ?? input.leadId ?? 'global'}-${createdAt}-${nanoid(8)}`;
+
+    const batch: AnalyticsEventBatchInput = {
+      session: {
+        id: `server-${createdAt.slice(0, 10)}`,
+        anonymousId: 'server',
+        startedAt: createdAt,
+        lastSeenAt: createdAt,
+        attribution: {},
+        consent: {
+          functional: true,
+          analytics: true,
+          marketing: false
+        }
+      },
+      events: [
+        {
+          eventId,
+          eventName: input.eventName,
+          route: input.route ?? 'server',
+          step: input.step,
+          leadId: input.leadId ?? undefined,
+          quoteId: input.quoteId ?? undefined,
+          properties: input.properties,
+          createdAt
+        }
+      ]
+    };
+
+    await this.recordAnalyticsEvents(batch);
+  }
+
+
   async createQuoteDraft(input: QuoteDraftInput) {
     return this.withDbIdempotency(
       'quote_draft',
@@ -2176,6 +2616,19 @@ export class DataStore {
               quoteId: publicQuoteId,
               status: 'draft',
               contactPending: true
+            }
+          });
+
+          await this.recordInternalAnalyticsEvent({
+            eventName: 'quote.draft_created',
+            quoteId: publicQuoteId,
+            leadId,
+            properties: {
+              billingMode,
+              serviceFrequency: sessionPricing.serviceFrequency,
+              areaM2: Number(measured.areaM2.toFixed(2)),
+              perimeterM: Number(measured.perimeterM.toFixed(2)),
+              distanceToNearestStationKm
             }
           });
 
@@ -2397,6 +2850,19 @@ export class DataStore {
             quoteId: publicQuoteId,
             status: 'draft',
             contactPending: true
+          }
+        });
+
+        await this.recordInternalAnalyticsEvent({
+          eventName: 'quote.draft_created',
+          quoteId: publicQuoteId,
+          leadId,
+          properties: {
+            billingMode,
+            serviceFrequency: sessionPricing.serviceFrequency,
+            areaM2: Number(measured.areaM2.toFixed(2)),
+            perimeterM: Number(measured.perimeterM.toFixed(2)),
+            distanceToNearestStationKm
           }
         });
 
@@ -2906,6 +3372,17 @@ export class DataStore {
             }
           });
 
+          await this.recordInternalAnalyticsEvent({
+            eventName: 'quote.finalized',
+            quoteId: quote.publicQuoteId,
+            leadId: lead.id,
+            properties: {
+              billingMode: quote.billingMode,
+              customerStatus: quote.customerStatus,
+              marketingConsent: lead.consentMarketing
+            }
+          });
+
           return {
             statusCode: 200,
             body: {
@@ -3034,6 +3511,16 @@ export class DataStore {
             quoteId: quote.publicQuoteId,
             status: 'in_review',
             contactPending: false
+          }
+        });
+
+        await this.recordInternalAnalyticsEvent({
+          eventName: 'quote.finalized',
+          quoteId: quote.publicQuoteId,
+          leadId: quote.leadId,
+          properties: {
+            customerStatus: 'pending',
+            marketingConsent: input.marketingConsent === true
           }
         });
 
@@ -3381,6 +3868,17 @@ export class DataStore {
         }
       }
 
+      if (claimed) {
+        await this.recordInternalAnalyticsEvent({
+          eventName: 'quote.claimed',
+          quoteId: quote.publicQuoteId,
+          leadId: quote.leadId,
+          properties: {
+            marketingConsent: input.marketingConsent === true
+          }
+        });
+      }
+
       return {
         statusCode: 200,
         body: {
@@ -3443,6 +3941,17 @@ export class DataStore {
               message: null
             }
           });
+        }
+      });
+    }
+
+    if (claimed) {
+      await this.recordInternalAnalyticsEvent({
+        eventName: 'quote.claimed',
+        quoteId: quote.publicQuoteId,
+        leadId: quote.leadId,
+        properties: {
+          marketingConsent: input.marketingConsent === true
         }
       });
     }
@@ -5060,6 +5569,18 @@ export class DataStore {
         afterRedacted: { status: quote.status }
       });
 
+      if (input.nextStatus === 'verified' || input.nextStatus === 'rejected') {
+        await this.recordInternalAnalyticsEvent({
+          eventName: input.nextStatus === 'verified' ? 'quote.admin_approved' : 'quote.admin_rejected',
+          quoteId: quote.publicQuoteId,
+          leadId: quote.leadId,
+          properties: {
+            previousStatus: beforeStatus,
+            nextStatus: input.nextStatus
+          }
+        });
+      }
+
       return {
         quoteId: quote.publicQuoteId,
         status: quote.status,
@@ -5106,6 +5627,18 @@ export class DataStore {
         status: updated.status
       }
     });
+
+    if (input.nextStatus === 'verified' || input.nextStatus === 'rejected') {
+      await this.recordInternalAnalyticsEvent({
+        eventName: input.nextStatus === 'verified' ? 'quote.admin_approved' : 'quote.admin_rejected',
+        quoteId: updated.publicQuoteId,
+        leadId: updated.leadId,
+        properties: {
+          previousStatus: quote.status,
+          nextStatus: input.nextStatus
+        }
+      });
+    }
 
     return {
       quoteId: updated.publicQuoteId,
@@ -6708,6 +7241,17 @@ export class DataStore {
       link.status = input.status ?? 'checkout_created';
       link.updatedAt = updatedAt;
 
+      await this.recordInternalAnalyticsEvent({
+        eventName: 'payment.checkout_started',
+        quoteId: quote.publicQuoteId,
+        eventId: `payment.checkout_started-${input.checkoutSessionId}`,
+        properties: {
+          paymentMode: link.mode,
+          amountCents: link.amountCents,
+          status: link.status
+        }
+      });
+
       return {
         id: link.id,
         publicQuoteId: quote.publicQuoteId,
@@ -6762,18 +7306,30 @@ export class DataStore {
     );
 
     const row = rows[0];
-    return row
-      ? {
-          id: row.id,
-          publicQuoteId: row.public_quote_id,
-          mode: row.mode,
-          status: row.status,
-          stripeSubscriptionId: row.stripe_subscription_id,
-          maxBillableVisits: row.max_billable_visits,
-          paidInvoiceCount: row.paid_invoice_count,
-          seasonEndAt: toIsoString(row.season_end_at)
-        }
-      : null;
+    if (!row) {
+      return null;
+    }
+
+    await this.recordInternalAnalyticsEvent({
+      eventName: 'payment.checkout_started',
+      quoteId: row.public_quote_id,
+      eventId: `payment.checkout_started-${input.checkoutSessionId}`,
+      properties: {
+        paymentMode: row.mode,
+        status: row.status
+      }
+    });
+
+    return {
+      id: row.id,
+      publicQuoteId: row.public_quote_id,
+      mode: row.mode,
+      status: row.status,
+      stripeSubscriptionId: row.stripe_subscription_id,
+      maxBillableVisits: row.max_billable_visits,
+      paidInvoiceCount: row.paid_invoice_count,
+      seasonEndAt: toIsoString(row.season_end_at)
+    };
   }
 
   async recordPaymentCheckoutCompleted(
@@ -6800,6 +7356,19 @@ export class DataStore {
       if (input.status === 'paid' || input.status === 'subscription_scheduled' || input.status === 'subscription_active') {
         quote.customerStatus = 'verified';
         quote.updatedAt = updatedAt;
+      }
+
+      if (input.status === 'paid' || input.status === 'subscription_active') {
+        await this.recordInternalAnalyticsEvent({
+          eventName: 'payment.completed',
+          quoteId: quote.publicQuoteId,
+          eventId: `payment.completed-${input.checkoutSessionId}`,
+          properties: {
+            paymentMode: link.mode,
+            status: input.status,
+            paidInvoiceCount: link.paidInvoiceCount
+          }
+        });
       }
 
       return {
@@ -6868,18 +7437,33 @@ export class DataStore {
     );
 
     const row = rows[0];
-    return row
-      ? {
-          id: row.id,
-          publicQuoteId: row.public_quote_id,
-          mode: row.mode,
-          status: row.status,
-          stripeSubscriptionId: row.stripe_subscription_id,
-          maxBillableVisits: row.max_billable_visits,
-          paidInvoiceCount: row.paid_invoice_count,
-          seasonEndAt: toIsoString(row.season_end_at)
+    if (!row) {
+      return null;
+    }
+
+    if (input.status === 'paid' || input.status === 'subscription_active') {
+      await this.recordInternalAnalyticsEvent({
+        eventName: 'payment.completed',
+        quoteId: row.public_quote_id,
+        eventId: `payment.completed-${input.checkoutSessionId}`,
+        properties: {
+          paymentMode: row.mode,
+          status: input.status,
+          paidInvoiceCount: row.paid_invoice_count
         }
-      : null;
+      });
+    }
+
+    return {
+      id: row.id,
+      publicQuoteId: row.public_quote_id,
+      mode: row.mode,
+      status: row.status,
+      stripeSubscriptionId: row.stripe_subscription_id,
+      maxBillableVisits: row.max_billable_visits,
+      paidInvoiceCount: row.paid_invoice_count,
+      seasonEndAt: toIsoString(row.season_end_at)
+    };
   }
 
   async recordPaymentInvoiceStatus(
@@ -6918,6 +7502,19 @@ export class DataStore {
       }
       link.updatedAt = updatedAt;
       quote.updatedAt = updatedAt;
+
+      if (link.status === 'paid' && paidInvoiceRecorded) {
+        await this.recordInternalAnalyticsEvent({
+          eventName: 'payment.completed',
+          quoteId: quote.publicQuoteId,
+          eventId: `payment.completed-${input.stripeSubscriptionId}-${input.invoiceId ?? link.paidInvoiceCount}`,
+          properties: {
+            paymentMode: link.mode,
+            status: link.status,
+            paidInvoiceCount: link.paidInvoiceCount
+          }
+        });
+      }
 
       return {
         id: link.id,
@@ -7019,19 +7616,34 @@ export class DataStore {
     );
 
     const row = rows[0];
-    return row
-      ? {
-          id: row.id,
-          publicQuoteId: row.public_quote_id,
-          mode: row.mode,
+    if (!row) {
+      return null;
+    }
+
+    if (row.status === 'paid' && row.invoice_increment > 0) {
+      await this.recordInternalAnalyticsEvent({
+        eventName: 'payment.completed',
+        quoteId: row.public_quote_id,
+        eventId: `payment.completed-${input.stripeSubscriptionId}-${input.invoiceId ?? row.paid_invoice_count}`,
+        properties: {
+          paymentMode: row.mode,
           status: row.status,
-          stripeSubscriptionId: row.stripe_subscription_id,
-          maxBillableVisits: row.max_billable_visits,
-          paidInvoiceCount: row.paid_invoice_count,
-          seasonEndAt: toIsoString(row.season_end_at),
-          paidInvoiceRecorded: row.invoice_increment > 0
+          paidInvoiceCount: row.paid_invoice_count
         }
-      : null;
+      });
+    }
+
+    return {
+      id: row.id,
+      publicQuoteId: row.public_quote_id,
+      mode: row.mode,
+      status: row.status,
+      stripeSubscriptionId: row.stripe_subscription_id,
+      maxBillableVisits: row.max_billable_visits,
+      paidInvoiceCount: row.paid_invoice_count,
+      seasonEndAt: toIsoString(row.season_end_at),
+      paidInvoiceRecorded: row.invoice_increment > 0
+    };
   }
 
   async recordPaymentSubscriptionStatus(
@@ -7922,6 +8534,500 @@ export class DataStore {
       })),
       generatedAt: nowIso(),
       launchAt: launchAt?.toISOString() ?? null
+    };
+  }
+
+  async upsertAdPlatformDailyMetrics(rows: AdPlatformDailyMetricInput[]) {
+    const importedAt = nowIso();
+
+    if (!this.prisma) {
+      rows.forEach((row) => {
+        const normalizedRow = {
+          ...row,
+          campaignId: row.campaignId ?? 'unknown',
+          adGroupId: row.adGroupId ?? 'unknown',
+          adId: row.adId ?? 'unknown',
+          device: row.device ?? 'unknown',
+          network: row.network ?? 'unknown'
+        };
+        const key = [
+          normalizedRow.platform,
+          normalizedRow.accountId,
+          normalizedRow.date,
+          normalizedRow.campaignId,
+          normalizedRow.adGroupId,
+          normalizedRow.adId,
+          normalizedRow.device,
+          normalizedRow.network
+        ].join('|');
+        this.memory.adPlatformDailyMetrics.set(key, {
+          ...normalizedRow,
+          costMicros: BigInt(normalizedRow.costMicros),
+          conversionValueMicros: BigInt(normalizedRow.conversionValueMicros),
+          importedAt
+        });
+      });
+
+      return {
+        rowCount: rows.length,
+        importedAt
+      };
+    }
+
+    for (const row of rows) {
+      const campaignId = row.campaignId ?? 'unknown';
+      const adGroupId = row.adGroupId ?? 'unknown';
+      const adId = row.adId ?? 'unknown';
+      const device = row.device ?? 'unknown';
+      const network = row.network ?? 'unknown';
+
+      await this.prisma.$executeRaw(
+        Prisma.sql`
+          INSERT INTO "ad_platform_daily_metrics" (
+            "platform",
+            "account_id",
+            "date",
+            "campaign_id",
+            "campaign_name",
+            "ad_group_id",
+            "ad_group_name",
+            "ad_id",
+            "ad_name",
+            "device",
+            "network",
+            "impressions",
+            "clicks",
+            "cost_micros",
+            "conversions",
+            "conversion_value_micros",
+            "imported_at"
+          )
+          VALUES (
+            ${row.platform},
+            ${row.accountId},
+            ${new Date(`${row.date}T00:00:00.000Z`)},
+            ${campaignId},
+            ${row.campaignName},
+            ${adGroupId},
+            ${row.adGroupName},
+            ${adId},
+            ${row.adName},
+            ${device},
+            ${network},
+            ${row.impressions},
+            ${row.clicks},
+            ${BigInt(row.costMicros)},
+            ${row.conversions},
+            ${BigInt(row.conversionValueMicros)},
+            ${new Date(importedAt)}
+          )
+          ON CONFLICT (
+            "platform",
+            "account_id",
+            "date",
+            "campaign_id",
+            "ad_group_id",
+            "ad_id",
+            "device",
+            "network"
+          ) DO UPDATE SET
+            "campaign_name" = EXCLUDED."campaign_name",
+            "ad_group_name" = EXCLUDED."ad_group_name",
+            "ad_name" = EXCLUDED."ad_name",
+            "impressions" = EXCLUDED."impressions",
+            "clicks" = EXCLUDED."clicks",
+            "cost_micros" = EXCLUDED."cost_micros",
+            "conversions" = EXCLUDED."conversions",
+            "conversion_value_micros" = EXCLUDED."conversion_value_micros",
+            "imported_at" = EXCLUDED."imported_at"
+        `
+      );
+    }
+
+    return {
+      rowCount: rows.length,
+      importedAt
+    };
+  }
+
+  async recordAdSpendImportRun(input: AdSpendImportRunInput) {
+    const run = {
+      id: nanoid(14),
+      provider: input.provider,
+      status: input.status,
+      dateFrom: input.dateFrom,
+      dateTo: input.dateTo,
+      rowCount: input.rowCount ?? 0,
+      errorMessage: input.errorMessage ?? null,
+      requestIds: input.requestIds ?? [],
+      startedAt: input.startedAt ?? nowIso(),
+      finishedAt: input.finishedAt ?? (input.status === 'running' ? null : nowIso())
+    };
+
+    if (!this.prisma) {
+      this.memory.adSpendImportRuns.push(run);
+      return run;
+    }
+
+    await this.prisma.$executeRaw(
+      Prisma.sql`
+        INSERT INTO "ad_spend_import_runs" (
+          "id",
+          "provider",
+          "status",
+          "date_from",
+          "date_to",
+          "row_count",
+          "error_message",
+          "request_ids",
+          "started_at",
+          "finished_at"
+        )
+        VALUES (
+          ${run.id},
+          ${run.provider},
+          ${run.status},
+          ${new Date(`${run.dateFrom}T00:00:00.000Z`)},
+          ${new Date(`${run.dateTo}T00:00:00.000Z`)},
+          ${run.rowCount},
+          ${run.errorMessage},
+          ${run.requestIds},
+          ${new Date(run.startedAt)},
+          ${run.finishedAt ? new Date(run.finishedAt) : null}
+        )
+      `
+    );
+
+    return run;
+  }
+
+  async getAnalyticsHealth(): Promise<AnalyticsHealthSummary> {
+    const generatedAt = nowIso();
+    const since = new Date(Date.now() - 24 * 60 * 60 * 1000);
+    const since7d = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
+    const lifecycleEventNames = new Set<AnalyticsEventName>([
+      'quote.draft_created',
+      'quote.claimed',
+      'quote.finalized',
+      'quote.admin_approved',
+      'quote.admin_rejected',
+      'payment.checkout_started',
+      'payment.completed'
+    ]);
+    const funnelRanks = new Map<AnalyticsEventName, number>([
+      ['quote.started', 10],
+      ['quote.address_selected', 20],
+      ['quote.service_area_checked', 30],
+      ['quote.map_loaded', 40],
+      ['quote.summary_viewed', 50],
+      ['quote.draft_created', 60],
+      ['quote.finalized', 70],
+      ['quote.admin_approved', 80],
+      ['payment.completed', 90]
+    ]);
+
+    if (!this.prisma) {
+      const eventItems = [...this.memory.analyticsEvents.values()];
+      const sessionItems = [...this.memory.analyticsSessions.values()];
+      const quoteItems = [...this.memory.quotes.values()];
+      const quoteByPublicId = new Map(quoteItems.map((quote) => [quote.publicQuoteId, quote]));
+      const latestRun =
+        [...this.memory.adSpendImportRuns].sort((left, right) => right.startedAt.localeCompare(left.startedAt))[0] ??
+        null;
+      const missingSessionEventCount = eventItems.filter(
+        (event) => event.sessionId && !this.memory.analyticsSessions.has(event.sessionId)
+      ).length;
+      const hasSubmitSnapshot = (quoteId: string) =>
+        this.memory.attributionTouches.some((touch) => touch.quoteId === quoteId && touch.touchType === 'submit_snapshot');
+      const paidQuoteIds = new Set(
+        this.memory.paymentLinks
+          .filter((link) => link.status === 'paid' || link.status === 'subscription_active')
+          .map((link) => link.quoteId)
+      );
+      const eventsBySession = new Map<string, MemoryAnalyticsEvent[]>();
+      eventItems.forEach((event) => {
+        if (!event.sessionId) {
+          return;
+        }
+        const sessionEvents = eventsBySession.get(event.sessionId) ?? [];
+        sessionEvents.push(event);
+        eventsBySession.set(event.sessionId, sessionEvents);
+      });
+      let impossibleFunnelOrderCount = 0;
+      eventsBySession.forEach((sessionEvents) => {
+        let highestRank = 0;
+        sessionEvents
+          .sort((left, right) => left.createdAt.localeCompare(right.createdAt))
+          .forEach((event) => {
+            const rank = funnelRanks.get(event.eventName) ?? 0;
+            if (rank > 0 && highestRank > 0 && rank < highestRank) {
+              impossibleFunnelOrderCount += 1;
+            }
+            highestRank = Math.max(highestRank, rank);
+          });
+      });
+      const utmValues = [...sessionItems.map((session) => session.attribution), ...eventItems.map((event) => event.attribution)]
+        .flatMap((attribution) => [attribution.utmSource, attribution.utmCampaign])
+        .filter((value): value is string => typeof value === 'string' && value.trim().length > 0);
+      const utmVariants = new Map<string, Set<string>>();
+      utmValues.forEach((value) => {
+        const key = value.toLowerCase();
+        const variants = utmVariants.get(key) ?? new Set<string>();
+        variants.add(value);
+        utmVariants.set(key, variants);
+      });
+      const dayKey = (date: Date) => date.toISOString().slice(0, 10);
+      const dailyCounts = new Map<string, number>();
+      eventItems.forEach((event) => {
+        const key = dayKey(new Date(event.receivedAt));
+        dailyCounts.set(key, (dailyCounts.get(key) ?? 0) + 1);
+      });
+      const yesterday = new Date(Date.now() - 24 * 60 * 60 * 1000);
+      const priorCounts = Array.from({ length: 7 }, (_, index) => {
+        const date = new Date(Date.now() - (index + 2) * 24 * 60 * 60 * 1000);
+        return dailyCounts.get(dayKey(date)) ?? 0;
+      });
+      const priorAverage = priorCounts.reduce((sum, count) => sum + count, 0) / priorCounts.length;
+      const suddenDailyEventVolumeDrop = priorAverage >= 10 && (dailyCounts.get(dayKey(yesterday)) ?? 0) < priorAverage * 0.5;
+      const dataQuality = {
+        missingSessionEventCount,
+        missingAttributionSubmittedQuoteCount: quoteItems.filter(
+          (quote) => (quote.status !== 'draft' || !quote.contactPending || quote.submittedAt) && !hasSubmitSnapshot(quote.id)
+        ).length,
+        paidQuotesMissingAttributionCount: [...paidQuoteIds].filter((quoteId) => !hasSubmitSnapshot(quoteId)).length,
+        lifecycleEventsMissingQuoteCount: eventItems.filter(
+          (event) => lifecycleEventNames.has(event.eventName) && event.quoteId && !quoteByPublicId.has(event.quoteId)
+        ).length,
+        impossibleFunnelOrderCount,
+        utmCasingDriftCount: [...utmVariants.values()].filter((variants) => variants.size > 1).length,
+        suddenDailyEventVolumeDrop,
+        failedAdSpendImportCount7d: this.memory.adSpendImportRuns.filter(
+          (run) => run.status === 'failed' && new Date(run.startedAt) >= since7d
+        ).length
+      };
+
+      return {
+        generatedAt,
+        eventsLast24h: eventItems.filter((event) => new Date(event.receivedAt) >= since).length,
+        sessionsLast24h: sessionItems.filter((session) => new Date(session.lastSeenAt) >= since).length,
+        duplicateEventCount: this.memory.duplicateAnalyticsEventCount,
+        missingSessionEventCount,
+        dataQuality,
+        latestGoogleAdsImport: latestRun
+          ? {
+              status: latestRun.status,
+              startedAt: latestRun.startedAt,
+              finishedAt: latestRun.finishedAt,
+              dateFrom: latestRun.dateFrom,
+              dateTo: latestRun.dateTo,
+              rowCount: latestRun.rowCount,
+              errorMessage: latestRun.errorMessage
+            }
+          : null
+      };
+    }
+
+    const rows = await this.prisma.$queryRaw<
+      Array<{
+        events_last_24h: number;
+        sessions_last_24h: number;
+        duplicate_event_count: number;
+        missing_session_event_count: number;
+        missing_attribution_submitted_quote_count: number;
+        paid_quotes_missing_attribution_count: number;
+        lifecycle_events_missing_quote_count: number;
+        impossible_funnel_order_count: number;
+        utm_casing_drift_count: number;
+        sudden_daily_event_volume_drop: boolean;
+        failed_ad_spend_import_count_7d: number;
+      }>
+    >(
+      Prisma.sql`
+        WITH ranked_events AS (
+          SELECT
+            "session_id",
+            "created_at",
+            CASE "event_name"
+              WHEN 'quote.started' THEN 10
+              WHEN 'quote.address_selected' THEN 20
+              WHEN 'quote.service_area_checked' THEN 30
+              WHEN 'quote.map_loaded' THEN 40
+              WHEN 'quote.summary_viewed' THEN 50
+              WHEN 'quote.draft_created' THEN 60
+              WHEN 'quote.finalized' THEN 70
+              WHEN 'quote.admin_approved' THEN 80
+              WHEN 'payment.completed' THEN 90
+              ELSE 0
+            END AS step_rank
+          FROM "analytics_events"
+          WHERE "session_id" IS NOT NULL
+        ),
+        ordered_events AS (
+          SELECT
+            *,
+            MAX(step_rank) OVER (
+              PARTITION BY "session_id"
+              ORDER BY "created_at"
+              ROWS BETWEEN UNBOUNDED PRECEDING AND 1 PRECEDING
+            ) AS previous_max_rank
+          FROM ranked_events
+          WHERE step_rank > 0
+        ),
+        utm_values AS (
+          SELECT "utm_source" AS value FROM "analytics_sessions"
+          UNION ALL SELECT "utm_campaign" AS value FROM "analytics_sessions"
+          UNION ALL SELECT "utm_source" AS value FROM "analytics_events"
+          UNION ALL SELECT "utm_campaign" AS value FROM "analytics_events"
+        ),
+        utm_drift AS (
+          SELECT LOWER(value) AS normalized_value
+          FROM utm_values
+          WHERE value IS NOT NULL AND TRIM(value) <> ''
+          GROUP BY LOWER(value)
+          HAVING COUNT(DISTINCT value) > 1
+        ),
+        daily_events AS (
+          SELECT "received_at"::date AS event_date, COUNT(*)::decimal AS event_count
+          FROM "analytics_events"
+          GROUP BY "received_at"::date
+        ),
+        prior_daily_events AS (
+          SELECT AVG(event_count) AS prior_average
+          FROM daily_events
+          WHERE event_date >= (CURRENT_DATE - INTERVAL '8 days')::date
+            AND event_date < (CURRENT_DATE - INTERVAL '1 day')::date
+        ),
+        yesterday_events AS (
+          SELECT COALESCE(MAX(event_count), 0) AS yesterday_count
+          FROM daily_events
+          WHERE event_date = (CURRENT_DATE - INTERVAL '1 day')::date
+        )
+        SELECT
+          (SELECT COUNT(*)::int FROM "analytics_events" WHERE "received_at" >= ${since}) AS events_last_24h,
+          (SELECT COUNT(*)::int FROM "analytics_sessions" WHERE "last_seen_at" >= ${since}) AS sessions_last_24h,
+          0::int AS duplicate_event_count,
+          (
+            SELECT COUNT(*)::int
+            FROM "analytics_events" ae
+            LEFT JOIN "analytics_sessions" s ON s."id" = ae."session_id"
+            WHERE ae."session_id" IS NOT NULL AND s."id" IS NULL
+          ) AS missing_session_event_count,
+          (
+            SELECT COUNT(*)::int
+            FROM "quotes" q
+            WHERE (q."status" <> 'draft'::"QuoteStatus" OR q."contact_pending" = false OR q."submitted_at" IS NOT NULL)
+              AND NOT EXISTS (
+                SELECT 1
+                FROM "attribution_touches" at
+                WHERE at."quote_id" = q."id"
+                  AND at."touch_type" = 'submit_snapshot'::"AttributionTouchType"
+              )
+          ) AS missing_attribution_submitted_quote_count,
+          (
+            SELECT COUNT(DISTINCT q."id")::int
+            FROM "quote_payment_links" pl
+            INNER JOIN "quotes" q ON q."id" = pl."quote_id"
+            WHERE pl."status" IN ('paid'::"QuotePaymentStatus", 'subscription_active'::"QuotePaymentStatus")
+              AND NOT EXISTS (
+                SELECT 1
+                FROM "attribution_touches" at
+                WHERE at."quote_id" = q."id"
+                  AND at."touch_type" = 'submit_snapshot'::"AttributionTouchType"
+              )
+          ) AS paid_quotes_missing_attribution_count,
+          (
+            SELECT COUNT(*)::int
+            FROM "analytics_events" ae
+            WHERE ae."event_name" IN (
+              'quote.draft_created',
+              'quote.claimed',
+              'quote.finalized',
+              'quote.admin_approved',
+              'quote.admin_rejected',
+              'payment.checkout_started',
+              'payment.completed'
+            )
+              AND ae."quote_id" IS NOT NULL
+              AND NOT EXISTS (
+                SELECT 1 FROM "quotes" q WHERE q."public_quote_id" = ae."quote_id"
+              )
+          ) AS lifecycle_events_missing_quote_count,
+          (
+            SELECT COUNT(*)::int
+            FROM ordered_events
+            WHERE previous_max_rank IS NOT NULL AND step_rank < previous_max_rank
+          ) AS impossible_funnel_order_count,
+          (SELECT COUNT(*)::int FROM utm_drift) AS utm_casing_drift_count,
+          (
+            SELECT COALESCE(prior_average >= 10 AND yesterday_count < prior_average * 0.5, false)
+            FROM prior_daily_events, yesterday_events
+          ) AS sudden_daily_event_volume_drop,
+          (
+            SELECT COUNT(*)::int
+            FROM "ad_spend_import_runs"
+            WHERE "provider" = 'google_ads'
+              AND "status" = 'failed'
+              AND "started_at" >= ${since7d}
+          ) AS failed_ad_spend_import_count_7d
+      `
+    );
+    const latestRuns = await this.prisma.$queryRaw<
+      Array<{
+        status: string;
+        started_at: Date;
+        finished_at: Date | null;
+        date_from: Date;
+        date_to: Date;
+        row_count: number;
+        error_message: string | null;
+      }>
+    >(
+      Prisma.sql`
+        SELECT
+          "status",
+          "started_at",
+          "finished_at",
+          "date_from",
+          "date_to",
+          "row_count",
+          "error_message"
+        FROM "ad_spend_import_runs"
+        WHERE "provider" = 'google_ads'
+        ORDER BY "started_at" DESC
+        LIMIT 1
+      `
+    );
+
+    const row = rows[0];
+    const latestRun = latestRuns[0];
+
+    return {
+      generatedAt,
+      eventsLast24h: row?.events_last_24h ?? 0,
+      sessionsLast24h: row?.sessions_last_24h ?? 0,
+      duplicateEventCount: row?.duplicate_event_count ?? 0,
+      missingSessionEventCount: row?.missing_session_event_count ?? 0,
+      dataQuality: {
+        missingSessionEventCount: row?.missing_session_event_count ?? 0,
+        missingAttributionSubmittedQuoteCount: row?.missing_attribution_submitted_quote_count ?? 0,
+        paidQuotesMissingAttributionCount: row?.paid_quotes_missing_attribution_count ?? 0,
+        lifecycleEventsMissingQuoteCount: row?.lifecycle_events_missing_quote_count ?? 0,
+        impossibleFunnelOrderCount: row?.impossible_funnel_order_count ?? 0,
+        utmCasingDriftCount: row?.utm_casing_drift_count ?? 0,
+        suddenDailyEventVolumeDrop: row?.sudden_daily_event_volume_drop ?? false,
+        failedAdSpendImportCount7d: row?.failed_ad_spend_import_count_7d ?? 0
+      },
+      latestGoogleAdsImport: latestRun
+        ? {
+            status: latestRun.status,
+            startedAt: latestRun.started_at.toISOString(),
+            finishedAt: latestRun.finished_at?.toISOString() ?? null,
+            dateFrom: latestRun.date_from.toISOString().slice(0, 10),
+            dateTo: latestRun.date_to.toISOString().slice(0, 10),
+            rowCount: latestRun.row_count,
+            errorMessage: latestRun.error_message
+          }
+        : null
     };
   }
 

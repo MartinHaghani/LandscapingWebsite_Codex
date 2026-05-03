@@ -2,6 +2,7 @@ import { SignedIn, SignedOut, useUser } from '@clerk/clerk-react';
 import { useEffect, useState } from 'react';
 import { Link, NavLink, useLocation } from 'react-router-dom';
 import { Button } from '../ui/Button';
+import { trackAnalyticsEvent } from '../../lib/analytics';
 import { cn } from '../../lib/cn';
 
 const navItems = [
@@ -81,7 +82,18 @@ export const Navbar = () => {
         </nav>
 
         <div className="flex items-center gap-2">
-          <Link to="/instant-quote" className="hidden md:block">
+          <Link
+            to="/instant-quote"
+            className="hidden md:block"
+            onClick={() =>
+              trackAnalyticsEvent('cta.clicked', {
+                properties: {
+                  component: 'navbar',
+                  destination: '/instant-quote'
+                }
+              })
+            }
+          >
             <Button variant="primary">Get Instant Quote</Button>
           </Link>
 
@@ -138,7 +150,18 @@ export const Navbar = () => {
                 {item.label}
               </NavLink>
             ))}
-            <Link to="/instant-quote" className="mt-3">
+            <Link
+              to="/instant-quote"
+              className="mt-3"
+              onClick={() =>
+                trackAnalyticsEvent('cta.clicked', {
+                  properties: {
+                    component: 'mobile_navbar',
+                    destination: '/instant-quote'
+                  }
+                })
+              }
+            >
               <Button className="w-full">Get Instant Quote</Button>
             </Link>
             <SignedOut>

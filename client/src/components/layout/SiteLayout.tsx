@@ -1,7 +1,9 @@
 import { Outlet, useLocation } from 'react-router-dom';
+import { useEffect } from 'react';
 import { Footer } from './Footer';
 import { Navbar } from './Navbar';
 import { ScrollToTop } from './ScrollToTop';
+import { installAnalyticsUnloadFlush, useAnalyticsPageView } from '../../lib/analytics';
 
 const compactFooterRoutePatterns = [
   /^\/instant-quote(?:\/summary)?$/,
@@ -16,6 +18,9 @@ const compactFooterRoutePatterns = [
 
 export const SiteLayout = () => {
   const { pathname } = useLocation();
+  useAnalyticsPageView();
+  useEffect(() => installAnalyticsUnloadFlush(), []);
+
   const footerVariant = compactFooterRoutePatterns.some((pattern) => pattern.test(pathname))
     ? 'compact'
     : 'full';

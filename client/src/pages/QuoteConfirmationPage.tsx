@@ -6,6 +6,7 @@ import { Button } from '../components/ui/Button';
 import { Card } from '../components/ui/Card';
 import { hasRequiredPhone } from '../lib/accountProfile';
 import { ApiError } from '../lib/api';
+import { trackAnalyticsEvent } from '../lib/analytics';
 import { legalDocumentSlugs } from '../lib/legalAcceptance';
 import { getQuoteConfirmationRedirect, loadQuoteConfirmation } from '../lib/quoteConfirmationFlow';
 import type { BillingMode } from '../types';
@@ -139,8 +140,22 @@ export const QuoteConfirmationPage = () => {
   const [legalAccepted, setLegalAccepted] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const finalizeIdempotencyKeyRef = useRef<string | null>(null);
+  const confirmationViewedTrackedRef = useRef(false);
+  const authRequiredTrackedRef = useRef(false);
   const profileHasRequiredPhone = hasRequiredPhone(user);
   const customerEmail = user?.primaryEmailAddress?.emailAddress ?? null;
+
+  useEffect(() => {
+    if (!quoteId || !isLoaded || isSignedIn || authRequiredTrackedRef.current) {
+      return;
+    }
+
+    authRequiredTrackedRef.current = true;
+    trackAnalyticsEvent('quote.auth_required', {
+      step: 'confirmation',
+      quoteId
+    });
+  }, [quoteId, isLoaded, isSignedIn]);
 
   useEffect(() => {
     if (!quoteId || !isLoaded || !isSignedIn || !profileHasRequiredPhone || !legalAccepted) {
@@ -199,6 +214,18 @@ export const QuoteConfirmationPage = () => {
           seasonalDiscountedTotal,
           seasonalSavingsTotal
         });
+
+        if (!confirmationViewedTrackedRef.current) {
+          confirmationViewedTrackedRef.current = true;
+          trackAnalyticsEvent('quote.confirmation_viewed', {
+            step: 'confirmation',
+            quoteId: quoteResponse.id,
+            properties: {
+              status: quoteResponse.status,
+              billingMode: quoteResponse.billingMode === 'per_session' ? 'per_session' : 'seasonal'
+            }
+          });
+        }
       } catch (err) {
         if (!mounted) {
           return;
