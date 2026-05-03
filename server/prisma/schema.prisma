@@ -365,6 +365,133 @@ model AttributionTouch {
   @@map("attribution_touches")
 }
 
+model AnalyticsSession {
+  id               String   @id
+  anonymousId      String   @map("anonymous_id") @db.VarChar(120)
+  startedAt        DateTime @map("started_at")
+  lastSeenAt       DateTime @map("last_seen_at")
+  landingPath      String?  @map("landing_path") @db.VarChar(300)
+  landingUrl       String?  @map("landing_url") @db.VarChar(1000)
+  referrer         String?  @db.VarChar(500)
+  gclid            String?  @db.VarChar(120)
+  gbraid           String?  @db.VarChar(120)
+  wbraid           String?  @db.VarChar(120)
+  utmSource        String?  @map("utm_source") @db.VarChar(160)
+  utmMedium        String?  @map("utm_medium") @db.VarChar(160)
+  utmCampaign      String?  @map("utm_campaign") @db.VarChar(200)
+  utmTerm          String?  @map("utm_term") @db.VarChar(200)
+  utmContent       String?  @map("utm_content") @db.VarChar(200)
+  utmId            String?  @map("utm_id") @db.VarChar(200)
+  googleCampaignId String?  @map("google_campaign_id") @db.VarChar(120)
+  googleAdGroupId  String?  @map("google_ad_group_id") @db.VarChar(120)
+  googleAdId       String?  @map("google_ad_id") @db.VarChar(120)
+  googleKeyword    String?  @map("google_keyword") @db.VarChar(200)
+  googleMatchType  String?  @map("google_match_type") @db.VarChar(40)
+  googleDevice     String?  @map("google_device") @db.VarChar(40)
+  googleNetwork    String?  @map("google_network") @db.VarChar(80)
+  deviceType       String?  @map("device_type") @db.VarChar(40)
+  browser          String?  @db.VarChar(80)
+  userAgent        String?  @map("user_agent") @db.VarChar(300)
+  functionalConsent Boolean @default(true) @map("functional_consent")
+  analyticsConsent Boolean @default(true) @map("analytics_consent")
+  marketingConsent Boolean @default(false) @map("marketing_consent")
+  createdAt        DateTime @default(now()) @map("created_at")
+  events           AnalyticsEvent[]
+
+  @@index([startedAt(sort: Desc)])
+  @@index([googleCampaignId])
+  @@index([utmSource, utmCampaign])
+  @@map("analytics_sessions")
+}
+
+model AnalyticsEvent {
+  eventId          String            @id @map("event_id") @db.VarChar(120)
+  sessionId        String?           @map("session_id")
+  anonymousId      String?           @map("anonymous_id") @db.VarChar(120)
+  leadId           String?           @map("lead_id")
+  quoteId          String?           @map("quote_id") @db.VarChar(120)
+  eventName        String            @map("event_name") @db.VarChar(80)
+  route            String            @db.VarChar(300)
+  step             String?           @db.VarChar(80)
+  propertiesJson   Json              @default("{}") @map("properties_json")
+  gclid            String?           @db.VarChar(120)
+  gbraid           String?           @db.VarChar(120)
+  wbraid           String?           @db.VarChar(120)
+  utmSource        String?           @map("utm_source") @db.VarChar(160)
+  utmMedium        String?           @map("utm_medium") @db.VarChar(160)
+  utmCampaign      String?           @map("utm_campaign") @db.VarChar(200)
+  utmTerm          String?           @map("utm_term") @db.VarChar(200)
+  utmContent       String?           @map("utm_content") @db.VarChar(200)
+  utmId            String?           @map("utm_id") @db.VarChar(200)
+  landingPath      String?           @map("landing_path") @db.VarChar(300)
+  landingUrl       String?           @map("landing_url") @db.VarChar(1000)
+  referrer         String?           @db.VarChar(500)
+  googleCampaignId String?           @map("google_campaign_id") @db.VarChar(120)
+  googleAdGroupId  String?           @map("google_ad_group_id") @db.VarChar(120)
+  googleAdId       String?           @map("google_ad_id") @db.VarChar(120)
+  googleKeyword    String?           @map("google_keyword") @db.VarChar(200)
+  googleMatchType  String?           @map("google_match_type") @db.VarChar(40)
+  googleDevice     String?           @map("google_device") @db.VarChar(40)
+  googleNetwork    String?           @map("google_network") @db.VarChar(80)
+  deviceType       String?           @map("device_type") @db.VarChar(40)
+  browser          String?           @db.VarChar(80)
+  userAgent        String?           @map("user_agent") @db.VarChar(300)
+  functionalConsent Boolean          @default(true) @map("functional_consent")
+  analyticsConsent Boolean           @default(true) @map("analytics_consent")
+  marketingConsent Boolean           @default(false) @map("marketing_consent")
+  createdAt        DateTime          @map("created_at")
+  receivedAt       DateTime          @default(now()) @map("received_at")
+  session          AnalyticsSession? @relation(fields: [sessionId], references: [id], onDelete: SetNull)
+
+  @@index([createdAt(sort: Desc)])
+  @@index([eventName, createdAt(sort: Desc)])
+  @@index([sessionId])
+  @@index([quoteId])
+  @@index([googleCampaignId])
+  @@map("analytics_events")
+}
+
+model AdPlatformDailyMetric {
+  id                    String   @id @default(dbgenerated("md5(random()::text || clock_timestamp()::text)"))
+  platform              String   @db.VarChar(40)
+  accountId             String   @map("account_id") @db.VarChar(120)
+  date                  DateTime @db.Date
+  campaignId            String   @default("unknown") @map("campaign_id") @db.VarChar(120)
+  campaignName          String?  @map("campaign_name") @db.VarChar(300)
+  adGroupId             String   @default("unknown") @map("ad_group_id") @db.VarChar(120)
+  adGroupName           String?  @map("ad_group_name") @db.VarChar(300)
+  adId                  String   @default("unknown") @map("ad_id") @db.VarChar(120)
+  adName                String?  @map("ad_name") @db.VarChar(300)
+  device                String   @default("unknown") @db.VarChar(40)
+  network               String   @default("unknown") @db.VarChar(80)
+  impressions           Int      @default(0)
+  clicks                Int      @default(0)
+  costMicros            BigInt   @default(0) @map("cost_micros")
+  conversions           Decimal  @default(0) @db.Decimal(18, 6)
+  conversionValueMicros BigInt   @default(0) @map("conversion_value_micros")
+  importedAt            DateTime @default(now()) @map("imported_at")
+
+  @@unique([platform, accountId, date, campaignId, adGroupId, adId, device, network])
+  @@index([date(sort: Desc)])
+  @@map("ad_platform_daily_metrics")
+}
+
+model AdSpendImportRun {
+  id           String    @id
+  provider     String    @db.VarChar(40)
+  status       String    @db.VarChar(20)
+  dateFrom     DateTime  @map("date_from") @db.Date
+  dateTo       DateTime  @map("date_to") @db.Date
+  rowCount     Int       @default(0) @map("row_count")
+  errorMessage String?   @map("error_message")
+  requestIds   String[]  @default([]) @map("request_ids")
+  startedAt    DateTime  @default(now()) @map("started_at")
+  finishedAt   DateTime? @map("finished_at")
+
+  @@index([startedAt(sort: Desc)])
+  @@map("ad_spend_import_runs")
+}
+
 model AuditLog {
   id             String        @id @default(cuid())
   actorUserId    String?       @map("actor_user_id") @db.VarChar(128)

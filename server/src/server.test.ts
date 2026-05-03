@@ -489,6 +489,109 @@ describe('/api/contact', () => {
   });
 });
 
+describe('/api/analytics/events', () => {
+  it('accepts validated analytics batches and dedupes event ids', async () => {
+    const { baseUrl } = await startServer();
+    const eventBatch = {
+      session: {
+        id: 'session-test-analytics-1',
+        anonymousId: 'anon-test-analytics-1',
+        startedAt: '2026-05-03T12:00:00.000Z',
+        lastSeenAt: '2026-05-03T12:01:00.000Z',
+        attribution: {
+          gclid: 'test-gclid',
+          utmSource: 'google',
+          utmCampaign: 'campaign-123',
+          utmId: 'campaign-123',
+          googleCampaignId: 'campaign-123',
+          googleAdGroupId: 'adgroup-456',
+          googleAdId: 'ad-789',
+          landingPath: '/instant-quote',
+          deviceType: 'desktop'
+        },
+        consent: {
+          functional: true,
+          analytics: true,
+          marketing: false
+        }
+      },
+      events: [
+        {
+          eventId: 'event-test-analytics-1',
+          eventName: 'quote.started',
+          route: '/instant-quote',
+          step: 'address',
+          properties: {
+            component: 'test'
+          },
+          createdAt: '2026-05-03T12:01:00.000Z'
+        }
+      ]
+    };
+
+    const first = await fetch(`${baseUrl}/api/analytics/events`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify(eventBatch)
+    });
+    assert.equal(first.status, 202);
+    assert.deepEqual(await first.json(), {
+      accepted: 1,
+      duplicates: 0,
+      rejected: 0
+    });
+
+    const replay = await fetch(`${baseUrl}/api/analytics/events`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify(eventBatch)
+    });
+    assert.equal(replay.status, 202);
+    assert.deepEqual(await replay.json(), {
+      accepted: 0,
+      duplicates: 1,
+      rejected: 0
+    });
+
+    const invalid = await fetch(`${baseUrl}/api/analytics/events`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        ...eventBatch,
+        events: [{ ...eventBatch.events[0], eventId: 'event-test-invalid-1', eventName: 'dom.everything_clicked' }]
+      })
+    });
+    assert.equal(invalid.status, 400);
+
+    const healthResponse = await fetch(`${baseUrl}/api/admin/analytics/health`, {
+      headers: {
+        Authorization: 'Bearer admin-marketing'
+      }
+    });
+    assert.equal(healthResponse.status, 200);
+    const health = (await healthResponse.json()) as {
+      eventsLast24h: number;
+      sessionsLast24h: number;
+      duplicateEventCount: number;
+      dataQuality: {
+        missingSessionEventCount: number;
+        lifecycleEventsMissingQuoteCount: number;
+      };
+    };
+    assert.equal(health.eventsLast24h, 1);
+    assert.equal(health.sessionsLast24h, 1);
+    assert.equal(health.duplicateEventCount, 1);
+    assert.equal(health.dataQuality.missingSessionEventCount, 0);
+    assert.equal(health.dataQuality.lifecycleEventsMissingQuoteCount, 0);
+  });
+});
+
 describe('quote draft + contact finalize flow', () => {
   it('creates draft quote with idempotent replay and finalizes contact', async () => {
     const { baseUrl } = await startServer();

@@ -1,6 +1,6 @@
 # Privacy Policy
 
-Last updated: May 1, 2026
+Last updated: May 3, 2026
 
 This Privacy Policy explains how 1001283716 ONTARIO INC., operating as Autoscape ("Autoscape", "we", "us", or "our"), collects, uses, discloses, and protects information through the Autoscape website, instant quote flow, customer account surfaces, payment pages, and related communications.
 
@@ -44,8 +44,10 @@ Account and payment information may include:
 
 Technical, analytics, and attribution information may include:
 
-- Google Ads click identifiers, UTM parameters, landing path, referrer, device type, browser summary, and conversion events.
-- Browser local storage and session storage values used to restore quote drafts and attribution snapshots.
+- Google Ads click identifiers, Google ValueTrack parameters, UTM parameters, landing path, landing URL, referrer, device type, browser summary, user-agent string, anonymous analytics session identifiers, consent snapshots, and conversion events.
+- Page views, CTA clicks, FAQ opens, contact actions, quote-funnel milestones, payment-page activity, checkout-start events, paid outcomes, experiment names, variants, and exposure identifiers.
+- Browser local storage and session storage values used to restore quote drafts and analytics or attribution snapshots.
+- Advertising platform spend and performance metrics imported from Google Ads, such as campaign, ad group, ad, device, network, impressions, clicks, cost, conversions, and conversion value.
 - IP address used for rate limiting and, for admin actions, a hashed IP address and user-agent string in audit logs.
 - Cookies or similar technologies from Clerk, Google, Mapbox, Stripe, and other service providers.
 
@@ -78,6 +80,8 @@ We use information to:
 - Process payments through Stripe.
 - Send transactional approved-quote emails through Resend.
 - Measure advertising performance and quote submissions.
+- Analyze first-party marketing performance, funnel drop-off, source/landing-page quality, service-area demand, lead quality, quote approvals, and paid customer outcomes.
+- Support authorized internal analysis by database/reporting tools, including read-only AI-assisted analysis tools operating under Autoscape-controlled access.
 - Maintain audit logs, detect misuse, enforce rate limits, and protect quote integrity.
 - Improve the service area, quote workflow, and customer experience.
 - Send email marketing only where Autoscape has recorded consent or another lawful basis confirmed by legal review.
@@ -117,8 +121,9 @@ Detected providers include:
 - Mapbox for address search, maps, satellite imagery, static map previews, and geocoding.
 - Stripe for checkout, subscriptions, billing portal, payment status, and card summary data.
 - Resend for approved-quote transactional email.
-- Google Ads and Google tag for conversion measurement and advertising attribution.
+- Google Ads, Google Ads API, and Google tag for conversion measurement, advertising attribution, and ad-spend/performance import.
 - PostgreSQL, Prisma, and the hosting infrastructure used by Autoscape for application data.
+- Authorized internal database and AI-assisted analysis tools may access first-party data, including personal information, through controlled read-only credentials for marketing and operations analysis.
 - DigitalOcean staging hosting and GoDaddy domain/DNS records, based on current project documentation.
 
 Personal information may be processed outside Ontario or Canada by these providers. Where required, Autoscape should review provider agreements and cross-border disclosure obligations before production launch.
@@ -127,7 +132,7 @@ Personal information may be processed outside Ontario or Canada by these provide
 
 We keep information as long as reasonably needed for the purposes described in this Policy, including quote review, customer support, payment records, audit logs, security, legal obligations, and business records.
 
-Specific retention schedule: [NEEDS BUSINESS REVIEW: define retention periods for leads, quotes, account metadata, payment records, audit logs, attribution data, service-area requests, and backups].
+Specific retention schedule: [NEEDS BUSINESS REVIEW: define retention periods for leads, quotes, account metadata, payment records, audit logs, first-party analytics events/sessions, ad-spend imports, service-area requests, and backups].
 
 ## Security
 
@@ -154,4 +159,3 @@ The website and services are intended for residential landscaping customers and 
 ## Changes
 
 Autoscape may update this Privacy Policy from time to time. The "Last updated" date shows when this draft was last revised.
-

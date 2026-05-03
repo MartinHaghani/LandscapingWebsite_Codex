@@ -32,7 +32,7 @@ describe('LegalPage', () => {
     const markup = renderLegalRoute('/legal/privacy-policy');
 
     expect(markup).toContain('Privacy Policy');
-    expect(markup).toContain('Last updated: May 1, 2026');
+    expect(markup).toContain('Last updated: May 3, 2026');
     expect(markup).toContain('1001283716 ONTARIO INC.');
     expect(markup).toContain('contact@autoscape.ca');
     expect(markup).toContain('Back to legal documents');

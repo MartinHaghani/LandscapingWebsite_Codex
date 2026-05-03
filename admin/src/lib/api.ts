@@ -282,6 +282,33 @@ export interface AdminAttributionSummaryRow {
   count: number;
 }
 
+export interface AdminAnalyticsHealth {
+  generatedAt: string;
+  eventsLast24h: number;
+  sessionsLast24h: number;
+  duplicateEventCount: number;
+  missingSessionEventCount: number;
+  dataQuality: {
+    missingSessionEventCount: number;
+    missingAttributionSubmittedQuoteCount: number;
+    paidQuotesMissingAttributionCount: number;
+    lifecycleEventsMissingQuoteCount: number;
+    impossibleFunnelOrderCount: number;
+    utmCasingDriftCount: number;
+    suddenDailyEventVolumeDrop: boolean;
+    failedAdSpendImportCount7d: number;
+  };
+  latestGoogleAdsImport: {
+    status: string;
+    startedAt: string;
+    finishedAt: string | null;
+    dateFrom: string;
+    dateTo: string;
+    rowCount: number;
+    errorMessage: string | null;
+  } | null;
+}
+
 export interface AdminServiceAreaCheckResponse {
   inServiceArea: boolean;
   distanceToNearestStationKm?: number;
@@ -475,6 +502,10 @@ export const adminApi = {
       generatedAt: string;
       launchAt: string | null;
     }>('/api/admin/attribution/summary', getToken);
+  },
+
+  getAnalyticsHealth(getToken: AuthTokenProvider) {
+    return request<AdminAnalyticsHealth>('/api/admin/analytics/health', getToken);
   },
 
   updateQuoteStatus(getToken: AuthTokenProvider, quoteId: string, status: string) {

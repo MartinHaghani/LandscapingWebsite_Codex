@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { analyticsEventNames } from './analytics.js';
 
 const easyQuoteIdPattern = /^[23456789ABCDEFGHJKMNPRSTUVWXYZ]{6}$/;
 const legacyQuoteIdPattern = /^Q-[A-Z0-9_-]{4,30}$/;
@@ -65,13 +66,68 @@ export const attributionSchema = z
     utmCampaign: z.string().trim().max(200).optional(),
     utmTerm: z.string().trim().max(200).optional(),
     utmContent: z.string().trim().max(200).optional(),
+    utmId: z.string().trim().max(200).optional(),
     landingPath: z.string().trim().max(300).optional(),
+    landingUrl: z.string().trim().max(1000).optional(),
     referrer: z.string().trim().max(500).optional(),
+    googleCampaignId: z.string().trim().max(120).optional(),
+    googleAdGroupId: z.string().trim().max(120).optional(),
+    googleAdId: z.string().trim().max(120).optional(),
+    googleKeyword: z.string().trim().max(200).optional(),
+    googleMatchType: z.string().trim().max(40).optional(),
+    googleDevice: z.string().trim().max(40).optional(),
+    googleNetwork: z.string().trim().max(80).optional(),
     deviceType: z.string().trim().max(40).optional(),
     browser: z.string().trim().max(80).optional(),
+    userAgent: z.string().trim().max(300).optional(),
     geoCity: z.string().trim().max(120).optional()
   })
   .optional();
+
+const analyticsPropertyValueSchema = z.union([
+  z.string().trim().max(500),
+  z.number().finite(),
+  z.boolean(),
+  z.null()
+]);
+
+const analyticsPropertiesSchema = z
+  .record(analyticsPropertyValueSchema)
+  .optional()
+  .refine((value) => JSON.stringify(value ?? {}).length <= 12_000, {
+    message: 'Event properties are too large.'
+  });
+
+const analyticsConsentSchema = z.object({
+  functional: z.boolean(),
+  analytics: z.boolean(),
+  marketing: z.boolean()
+});
+
+const analyticsSessionSchema = z.object({
+  id: z.string().trim().min(8).max(120),
+  anonymousId: z.string().trim().min(8).max(120),
+  startedAt: z.string().datetime(),
+  lastSeenAt: z.string().datetime(),
+  attribution: attributionSchema.default({}),
+  consent: analyticsConsentSchema
+});
+
+const analyticsEventSchema = z.object({
+  eventId: z.string().trim().min(8).max(120),
+  eventName: z.enum(analyticsEventNames),
+  route: z.string().trim().min(1).max(300),
+  step: z.string().trim().max(80).optional(),
+  leadId: z.string().trim().max(120).optional(),
+  quoteId: z.string().trim().max(120).optional(),
+  properties: analyticsPropertiesSchema,
+  createdAt: z.string().datetime()
+});
+
+export const analyticsEventBatchSchema = z.object({
+  session: analyticsSessionSchema,
+  events: z.array(analyticsEventSchema).min(1).max(50)
+});
 
 export const quoteDraftPayloadSchema = z.object({
   address: z.string().trim().min(3).max(300),

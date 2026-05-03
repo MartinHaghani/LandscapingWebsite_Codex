@@ -8,6 +8,7 @@ Autoscape is a multi-app monorepo for:
 - public shell branding uses the horizontal Autoscape PNG mark at `client/public/images/brand/autoscape-horizontal-brand.png`
 - public shell loads the Google Ads tag `AW-17991079326` from `client/index.html`
 - successful public `Submit Quote` draft saves fire the Google Ads `Submit lead form` conversion `AW-17991079326/FqIMCOHXqYIcEJ6r6IJD`
+- first-party marketing analytics capture sessions, attribution, quote-funnel events, lifecycle outcomes, and Google Ads spend in Postgres for internal reporting and external read-only agent analysis
 
 ## Documentation Map
 
@@ -19,6 +20,8 @@ Autoscape is a multi-app monorepo for:
 - Design decisions: [`docs/design.md`](./docs/design.md)
 - Deployment: [`docs/deployment.md`](./docs/deployment.md)
 - Legal evidence report: [`docs/legal_evidence_report.md`](./docs/legal_evidence_report.md)
+- Marketing agent data dictionary: [`docs/marketing_agent_data_dictionary.md`](./docs/marketing_agent_data_dictionary.md)
+- Marketing agent read-only role SQL: [`docs/marketing_agent_readonly_role.sql`](./docs/marketing_agent_readonly_role.sql)
 
 ## Stack
 
@@ -72,6 +75,13 @@ PUBLIC_API_BASE_URL=http://localhost:4000
 MAPBOX_STATIC_ACCESS_TOKEN=pk.your_mapbox_public_token
 STRIPE_SECRET_KEY=sk_test_replace_me
 STRIPE_WEBHOOK_SECRET=whsec_replace_me
+GOOGLE_ADS_DEVELOPER_TOKEN=replace_me
+GOOGLE_ADS_CLIENT_ID=replace_me.apps.googleusercontent.com
+GOOGLE_ADS_CLIENT_SECRET=replace_me
+GOOGLE_ADS_REFRESH_TOKEN=replace_me
+GOOGLE_ADS_CUSTOMER_ID=1234567890
+# optional manager account access
+GOOGLE_ADS_LOGIN_CUSTOMER_ID=1234567890
 
 # admin/.env
 VITE_API_BASE_URL=http://localhost:4000
@@ -87,13 +97,21 @@ npm --prefix server run prisma:generate
 npm --prefix server run prisma:migrate:dev
 ```
 
-5. If you are cutting an existing development/test database over to the freehand editor, wipe old quote data once:
+5. Import Google Ads spend when Google Ads API credentials are configured:
+
+```bash
+npm --prefix server run ads:import-google -- --days=30
+```
+
+The importer re-pulls a trailing window and upserts daily campaign/ad-group/ad/device/network metrics into Postgres.
+
+6. If you are cutting an existing development/test database over to the freehand editor, wipe old quote data once:
 
 ```bash
 npm --prefix server run cutover:freehand-reset-dev-data
 ```
 
-6. Run apps:
+7. Run apps:
 
 ```bash
 npm run dev        # public app + API
@@ -132,6 +150,7 @@ Current live status: `autoscape-staging` is active in Toronto with `autoscape-st
 - Services page now presents five inline premium-vector service illustrations for Autonomous Mowing, Smart Edging, Cleanup & Debris, Seasonal Maintenance, and Performance Reporting.
 - Marketing pages now use launch-ready production copy (no placeholder content), warm-light visual tokens, and readability-first spacing/contrast across the home, services, and contact surfaces, with mobile navigation, a cleaner signed-out header divider, route-aware full/compact footer variants, footer quick links, and a contact page that promotes compact direct phone/email actions beside the message form.
 - Public legal pages are served from `/legal` and `/legal/:slug`, using Markdown sources in `client/src/content/legal/` plus a small raw-Markdown renderer. Footer links expose Privacy, Terms, Cookies, Payments, and the full legal index across both full and compact footer variants.
+- Public pages create a first-party analytics session, capture Google Ads click IDs, UTMs, ValueTrack parameters, consent snapshot, device/browser fields, and batch allowlisted funnel events to `POST /api/analytics/events`; unload uses `sendBeacon` when available.
 - Contact, quote submit, complete-profile, claim-quote, and approved-payment checkout actions now include nearby Privacy/Terms/Payment or Estimate Terms links. The contact form and complete-profile account intake include an optional unchecked email-marketing opt-in; SMS marketing remains inactive at launch.
 - Home hero now uses a balanced desktop split: left-side headline and CTA group with `No sign-up required.`, a mobile-stacked CTA row on narrow screens, and a right-side animated transparent lawn parcel with a looping three-state sequence: perimeter `learning your lawn...`, 2-second `Generating path`, then `Mowing...` along an 11-pass rounded boustrophedon infill path with denser direction arrows, direct mowing spawn on the first scanline, and a ticker-flip status capsule sized to the active label and centered under the full lawn graphic. On mobile, the lawn graphic appears directly under `Precise Cuts, Lower Costs` and before the CTA buttons.
 - Home page now keeps a tighter top-of-page flow: hero, pricing comparison, mower technology section, three-card services overview with Autonomous Mowing, Edging, and Cleanup & Debris, FAQ, and final quote CTA, with flatter post-hero sections, an unboxed larger sample lawn price check with extra intro spacing, a narrower row-label column, a seasonal `20% off` corner badge, icon-led mower specs, larger FAQ answers with bolded key phrases, and the older Why Electric, How It Works, Why Autoscape, and Testimonials sections removed. On mobile, the mower asset appears directly beneath the `Meet our lawnmowers` heading before the highlight list.
@@ -193,6 +212,7 @@ Current live status: `autoscape-staging` is active in Toronto with `autoscape-st
   6. `/quote-confirmation/:quoteId` handles sign-in and required phone gating before review handoff
   7. `POST /api/quote/:quoteId/contact` finalizes contact + sets status `in_review` (`customer_status=pending`)
   8. Confirmation page `/quote-confirmation/:quoteId`
+- Quote lifecycle and payment paths also emit server-side analytics events for draft creation, claim, finalize, admin approval/rejection, checkout start, and paid outcomes; these stay in first-party storage and are not forwarded raw to ad platforms.
 - Admin-created quote claim flow:
   - admins can open `/quotes/new`, reserve a real six-character easy Quote ID before save, draw lawn/obstacle geometry on the Mapbox Satellite Streets quote map with building outline context where available, and save an anonymous payable quote directly as `status=verified`, `customer_status=awaiting_payment`, `contact_pending=false`
   - admin-created quotes stay in the existing `quotes` table with `auth_user_id=null` until the customer claims them; version 1 is stored in `quote_versions` with `actor_type=admin`
@@ -215,6 +235,18 @@ Current live status: `autoscape-staging` is active in Toronto with `autoscape-st
   - customers can switch billing before payment starts with `POST /api/account/quotes/:quoteId/billing-mode`
   - `POST /api/account/quotes/:quoteId/billing-portal` opens Stripe-hosted card management for owners when Stripe has customer billing context, and account quote detail now includes conditional card-on-file metadata
 - Out-of-area page auto-captures expansion demand via `POST /api/service-area/request`.
+- Analytics reporting views include out-of-area demand and quote drop-off summaries for the marketing agent.
+
+## Marketing Analytics
+
+- First-party tables: `analytics_sessions`, `analytics_events`, `ad_platform_daily_metrics`, and `ad_spend_import_runs`.
+- Reporting views: `marketing_funnel_daily`, `campaign_performance_daily`, `source_landing_page_performance`, `quote_dropoff_sessions`, `experiment_performance_daily`, `geo_demand_summary`, `lead_quality_summary`, and `paid_customer_attribution`.
+- API endpoints:
+  - `POST /api/analytics/events` accepts batched allowlisted browser events with `eventId` idempotency.
+  - `GET /api/admin/analytics/health` shows recent event/session volume and latest Google Ads import status to admin attribution users.
+- Google Ads spend ingestion uses the Google Ads API through `npm --prefix server run ads:import-google -- --days=30`; schedule it daily in production and keep the 30-day trailing window to absorb delayed spend/conversion corrections.
+- External ChatGPT/Codex-style database agents should use the production Postgres read-only role template in `docs/marketing_agent_readonly_role.sql` and the semantic layer in `docs/marketing_agent_data_dictionary.md`.
+- Third-party ad platforms receive only sanitized conversion milestones; raw addresses, contact information, exact coordinates, and quote geometry remain in first-party systems unless a separate enhanced-conversion legal/consent review approves otherwise.
 
 ## Service Area Privacy
 

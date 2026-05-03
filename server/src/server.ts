@@ -19,6 +19,7 @@ import {
   adminQuoteStatusSchema,
   adminQuoteVersionCreateSchema,
   accountQuoteBillingModeSchema,
+  analyticsEventBatchSchema,
   contactPayloadSchema,
   quoteDraftPayloadSchema,
   quoteContactPayloadSchema,
@@ -1149,6 +1150,7 @@ export const createServer = (options: CreateServerOptions = {}) => {
         pathname.match(/^\/api\/account\/quotes\/[^/]+\/payment\/checkout$/) ||
         pathname === '/api/admin/quotes' ||
         pathname === '/api/admin/quotes/reserve-id' ||
+        pathname === '/api/analytics/events' ||
         pathname === '/api/contact' ||
         pathname === '/api/service-area/request')
     ) {
@@ -1435,6 +1437,35 @@ export const createServer = (options: CreateServerOptions = {}) => {
           ...result.body,
           replayed: result.replayed
         });
+        return;
+      } catch (error) {
+        if (error instanceof SyntaxError) {
+          json(res, 400, { error: 'Invalid JSON body.' });
+          return;
+        }
+        if (error instanceof Error && error.message === 'Payload too large.') {
+          json(res, 413, { error: 'Payload too large.' });
+          return;
+        }
+
+        const mapped = mapStoreError(error);
+        json(res, mapped.statusCode, { error: mapped.message });
+        return;
+      }
+    }
+
+    if (method === 'POST' && pathname === '/api/analytics/events') {
+      try {
+        const body = await readJson(req, 250_000);
+        const parsed = analyticsEventBatchSchema.safeParse(body);
+
+        if (!parsed.success) {
+          json(res, 400, { error: 'Invalid analytics event payload.', details: parsed.error.flatten() });
+          return;
+        }
+
+        const result = await dataStore.recordAnalyticsEvents(parsed.data);
+        json(res, 202, result);
         return;
       } catch (error) {
         if (error instanceof SyntaxError) {
@@ -2340,6 +2371,17 @@ export const createServer = (options: CreateServerOptions = {}) => {
           });
 
           json(res, 200, summary);
+          return;
+        }
+
+        if (method === 'GET' && pathname === '/api/admin/analytics/health') {
+          if (!hasCapability(identity.role, 'VIEW_ATTRIBUTION')) {
+            json(res, 403, { error: 'Forbidden.' });
+            return;
+          }
+
+          const health = await dataStore.getAnalyticsHealth();
+          json(res, 200, health);
           return;
         }
 

@@ -170,6 +170,30 @@ services:
         value: __SET_IN_DIGITALOCEAN__
         scope: RUN_TIME
         type: SECRET
+      - key: GOOGLE_ADS_DEVELOPER_TOKEN
+        value: __SET_IN_DIGITALOCEAN__
+        scope: RUN_TIME
+        type: SECRET
+      - key: GOOGLE_ADS_CLIENT_ID
+        value: __SET_IN_DIGITALOCEAN__
+        scope: RUN_TIME
+        type: SECRET
+      - key: GOOGLE_ADS_CLIENT_SECRET
+        value: __SET_IN_DIGITALOCEAN__
+        scope: RUN_TIME
+        type: SECRET
+      - key: GOOGLE_ADS_REFRESH_TOKEN
+        value: __SET_IN_DIGITALOCEAN__
+        scope: RUN_TIME
+        type: SECRET
+      - key: GOOGLE_ADS_CUSTOMER_ID
+        value: __SET_IN_DIGITALOCEAN__
+        scope: RUN_TIME
+        type: SECRET
+      - key: GOOGLE_ADS_LOGIN_CUSTOMER_ID
+        value: __SET_IN_DIGITALOCEAN__
+        scope: RUN_TIME
+        type: SECRET
 
 jobs:
   - name: migrate
@@ -189,6 +213,51 @@ jobs:
         value: ${autoscape-production-db.DATABASE_URL}
         scope: RUN_TIME
         type: GENERAL
+
+  - name: google-ads-spend-import
+    environment_slug: node-js
+    github:
+      repo: MartinHaghani/LandscapingWebsite_Codex
+      branch: main
+      deploy_on_push: true
+    source_dir: server
+    build_command: npm ci && npm run prisma:generate && npm run build
+    run_command: npm run ads:import-google -- --days=30
+    instance_count: 1
+    instance_size_slug: apps-s-1vcpu-0.5gb
+    kind: SCHEDULED
+    schedule:
+      cron: "15 6 * * *"
+      time_zone: America/Toronto
+    envs:
+      - key: DATABASE_URL
+        value: ${autoscape-production-db.DATABASE_URL}
+        scope: RUN_TIME
+        type: GENERAL
+      - key: GOOGLE_ADS_DEVELOPER_TOKEN
+        value: __SET_IN_DIGITALOCEAN__
+        scope: RUN_TIME
+        type: SECRET
+      - key: GOOGLE_ADS_CLIENT_ID
+        value: __SET_IN_DIGITALOCEAN__
+        scope: RUN_TIME
+        type: SECRET
+      - key: GOOGLE_ADS_CLIENT_SECRET
+        value: __SET_IN_DIGITALOCEAN__
+        scope: RUN_TIME
+        type: SECRET
+      - key: GOOGLE_ADS_REFRESH_TOKEN
+        value: __SET_IN_DIGITALOCEAN__
+        scope: RUN_TIME
+        type: SECRET
+      - key: GOOGLE_ADS_CUSTOMER_ID
+        value: __SET_IN_DIGITALOCEAN__
+        scope: RUN_TIME
+        type: SECRET
+      - key: GOOGLE_ADS_LOGIN_CUSTOMER_ID
+        value: __SET_IN_DIGITALOCEAN__
+        scope: RUN_TIME
+        type: SECRET
 
 domains:
   - domain: autoscape.ca

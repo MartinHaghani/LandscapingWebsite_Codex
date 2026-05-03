@@ -8,6 +8,7 @@ import { Badge } from '../components/ui/Badge';
 import { Button } from '../components/ui/Button';
 import { Card } from '../components/ui/Card';
 import { api } from '../lib/api';
+import { trackAnalyticsEvent } from '../lib/analytics';
 import { cn } from '../lib/cn';
 import { fetchAddressSuggestions } from '../lib/geocoding';
 import { formatNumber, toFt, toFt2 } from '../lib/geometry';
@@ -85,6 +86,10 @@ export const InstantQuotePage = () => {
   const polygonCounterRef = useRef(0);
   const mapStepRef = useRef<HTMLDivElement | null>(null);
   const guideRevealTimeoutRef = useRef<number | null>(null);
+  const quoteStartedTrackedRef = useRef(false);
+  const addressStartedTrackedRef = useRef(false);
+  const mapLoadedTrackedRef = useRef(false);
+  const validationTrackedRef = useRef<string | null>(null);
 
   const [addressInput, setAddressInput] = useState('');
   const [selectedAddress, setSelectedAddress] = useState('');
@@ -161,6 +166,12 @@ export const InstantQuotePage = () => {
 
   const beginQuoteGuideSession = () => {
     clearQuoteGuideRevealTimer();
+    trackAnalyticsEvent('quote.guide_opened', {
+      step: 'map',
+      properties: {
+        source: 'auto'
+      }
+    });
     setQuoteGuideSessionState((current) => startNextQuoteGuideSession(current));
     setQuoteGuideWaitingForMapReady(true);
     setQuoteGuideVisible(false);
@@ -176,6 +187,9 @@ export const InstantQuotePage = () => {
 
   const completeQuoteGuide = () => {
     clearQuoteGuideRevealTimer();
+    trackAnalyticsEvent('quote.guide_completed', {
+      step: 'map'
+    });
     setQuoteGuideWaitingForMapReady(false);
     setQuoteGuideVisible(false);
     setQuoteGuideActiveStepIndex(0);
@@ -183,10 +197,25 @@ export const InstantQuotePage = () => {
 
   const openQuoteGuideManually = () => {
     clearQuoteGuideRevealTimer();
+    trackAnalyticsEvent('quote.guide_opened', {
+      step: 'map',
+      properties: {
+        source: 'manual'
+      }
+    });
     setQuoteGuideActiveStepIndex(0);
     setQuoteGuideWaitingForMapReady(false);
     setQuoteGuideVisible(true);
   };
+
+  useEffect(() => {
+    if (!quoteStartedTrackedRef.current) {
+      trackAnalyticsEvent('quote.started', {
+        step: 'address'
+      });
+      quoteStartedTrackedRef.current = true;
+    }
+  }, []);
 
   useEffect(() => {
     const trimmed = addressInput.trim();
@@ -355,6 +384,12 @@ export const InstantQuotePage = () => {
     setSuggestions([]);
     setHighlightedSuggestionIndex(-1);
     setStatusMessage(null);
+    trackAnalyticsEvent('quote.address_selected', {
+      step: 'address',
+      properties: {
+        source: 'mapbox_suggestion'
+      }
+    });
 
     if (isDifferentAddress) {
       clearEditorForNewAddress();
@@ -433,7 +468,21 @@ export const InstantQuotePage = () => {
         lng: resolvedAddress.center[0]
       });
 
+      trackAnalyticsEvent('quote.service_area_checked', {
+        step: 'address',
+        properties: {
+          inServiceArea: coverage.inServiceArea,
+          distanceToNearestStationKm:
+            typeof coverage.distanceToNearestStationKm === 'number'
+              ? Number(coverage.distanceToNearestStationKm.toFixed(3))
+              : null
+        }
+      });
+
       if (!coverage.inServiceArea) {
+        trackAnalyticsEvent('quote.service_area_rejected', {
+          step: 'address'
+        });
         navigate(getCoverageGateDestination('out-of-area'), {
           state: {
             address: resolvedAddress.address,
@@ -548,6 +597,13 @@ export const InstantQuotePage = () => {
   };
 
   const handleQuoteMapReady = () => {
+    if (!mapLoadedTrackedRef.current) {
+      trackAnalyticsEvent('quote.map_loaded', {
+        step: 'map'
+      });
+      mapLoadedTrackedRef.current = true;
+    }
+
     if (
       currentStep !== 'map' ||
       !quoteGuideWaitingForMapReady ||
@@ -612,12 +668,27 @@ export const InstantQuotePage = () => {
     setDrawMode(null);
     setClearAllConfirmation(false);
     setStatusMessage(null);
+    trackAnalyticsEvent(kind === 'service' ? 'quote.polygon_completed' : 'quote.obstacle_completed', {
+      step: 'map',
+      properties: {
+        vertexCount: ringPoints.length,
+        rawPointCount: rawStrokePoints.length
+      }
+    });
   };
 
   const toggleDrawMode = (nextKind: PolygonKind) => {
     setClearAllConfirmation(false);
     setSelection({ kind: 'none' });
     setStatusMessage(null);
+    if (drawMode !== nextKind) {
+      trackAnalyticsEvent('quote.drawing_started', {
+        step: 'map',
+        properties: {
+          polygonKind: nextKind
+        }
+      });
+    }
     setDrawMode((current) => (current === nextKind ? null : nextKind));
   };
 
@@ -687,6 +758,28 @@ export const InstantQuotePage = () => {
 
     clearAllGeometry();
   };
+
+  useEffect(() => {
+    const validationIssue = metrics.selfIntersecting
+      ? 'self_intersecting'
+      : metrics.effectiveGeometryEmpty
+        ? 'effective_geometry_empty'
+        : null;
+
+    if (validationIssue && validationTrackedRef.current !== validationIssue) {
+      validationTrackedRef.current = validationIssue;
+      trackAnalyticsEvent('quote.validation_failed', {
+        step: 'map',
+        properties: {
+          reason: validationIssue
+        }
+      });
+    }
+
+    if (!validationIssue) {
+      validationTrackedRef.current = null;
+    }
+  }, [metrics.selfIntersecting, metrics.effectiveGeometryEmpty]);
 
   useEffect(() => {
     if (selection.kind === 'none') {
@@ -794,6 +887,12 @@ export const InstantQuotePage = () => {
                     id="address"
                     value={addressInput}
                     onChange={(event) => {
+                      if (!addressStartedTrackedRef.current) {
+                        addressStartedTrackedRef.current = true;
+                        trackAnalyticsEvent('quote.address_started', {
+                          step: 'address'
+                        });
+                      }
                       setAddressInput(event.target.value);
                       setSelectedAddress('');
                       setSelectedAddressKey(null);

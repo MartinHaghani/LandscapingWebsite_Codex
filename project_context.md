@@ -19,6 +19,7 @@ Autoscape provides:
 - Services page keeps the coverage map prominent but shortens the visible map height on mobile before the five shared-style inline SVG illustrations: Autonomous Mowing, Smart Edging, Cleanup & Debris, Seasonal Maintenance, and Performance Reporting.
 - Navigation includes the horizontal Autoscape PNG brand mark, mobile menu support, quote CTA, signed-out auth links separated by a slim divider, and a signed-in dashboard link styled with the standard site font/color treatment.
 - Public shell loads the Google Ads tag `AW-17991079326` from `client/index.html`; the admin shell is not tagged.
+- Public shell initializes the first-party analytics SDK, captures landing/referrer/UTM/Google Ads click IDs/ValueTrack parameters, stores an anonymous session, and batches allowlisted page, CTA, contact, quote, and payment events to `POST /api/analytics/events`.
 - Footer repeats the horizontal Autoscape PNG brand mark and includes production contact details, internal quick links, and legal links; quote, auth, payment, confirmation, and dashboard-payment funnel routes use a compact footer variant with legal links preserved.
 - Legal pages are available at `/legal` and `/legal/:slug`, with Markdown source files in `client/src/content/legal/` and drafting evidence tracked in `docs/legal_evidence_report.md`.
 - Marketing pages (home/services/contact) use non-placeholder production copy and a warm-light readability-first design system; the contact page makes phone and email compact direct actions beside the message form.
@@ -77,6 +78,7 @@ Autoscape provides:
    - Server derives/stores canonical quote geometry from `ringPoints`; legacy source payloads are rejected.
    - If the API is unreachable, the review page keeps the local draft intact and shows a direct API reachability error instead of a generic submit failure.
    - After a successful draft response, the public client fires the Google Ads `Submit lead form` conversion `AW-17991079326/FqIMCOHXqYIcEJ6r6IJD` with the quote ID as the transaction ID.
+   - Client and server analytics record the draft as a first-party `quote.draft_created` milestone with session attribution for internal funnel reporting.
 7. Confirmation handoff at `/quote-confirmation/:quoteId` (legacy `/quote-contact/:quoteId` redirects here).
 8. Signed-in draft creation records quote address in Clerk account metadata (`addressHistory` + `defaultAddress`).
 9. Authenticated user claim step (`POST /api/quote/:quoteId/claim`) links quote ownership and now requires the completed-phone profile gate.
@@ -85,6 +87,7 @@ Autoscape provides:
 - Server derives name/email/phone from authenticated account.
 - Property address is derived from stored quote draft address (not a form field).
 - Finalize moves quote directly to `in_review` with `customer_status=pending`.
+- Server-side analytics records claim and finalize lifecycle events from the authoritative API paths, so browser retries or blocked scripts do not become the only source of truth for customer outcomes.
 
 11. Confirmation page loads quote for owner/admin only.
 
@@ -103,6 +106,7 @@ Autoscape provides:
 - Approved quote emails link to public `/pay/:token` pages. Tokens are long random secrets stored only as SHA-256 hashes and are regenerated on approval/resend; superseded email tokens resolve to the current payment link instead of dead-ending while the quote is still payable.
 - Successful Stripe Checkout for both public payment links and authenticated dashboard checkout redirects to `/payment-complete`, which thanks the customer and confirms same-week mowing start. Canceled Checkout returns to the originating payment page for retry.
 - Public/authenticated payment APIs are `GET /api/payment-links/:token`, `POST /api/payment-links/:token/checkout`, `POST /api/account/quotes/:quoteId/payment/checkout`, `POST /api/account/quotes/:quoteId/billing-portal`, and `POST /api/stripe/webhook`.
+- Public/authenticated payment pages and server payment records emit first-party analytics for payment link view, checkout start, and paid outcomes; Stripe remains the payment source of truth.
 - Seasonal quotes create one-time Stripe Checkout Sessions for the approved discounted seasonal total. Per-session quotes create weekly Stripe subscription Checkout Sessions, use a May 1 billing-cycle anchor before season or charge immediately during season, cap paid invoices at `sessionsMax`, and stop no later than September 30.
 - Account quote detail responses now include conditional billing metadata so the dashboard can show the current card-on-file summary when Stripe has a reusable saved method.
 - Quote lookup APIs are owner-only unless caller is admin.
@@ -151,6 +155,7 @@ Admin app (separate Vite frontend) supports:
 - `Area requests` queue with heatmap + cluster map module and hotspot list
 - lead/contact inbox
 - attribution summary (submit snapshot aggregation)
+- analytics health cards for recent event/session volume and Google Ads import status
 - audit events
 - CSV export with role-based PII controls, placed as a low-prominence bottom-page action
 - collapsed search/filter/sort controls across all admin tabs
@@ -177,12 +182,28 @@ Admin app (separate Vite frontend) supports:
   - `server/prisma/migrations/20260415163000_weekly_only_service_frequency/migration.sql`
   - `server/prisma/migrations/20260416130000_approved_quote_email_delivery/migration.sql`
   - `server/prisma/migrations/20260421110000_stripe_quote_payments/migration.sql`
+  - `server/prisma/migrations/20260503120000_marketing_analytics/migration.sql`
 - Idempotency table stores request hash + exact response replay payload.
 - In-memory fallback store remains for local runs without `DATABASE_URL`.
 - Dev cutover script: `npm --prefix server run cutover:freehand-reset-dev-data`
   - wipes test quote/leads/editor records before the freehand v2 rollout
   - preserves schema/reference data such as base stations
 - Local dev quote submit expects the API on `http://localhost:4000`; server CORS reflects loopback frontend origins (`localhost`, `127.0.0.1`, `[::1]`) across arbitrary local ports.
+
+### Marketing Analytics + Agent Intelligence
+
+- First-party analytics tables are the source of truth for marketing analysis:
+  - `analytics_sessions` stores anonymous sessions, landing/referrer, UTMs, Google Ads click IDs, ValueTrack fields, device/browser fields, and consent snapshot.
+  - `analytics_events` stores deduped allowlisted events with attribution copied from the session at event time plus optional lead/quote IDs.
+  - `ad_platform_daily_metrics` stores Google Ads campaign/ad-group/ad/device/network spend and performance rows.
+  - `ad_spend_import_runs` records spend import status, row counts, date windows, errors, and request IDs when available.
+- The public app uses `client/src/lib/analytics.ts` to batch normal events with `fetch` and flush unload events with `navigator.sendBeacon` when available.
+- The active API exposes `POST /api/analytics/events` for browser event ingestion and `GET /api/admin/analytics/health` for admin-visible ingestion/import health.
+- Authoritative server paths emit lifecycle events for quote draft creation, quote claim, quote finalize, admin approval/rejection, checkout start, and payment completion.
+- Google Ads spend ingestion lives in `server/src/lib/googleAdsImport.ts` and `server/src/scripts/importGoogleAdsSpend.ts`; run `npm --prefix server run ads:import-google -- --days=30` daily in production after configuring `GOOGLE_ADS_*` credentials.
+- Canonical reporting views for agent analysis are `marketing_funnel_daily`, `campaign_performance_daily`, `source_landing_page_performance`, `quote_dropoff_sessions`, `experiment_performance_daily`, `geo_demand_summary`, `lead_quality_summary`, and `paid_customer_attribution`.
+- Agent-facing documentation lives in `docs/marketing_agent_data_dictionary.md`; the production read-only role template lives in `docs/marketing_agent_readonly_role.sql`.
+- Google Ads conversion exports stay separate from internal analytics. Current Google Ads browser conversion is the submit-lead event after quote draft creation; later offline conversion uploads should use milestone IDs for dedupe and must not include raw address, contact data, exact coordinates, or geometry without separate consent/legal review.
 
 ## Security / Privacy Model
 
@@ -198,6 +219,8 @@ Admin app (separate Vite frontend) supports:
 - Admin RBAC roles: `OWNER`, `ADMIN`, `REVIEWER`, `MARKETING`.
 - Admin role mapping source: Clerk org roles `owner/admin/reviewer/marketing`.
 - MARKETING role gets masked PII for lists and exports.
+- External marketing database-agent access is intentionally separate from the admin `MARKETING` role: it uses a manually created Postgres role with `SELECT` only, full internal PII visibility, connection/time limits, and read-only transactions. That role must not receive DML or DDL privileges.
+- First-party analytics stores internal quote/customer/property context for Autoscape analysis; ad-platform forwarding remains sanitized by default.
 - Analytics endpoints use `SYSTEM_LAUNCH_AT` cutoff for launch-era consistency.
 
 ## Current Defaults

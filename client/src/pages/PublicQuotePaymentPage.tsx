@@ -4,6 +4,7 @@ import { LegalAgreementCheckbox, LegalDocumentLinks } from '../components/legal/
 import { Button } from '../components/ui/Button';
 import { Card } from '../components/ui/Card';
 import { api, ApiError } from '../lib/api';
+import { trackAnalyticsEvent } from '../lib/analytics';
 import { formatNumber } from '../lib/geometry';
 import { legalAcceptancePayload, legalDocumentSlugs } from '../lib/legalAcceptance';
 import type { PaymentLinkResponse, QuotePaymentStatus } from '../types';
@@ -269,6 +270,14 @@ export const PublicQuotePaymentPage = () => {
         const result = await api.getPaymentLink(token);
         if (mounted) {
           setPaymentLink(result);
+          trackAnalyticsEvent('payment.link_viewed', {
+            step: 'payment',
+            quoteId: result.quote.id,
+            properties: {
+              paymentMode: result.payment.mode,
+              status: result.payment.status
+            }
+          });
         }
       } catch (err) {
         if (mounted) {
@@ -295,6 +304,16 @@ export const PublicQuotePaymentPage = () => {
 
     setCheckoutLoading(true);
     setCheckoutError(null);
+    if (paymentLink) {
+      trackAnalyticsEvent('payment.checkout_started', {
+        step: 'payment',
+        quoteId: paymentLink.quote.id,
+        properties: {
+          paymentMode: paymentLink.payment.mode,
+          amount: paymentLink.payment.amount
+        }
+      });
+    }
     try {
       const result = await api.createPaymentCheckout(token, {
         legalAcceptance: legalAcceptancePayload

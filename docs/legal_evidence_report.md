@@ -1,6 +1,6 @@
 # Autoscape Legal Evidence Report
 
-Last updated: May 1, 2026
+Last updated: May 3, 2026
 
 This report summarizes the codebase evidence used to draft Autoscape's launch legal documents. The documents are legal drafts for attorney and business-owner review. They do not guarantee legal compliance.
 
@@ -8,16 +8,16 @@ This report summarizes the codebase evidence used to draft Autoscape's launch le
 
 | Document | Source file | Public route | Codebase evidence |
 | --- | --- | --- | --- |
-| Privacy Policy | `client/src/content/legal/privacy-policy.md` | `/legal/privacy-policy` | Contact form, quote drafts, account auth, payment pages, attribution, Google Ads tag, Mapbox, Clerk, Stripe, Resend, storage, audit logs |
+| Privacy Policy | `client/src/content/legal/privacy-policy.md` | `/legal/privacy-policy` | Contact form, quote drafts, account auth, payment pages, attribution, first-party analytics, Google Ads tag/API, Mapbox, Clerk, Stripe, Resend, storage, audit logs |
 | Terms of Service | `client/src/content/legal/terms-of-service.md` | `/legal/terms-of-service` | Website use, quote creation, account gating, claim/finalize flow, payment checkout, service-area checks, autonomous service positioning |
-| Cookie Policy | `client/src/content/legal/cookie-policy.md` | `/legal/cookie-policy` | Clerk auth cookies/session handling, Google Ads tag, localStorage draft persistence, sessionStorage attribution, Mapbox and Stripe browser flows |
+| Cookie Policy | `client/src/content/legal/cookie-policy.md` | `/legal/cookie-policy` | Clerk auth cookies/session handling, Google Ads tag, first-party analytics storage, localStorage draft persistence, attribution/session storage, Mapbox and Stripe browser flows |
 | Refund, Cancellation, and Payment Policy | `client/src/content/legal/refund-cancellation-payment-policy.md` | `/legal/refund-cancellation-payment-policy` | Seasonal/per-visit billing modes, Stripe Checkout/Billing Portal, payment statuses, approved quote payment pages |
 | Service Disclaimer | `client/src/content/legal/service-disclaimer.md` | `/legal/service-disclaimer` | Landscaping quote flow, autonomous mowing/service copy, property geometry, service-area limits, pricing review |
 | AI and Automation Disclaimer | `client/src/content/legal/ai-automation-disclaimer.md` | `/legal/ai-automation-disclaimer` | Automated quote calculations, service-area routing, quote review, autonomous landscaping service positioning |
 | SMS and Email Communications Policy | `client/src/content/legal/sms-email-policy.md` | `/legal/sms-email-policy` | Phone/email collection, approved quote email through Resend, optional email marketing opt-in, no SMS provider or SMS marketing consent at launch |
 | Accessibility Statement | `client/src/content/legal/accessibility-statement.md` | `/legal/accessibility-statement` | Public website launch, forms, account pages, maps, no verified WCAG conformance claim in repo |
 | Acceptable Use Policy | `client/src/content/legal/acceptable-use-policy.md` | `/legal/acceptable-use-policy` | Accounts, quote tools, contact form, dashboard, payment links, no public posting or review system |
-| Third-Party Services Disclosure | `client/src/content/legal/third-party-services-disclosure.md` | `/legal/third-party-services-disclosure` | Clerk, Stripe, Resend, Mapbox, Google Ads, Prisma/PostgreSQL, DigitalOcean, GoDaddy references |
+| Third-Party Services Disclosure | `client/src/content/legal/third-party-services-disclosure.md` | `/legal/third-party-services-disclosure` | Clerk, Stripe, Resend, Mapbox, Google Ads/API, first-party database/AI analysis tooling, Prisma/PostgreSQL, DigitalOcean, GoDaddy references |
 | Service Area and Availability Disclaimer | `client/src/content/legal/service-area-disclaimer.md` | `/legal/service-area-disclaimer` | Service-area map/check/request endpoints, obfuscated coverage overlay, default Vaughan station, out-of-area request capture |
 | Estimate, Quote, and Booking Terms | `client/src/content/legal/estimate-booking-terms.md` | `/legal/estimate-booking-terms` | Instant quote summary, draft save, claim/finalize, human review, billing selection, approved payment pages |
 
@@ -36,17 +36,21 @@ Media Release Terms were not created because the inspected codebase does not sho
 - `client/src/pages/QuoteConfirmationPage.tsx`
 - `client/index.html`
 - `client/src/lib/api.ts`
+- `client/src/lib/analytics.ts`
 - `client/src/lib/attribution.ts`
 - `client/src/lib/quoteDraftPersistence.ts`
 - `client/src/types.ts`
 - `server/src/server.ts`
 - `server/src/lib/schemas.ts`
 - `server/src/lib/dataStore.ts`
+- `server/src/lib/analytics.ts`
+- `server/src/lib/googleAdsImport.ts`
 - `server/src/lib/adminAuth.ts`
 - `server/src/lib/stripePayments.ts`
 - `server/src/lib/approvedQuoteEmail.ts`
 - `server/prisma/schema.prisma`
 - `server/prisma/migrations/20260502090000_legal_acceptance_records/migration.sql`
+- `server/prisma/migrations/20260503120000_marketing_analytics/migration.sql`
 - `.env.example`, `client/.env.example`, `server/.env.example`, `admin/.env.example`
 - `README.md`
 - `project_context.md`
@@ -62,7 +66,9 @@ Media Release Terms were not created because the inspected codebase does not sho
 - Resend: approved-quote transactional email.
 - Mapbox: address suggestions/geocoding, Mapbox GL maps, satellite/static map previews.
 - Google Ads/Google tag: public shell tag `AW-17991079326` and quote draft conversion `AW-17991079326/FqIMCOHXqYIcEJ6r6IJD`.
+- Google Ads API: campaign/ad-group/ad spend and performance import into first-party reporting tables.
 - PostgreSQL/PostGIS through Prisma: application data persistence.
+- Authorized internal database and AI-assisted analysis tools: read-only analysis of first-party application and marketing data.
 - DigitalOcean App Platform and DigitalOcean Managed PostgreSQL: documented staging/production hosting model.
 - GoDaddy: documented DNS/domain references.
 
@@ -75,7 +81,8 @@ Media Release Terms were not created because the inspected codebase does not sho
 - Clerk user IDs, account profile metadata, required phone metadata, email marketing consent metadata, and customer address metadata.
 - Legal acceptance records containing action, document slugs, document version, optional lead/quote/auth user references, email, hashed IP, user agent, timestamp, and metadata.
 - Stripe payment object IDs, checkout session IDs, customer IDs, payment intent/subscription IDs, payment status, paid invoice IDs, card brand, last four digits, and card expiry summary when available.
-- Attribution data including Google click identifiers, UTM parameters, landing path, referrer, device type, browser summary, and conversion transaction ID.
+- Attribution and first-party analytics data including anonymous/session IDs, Google click identifiers, Google ValueTrack parameters, UTM parameters, landing path, landing URL, referrer, device type, browser summary, user-agent string, consent snapshots, event IDs, funnel events, experiment names, variants, exposure IDs, and conversion transaction ID.
+- Advertising spend/performance metrics including campaign, ad group, ad, device, network, impressions, clicks, cost, conversions, and conversion value.
 - Admin audit log metadata including hashed IP address and user-agent string.
 
 ## Cookies, Storage, and Tracking Detected
@@ -84,6 +91,7 @@ Media Release Terms were not created because the inspected codebase does not sho
 - Clerk authentication cookies and session handling through Clerk SDK usage.
 - Browser `localStorage` quote draft persistence key `autoscape.quoteDraft.v2`.
 - Browser `sessionStorage` attribution key `autoscape_attribution_v1`.
+- Browser first-party analytics storage keys `autoscape.analytics.anonymousId.v1`, `autoscape.analytics.session.v1`, and `autoscape.analyticsConsent.v1`.
 - Mapbox browser requests for maps, geocoding, and static imagery.
 - Stripe Checkout and Billing Portal browser sessions.
 - No first-party cookie banner or consent-management framework was detected.
@@ -105,14 +113,19 @@ Media Release Terms were not created because the inspected codebase does not sho
 - Stored complete-profile email opt-in in Clerk `unsafeMetadata.autoscapeProfile.emailMarketingConsent`.
 - Propagated Clerk email-marketing opt-in to lead consent during quote claim and quote finalize.
 - Did not add SMS marketing consent, SMS sending, a cookie banner, or a cookie consent framework.
+- Added first-party analytics session/event capture and `POST /api/analytics/events` with allowlisted events and `eventId` dedupe.
+- Added Google Ads spend import script/API client and import-run logging.
+- Added marketing reporting views plus external marketing-agent data dictionary and read-only role SQL template.
+- Added admin analytics health display for event/session and Google Ads import status.
 
 ## Missing Business or Attorney Review Items
 
 - Privacy officer/contact role and internal privacy-request process.
-- Data retention periods for leads, quotes, account metadata, payment records, attribution, audit logs, service-area requests, and backups.
+- Data retention periods for leads, quotes, account metadata, payment records, attribution, first-party analytics, ad-spend imports, audit logs, service-area requests, and backups.
 - Production hosting and subprocessors to confirm before launch.
 - Cross-border processing disclosure and vendor contract/data-processing review.
 - Cookie consent strategy for Google Ads, Clerk, Mapbox, Stripe, and any future analytics/marketing tags.
+- Whether the external database/AI analysis tool needs separate vendor review, contractual controls, or additional customer-facing disclosure before production use.
 - Email unsubscribe implementation, suppression list, message frequency, and marketing provider/process before campaigns.
 - SMS provider, SMS transactional use, and any future SMS marketing consent process.
 - Insurance, licensing, bonding, WSIB, and certification wording, if any.

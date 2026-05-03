@@ -35,6 +35,20 @@ const writeStoredAttribution = (payload: AttributionPayload) => {
   }
 };
 
+const mergeAttributionPayload = (stored: AttributionPayload, fromUrl: AttributionPayload): AttributionPayload => {
+  const urlValues = Object.fromEntries(
+    Object.entries(fromUrl).filter(([, value]) => typeof value === 'string' && value.trim().length > 0)
+  ) as AttributionPayload;
+
+  return {
+    ...stored,
+    ...urlValues,
+    landingPath: stored.landingPath ?? urlValues.landingPath,
+    landingUrl: stored.landingUrl ?? urlValues.landingUrl,
+    referrer: stored.referrer ?? urlValues.referrer
+  };
+};
+
 export const getAttributionSnapshot = (): AttributionPayload => {
   if (typeof window === 'undefined') {
     return {};
@@ -43,12 +57,7 @@ export const getAttributionSnapshot = (): AttributionPayload => {
   const fromUrl = api.getAttributionFromUrl(window.location);
   const stored = readStoredAttribution();
 
-  const merged: AttributionPayload = {
-    ...stored,
-    ...Object.fromEntries(
-      Object.entries(fromUrl).filter(([, value]) => typeof value === 'string' && value.trim().length > 0)
-    )
-  };
+  const merged = mergeAttributionPayload(stored, fromUrl);
 
   if (hasValue(merged)) {
     writeStoredAttribution(merged);

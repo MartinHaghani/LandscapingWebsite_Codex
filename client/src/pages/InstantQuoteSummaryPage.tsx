@@ -7,6 +7,7 @@ import { QuoteStaticPreview } from '../components/quote/QuoteStaticPreview';
 import { Button } from '../components/ui/Button';
 import { Card } from '../components/ui/Card';
 import { api, ApiError, createIdempotencyKey } from '../lib/api';
+import { trackAnalyticsEvent } from '../lib/analytics';
 import { getAttributionSnapshot } from '../lib/attribution';
 import { toFt, toFt2 } from '../lib/geometry';
 import { trackSubmitLeadConversion } from '../lib/googleAds';
@@ -265,6 +266,7 @@ export const InstantQuoteSummaryPage = () => {
   const { getToken } = useAuth();
   const attributionRef = useRef(getAttributionSnapshot());
   const restoredFromStorageRef = useRef(false);
+  const summaryViewedTrackedRef = useRef(false);
   const [draftState, setDraftState] = useState<QuoteDraftPersistedState | null>(null);
   const [loadingDraft, setLoadingDraft] = useState(true);
   const [submitting, setSubmitting] = useState(false);
@@ -333,9 +335,34 @@ export const InstantQuoteSummaryPage = () => {
     key: Key,
     value: QuoteDraftPersistedState[Key]
   ) => {
+    if (key === 'billingMode') {
+      trackAnalyticsEvent('quote.billing_mode_selected', {
+        step: 'summary',
+        properties: {
+          billingMode: String(value)
+        }
+      });
+    }
     setDraftState((current) => (current ? { ...current, [key]: value } : current));
     setStatusMessage(null);
   };
+
+  useEffect(() => {
+    if (!isDraftReady || summaryViewedTrackedRef.current) {
+      return;
+    }
+
+    summaryViewedTrackedRef.current = true;
+    trackAnalyticsEvent('quote.summary_viewed', {
+      step: 'summary',
+      properties: {
+        billingMode,
+        servicePolygonCount: metrics.validServicePolygonCount,
+        quoteValueBucket:
+          quoteTotal < 60 ? 'under_60' : quoteTotal < 90 ? '60_90' : quoteTotal < 130 ? '90_130' : '130_plus'
+      }
+    });
+  }, [billingMode, isDraftReady, metrics.validServicePolygonCount, quoteTotal]);
 
   const handleBackToMap = () => {
     navigate('/instant-quote');
@@ -348,6 +375,15 @@ export const InstantQuoteSummaryPage = () => {
 
     setSubmitting(true);
     setStatusMessage(null);
+    trackAnalyticsEvent('quote.submit_clicked', {
+      step: 'summary',
+      properties: {
+        billingMode,
+        servicePolygonCount: metrics.validServicePolygonCount,
+        quoteValueBucket:
+          quoteTotal < 60 ? 'under_60' : quoteTotal < 90 ? '60_90' : quoteTotal < 130 ? '90_130' : '130_plus'
+      }
+    });
 
     try {
       const authToken = await getToken();
@@ -391,6 +427,15 @@ export const InstantQuoteSummaryPage = () => {
         clearQuoteDraftState(window.localStorage);
       }
 
+      trackAnalyticsEvent('quote.draft_created', {
+        step: 'summary',
+        quoteId: response.quoteId,
+        properties: {
+          billingMode,
+          quoteValueBucket:
+            quoteTotal < 60 ? 'under_60' : quoteTotal < 90 ? '60_90' : quoteTotal < 130 ? '90_130' : '130_plus'
+        }
+      });
       await trackSubmitLeadConversion(response.quoteId);
       navigate(response.nextStepUrl ?? `/quote-confirmation/${response.quoteId}`);
     } catch (error) {

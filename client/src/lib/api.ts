@@ -222,10 +222,20 @@ export const api = {
       utmCampaign: params.get('utm_campaign') ?? undefined,
       utmTerm: params.get('utm_term') ?? undefined,
       utmContent: params.get('utm_content') ?? undefined,
+      utmId: params.get('utm_id') ?? undefined,
       landingPath: location.pathname,
+      landingUrl: typeof window !== 'undefined' ? window.location.href : undefined,
       referrer: typeof document !== 'undefined' ? document.referrer || undefined : undefined,
+      googleCampaignId: params.get('google_campaign_id') ?? undefined,
+      googleAdGroupId: params.get('google_ad_group_id') ?? undefined,
+      googleAdId: params.get('google_ad_id') ?? undefined,
+      googleKeyword: params.get('google_keyword') ?? undefined,
+      googleMatchType: params.get('google_match_type') ?? undefined,
+      googleDevice: params.get('google_device') ?? undefined,
+      googleNetwork: params.get('google_network') ?? undefined,
       deviceType: typeof navigator !== 'undefined' && /Mobi|Android|iPhone|iPad/i.test(navigator.userAgent) ? 'mobile' : 'desktop',
-      browser: typeof navigator !== 'undefined' ? navigator.userAgent.split(' ').slice(-1)[0] : undefined
+      browser: typeof navigator !== 'undefined' ? navigator.userAgent.split(' ').slice(-1)[0] : undefined,
+      userAgent: typeof navigator !== 'undefined' ? navigator.userAgent : undefined
     };
 
     return attribution;

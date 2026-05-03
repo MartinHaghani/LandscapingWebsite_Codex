@@ -5,6 +5,7 @@ import { Card } from '../components/ui/Card';
 import { SectionTitle } from '../components/ui/SectionTitle';
 import { Button } from '../components/ui/Button';
 import { HomeHeroLawnGraphic } from '../components/home/HomeHeroLawnGraphic';
+import { trackAnalyticsEvent } from '../lib/analytics';
 
 const faqs = [
   {
@@ -89,11 +90,32 @@ export const HomePage = () => (
               </p>
               <div className="mt-7 flex flex-col gap-3 min-[375px]:flex-row min-[375px]:flex-wrap min-[375px]:items-center">
                 <div className="w-full min-[375px]:w-auto">
-                  <Link to="/instant-quote">
+                  <Link
+                    to="/instant-quote"
+                    onClick={() =>
+                      trackAnalyticsEvent('cta.clicked', {
+                        properties: {
+                          component: 'home_hero',
+                          destination: '/instant-quote'
+                        }
+                      })
+                    }
+                  >
                     <Button className="w-full min-[375px]:w-auto">Get Instant Quote</Button>
                   </Link>
                 </div>
-                <Link to="/contact" className="w-full min-[375px]:w-auto">
+                <Link
+                  to="/contact"
+                  className="w-full min-[375px]:w-auto"
+                  onClick={() =>
+                    trackAnalyticsEvent('cta.clicked', {
+                      properties: {
+                        component: 'home_hero',
+                        destination: '/contact'
+                      }
+                    })
+                  }
+                >
                   <Button variant="secondary" className="w-full min-[375px]:w-auto">
                     Talk to the Team
                   </Button>
@@ -170,7 +192,17 @@ export const HomePage = () => (
             estimate in minutes.
           </p>
           <div className="mt-6 flex flex-wrap gap-3">
-            <Link to="/instant-quote">
+            <Link
+              to="/instant-quote"
+              onClick={() =>
+                trackAnalyticsEvent('cta.clicked', {
+                  properties: {
+                    component: 'home_final_cta',
+                    destination: '/instant-quote'
+                  }
+                })
+              }
+            >
               <Button>Start Instant Quote</Button>
             </Link>
             <Link to="/services">

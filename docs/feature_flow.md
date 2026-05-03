@@ -5,8 +5,10 @@
 1. User sees the horizontal Autoscape PNG brand mark in the navbar on entry and again in the footer.
 2. Navbar keeps desktop nav links, quote CTA, signed-out auth links with the slim divider, signed-in dashboard link, and mobile menu behavior.
 3. Public page loads include the Google Ads tag `AW-17991079326` from the Vite HTML shell.
-4. Quote, auth, confirmation, payment, payment-complete, and dashboard-payment funnel routes render a compact footer; general marketing routes keep the full footer.
-5. Footer variants link to core legal pages, and `/legal` lists the Markdown legal documents rendered from `client/src/content/legal/`.
+4. The first-party analytics SDK creates or resumes an anonymous session, stores landing/referrer/UTM/Google Ads click IDs/ValueTrack fields, records `page.viewed`, and flushes batched events to `POST /api/analytics/events`.
+5. CTA clicks, FAQ opens, contact direct actions, quote actions, payment actions, and experiment exposure properties are recorded only through the allowlisted event taxonomy.
+6. Quote, auth, confirmation, payment, payment-complete, and dashboard-payment funnel routes render a compact footer; general marketing routes keep the full footer.
+7. Footer variants link to core legal pages, and `/legal` lists the Markdown legal documents rendered from `client/src/content/legal/`.
 
 ## Services: Coverage-First Entry
 
@@ -15,6 +17,7 @@
    - The API builds coverage from server-side base-station config and falls back to the default Vaughan station when no base-station env is provided.
 3. Page presents five illustrated service cards: Autonomous Mowing, Smart Edging, Cleanup & Debris, Seasonal Maintenance, and Performance Reporting.
 4. User clicks `Check my address` CTA to start Instant Quote.
+5. Service-area CTA clicks and out-of-area demand are visible in first-party analytics and agent reporting views.
 
 ## Home: Transparent Hero Graphic
 
@@ -82,6 +85,7 @@
 ### Step 1: Address + Coverage Gate
 
 1. User enters/selects address (Canada/US suggestions only).
+   - First address entry records `quote.address_started`; selected suggestions record `quote.address_selected`.
 2. Suggestion list supports keyboard controls (`ArrowUp/ArrowDown/Enter/Escape`) and click selection.
    - Clicking a suggestion immediately runs the coverage gate and continues to the map when in area.
    - Pressing Enter on a highlighted suggestion behaves the same way.
@@ -89,6 +93,7 @@
 3. Address input and continue action stack on mobile so neither control squeezes the other.
 4. Client resolves selection to `lat/lng`.
 5. Client calls `POST /api/service-area/check`.
+   - In-area checks record `quote.service_area_checked`; out-of-area checks also record `quote.service_area_rejected`.
 6. Gate outcomes:
 
 - in area: proceed to map step
@@ -107,6 +112,7 @@
 8. Delete and `Clear all` are grouped together, and `Clear all` requires confirmation. The confirmation label shortens to `Confirm` on mobile while desktop keeps `Confirm clear all`.
 9. Geometry edits do not auto-reframe the map zoom.
 10. Quote map stays on satellite basemap by default; controls use warm-light, high-contrast UI surfaces.
+    - Map readiness records `quote.map_loaded`; guide open/completion, draw start, polygon completion, obstacle completion, and validation failures are tracked as first-party funnel events.
 11. Map header chrome is reduced to a thin address pill with a subtle `Change address` action, and the address marker uses a green home icon inside the white dot.
 12. The detailed under-map summary card remains available on desktop but is hidden on mobile, including area/perimeter/lawn/obstacle metrics, unit toggle, reset saved draft, and draft status.
 13. After a fresh successful address-to-map transition, the client waits for the map to finish loading and reveals a centered guide modal shell after 1 second.
@@ -138,6 +144,7 @@
 3. Review page presents `Per Season` and `Per Visit` as radio plan cards under `Choose how to pay`, separated by an `or` divider; `Per Season` shows a struck-through regular price plus savings inside the plan card, `Per Visit` shows the full-season total inline, and `billingMode` stays in sync with the selected card.
 4. User sees Terms, Privacy Policy, and Estimate Terms links near the bottom `Submit Quote` button.
 5. User taps the bottom `Submit Quote` button, which still creates the draft and then routes to contact details.
+   - The click records `quote.submit_clicked`; billing-card changes record `quote.billing_mode_selected`; summary entry records `quote.summary_viewed`.
 6. Client submits idempotent draft from the review page:
 
 - `POST /api/quote/draft`
@@ -147,9 +154,10 @@
 
 7. Server validates geometry, derives canonical quote geometry from `ringPoints`, and stores draft quote + version 1 history row.
 8. After the successful draft response, the client fires the Google Ads `Submit lead form` conversion `AW-17991079326/FqIMCOHXqYIcEJ6r6IJD` with the quote ID as the transaction ID.
-9. If request is authenticated, server records draft address to Clerk account metadata (`addressHistory`, latest as `defaultAddress`).
-10. Client clears local draft snapshot and routes to `/quote-confirmation/:quoteId`.
-11. If the API is unreachable instead, client keeps the local draft and shows a direct API reachability error so the user can retry after the backend is available.
+9. Client and server first-party analytics record `quote.draft_created`; the server event comes from the authoritative draft path.
+10. If request is authenticated, server records draft address to Clerk account metadata (`addressHistory`, latest as `defaultAddress`).
+11. Client clears local draft snapshot and routes to `/quote-confirmation/:quoteId`.
+12. If the API is unreachable instead, client keeps the local draft and shows a direct API reachability error so the user can retry after the backend is available.
 
 ### Contact Finalize (Required)
 
@@ -164,6 +172,7 @@
 - header: `Authorization: Bearer <clerk session token>`
 
 6. Confirmation page fetches the draft quote and auto-finalizes it when `contactPending === true`.
+   - Signed-out confirmation views record `quote.auth_required`; successful quote load records `quote.confirmation_viewed`.
 7. Client calls idempotent finalize endpoint:
 
 - `POST /api/quote/:quoteId/contact`
@@ -173,6 +182,7 @@
 8. Server marks quote `in_review`, `customer_status=pending`, `contact_pending=false`, and writes lead contact event.
 9. Server records quote address again into Clerk metadata as a secondary sync pass and propagates any account email marketing opt-in to the lead.
 10. Confirmation page renders the in-review workflow summary and 24-hour response-time note.
+11. Server-side analytics records `quote.claimed` and `quote.finalized` from the claim/finalize endpoints.
 
 ### Customer Dashboard
 
@@ -216,8 +226,10 @@
 
 1. Admin approval or manual resend creates a fresh secure payment token and sends a simplified approved-quote payment email with one `/pay/:token` button, the actual selected payment amount/mode, quote details, and the unchanged approved map preview.
 2. `GET /api/payment-links/:token` loads sanitized approved quote details, payment status, and the shared approved quote preview image without requiring sign-in; superseded email tokens resolve to the current payment link instead of showing a dead link while the quote is still payable.
+   - Payment-link view records `payment.link_viewed`.
 3. `POST /api/payment-links/:token/checkout` creates or reuses a Stripe Checkout Session. Signed-in customers can also create/reuse Checkout from `POST /api/account/quotes/:quoteId/payment/checkout`.
    - Public and dashboard payment pages link the checkout action to the Refund, Cancellation, and Payment Policy plus Terms.
+   - Checkout starts record `payment.checkout_started`; webhook-confirmed paid outcomes record `payment.completed`.
 4. Seasonal quotes use one-time Checkout for the approved discounted seasonal total.
 5. Per-session quotes use weekly subscription Checkout; if paid before May 1, the subscription uses a May 1 billing-cycle anchor with no proration, otherwise the first charge starts at checkout.
 6. Per-session billing is capped at the approved `sessionsMax` count and no later than September 30.
@@ -247,8 +259,10 @@
 
 1. User opens `/contact` under the `Talk to the Autoscape Team` heading and sees compact direct phone and email actions beside the message form.
 2. User can call/email directly or submit the contact form (name/email/phone/message required, address optional, email marketing opt-in optional and unchecked by default).
-3. Client sends idempotent `POST /api/contact`.
-4. Server writes/updates lead + contact event and persists `consentMarketing=true` only when the user explicitly opts in.
+3. First field entry records `contact.started`; direct phone/email actions record `contact.action_clicked`.
+4. Client sends idempotent `POST /api/contact`.
+5. Server writes/updates lead + contact event and persists `consentMarketing=true` only when the user explicitly opts in.
+6. Successful submit records `contact.submitted`.
 
 ## Admin Operations Flow
 
@@ -300,4 +314,13 @@
 ### Attribution + Export
 
 - `GET /api/admin/attribution/summary` (launch-cutoff aware)
+- `GET /api/admin/analytics/health` (recent event/session volume and latest Google Ads import status)
 - `GET /api/admin/exports/quotes.csv` (masked/full based on role), exposed as a quieter bottom-page action in the admin UI
+
+### Marketing Agent Analysis
+
+1. Google Ads spend is imported daily by running `npm --prefix server run ads:import-google -- --days=30`; the trailing window is intentionally re-pulled so delayed spend/conversion corrections update existing rows.
+2. The external ChatGPT/Codex-style database agent connects with the manually created read-only Postgres role from `docs/marketing_agent_readonly_role.sql`.
+3. The agent first queries reporting views such as `campaign_performance_daily`, `marketing_funnel_daily`, `source_landing_page_performance`, `quote_dropoff_sessions`, and `experiment_performance_daily`.
+4. The agent uses `docs/marketing_agent_data_dictionary.md` for canonical metrics, event definitions, attribution caveats, and output style.
+5. Agent answers should stay brief by default and frame insights internally as observation, evidence, likely cause, recommended action, and confidence.

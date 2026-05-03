@@ -4,6 +4,7 @@ import { SectionTitle } from '../components/ui/SectionTitle';
 import { Button } from '../components/ui/Button';
 import { LegalAgreementCheckbox, LegalDocumentLinks } from '../components/legal/LegalAgreementCheckbox';
 import { api, ApiError, createIdempotencyKey } from '../lib/api';
+import { trackAnalyticsEvent } from '../lib/analytics';
 import { getAttributionSnapshot } from '../lib/attribution';
 import { legalAcceptancePayload, legalDocumentSlugs } from '../lib/legalAcceptance';
 
@@ -71,6 +72,7 @@ export const ContactPage = () => {
   const [privacyAccepted, setPrivacyAccepted] = useState(false);
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
+  const [startedTracked, setStartedTracked] = useState(false);
 
   const canSubmit = useMemo(
     () =>
@@ -105,6 +107,12 @@ export const ContactPage = () => {
         type: 'success',
         message: `Message received. Confirmation ID: ${response.id}`
       });
+      trackAnalyticsEvent('contact.submitted', {
+        properties: {
+          marketingConsent,
+          hasAddress: form.address.trim().length > 0
+        }
+      });
       setForm(emptyForm);
       setMarketingConsent(false);
       setPrivacyAccepted(false);
@@ -116,6 +124,15 @@ export const ContactPage = () => {
     } finally {
       setLoading(false);
     }
+  };
+
+  const trackContactStarted = () => {
+    if (startedTracked) {
+      return;
+    }
+
+    setStartedTracked(true);
+    trackAnalyticsEvent('contact.started');
   };
 
   return (
@@ -145,6 +162,13 @@ export const ContactPage = () => {
                 <a
                   key={method.href}
                   href={method.href}
+                  onClick={() =>
+                    trackAnalyticsEvent('contact.action_clicked', {
+                      properties: {
+                        channel: method.icon
+                      }
+                    })
+                  }
                   className="grid grid-cols-[2.75rem_minmax(0,1fr)] gap-4 py-5 transition-colors hover:text-brand sm:grid-cols-[3rem_minmax(0,1fr)]"
                 >
                   <span className="flex h-11 w-11 items-center justify-center rounded-lg border border-brand/25 bg-brand/10 text-brand">
@@ -195,9 +219,10 @@ export const ContactPage = () => {
                   id="name"
                   required
                   value={form.name}
-                  onChange={(event) =>
-                    setForm((current) => ({ ...current, name: event.target.value }))
-                  }
+                  onChange={(event) => {
+                    trackContactStarted();
+                    setForm((current) => ({ ...current, name: event.target.value }));
+                  }}
                   autoComplete="name"
                   className="form-input"
                   placeholder="Jane Doe"
@@ -213,9 +238,10 @@ export const ContactPage = () => {
                   type="email"
                   required
                   value={form.email}
-                  onChange={(event) =>
-                    setForm((current) => ({ ...current, email: event.target.value }))
-                  }
+                  onChange={(event) => {
+                    trackContactStarted();
+                    setForm((current) => ({ ...current, email: event.target.value }));
+                  }}
                   autoComplete="email"
                   className="form-input"
                   placeholder="jane@example.com"
@@ -231,9 +257,10 @@ export const ContactPage = () => {
                   type="tel"
                   required
                   value={form.phone}
-                  onChange={(event) =>
-                    setForm((current) => ({ ...current, phone: event.target.value }))
-                  }
+                  onChange={(event) => {
+                    trackContactStarted();
+                    setForm((current) => ({ ...current, phone: event.target.value }));
+                  }}
                   autoComplete="tel"
                   className="form-input"
                   placeholder="+1 416 000 0000"
@@ -247,9 +274,10 @@ export const ContactPage = () => {
                 <input
                   id="address"
                   value={form.address}
-                  onChange={(event) =>
-                    setForm((current) => ({ ...current, address: event.target.value }))
-                  }
+                  onChange={(event) => {
+                    trackContactStarted();
+                    setForm((current) => ({ ...current, address: event.target.value }));
+                  }}
                   autoComplete="street-address"
                   className="form-input"
                   placeholder="123 Greenway Blvd, Vaughan, ON"
@@ -265,9 +293,10 @@ export const ContactPage = () => {
                   rows={5}
                   required
                   value={form.message}
-                  onChange={(event) =>
-                    setForm((current) => ({ ...current, message: event.target.value }))
-                  }
+                  onChange={(event) => {
+                    trackContactStarted();
+                    setForm((current) => ({ ...current, message: event.target.value }));
+                  }}
                   className="form-input min-h-[140px]"
                   placeholder="Tell us about your property, service goals, or any timeline requirements."
                 />
