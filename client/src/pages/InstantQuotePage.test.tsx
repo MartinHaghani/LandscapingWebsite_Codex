@@ -25,17 +25,16 @@ const renderInstantQuotePage = () =>
     </StaticRouter>
   );
 
-describe('InstantQuotePage progress header', () => {
-  it('renders the 3-step progress rail without the old intro copy', () => {
+describe('InstantQuotePage address header', () => {
+  it('renders the address-first privacy reassurance without the progress rail', () => {
     const markup = renderInstantQuotePage();
 
-    expect(markup).toContain('data-quote-progress="true"');
-    expect(markup).toContain('data-step-state="current"');
-    expect(markup).toContain('data-step-state="upcoming"');
-    expect(markup).toContain('Step 1 of 3');
-    expect(markup).toContain('Review quote');
-    expect(markup).toContain('Current step');
-    expect(markup).toContain('Up next');
+    expect(markup).toContain('start with an address');
+    expect(markup).toContain('Your privacy is important to us.');
+    expect(markup).toContain('stay with Autoscape');
+    expect(markup).toContain('We do not sell your information');
+    expect(markup).not.toContain('data-quote-progress="true"');
+    expect(markup).not.toContain('Step 1 of 3');
     expect(markup).toContain('flex flex-col gap-3 sm:flex-row sm:items-start');
     expect(markup).toContain('w-full shrink-0 whitespace-nowrap px-5 py-3 sm:w-auto');
     expect(markup).not.toContain('Select a property address to lock the map center.');

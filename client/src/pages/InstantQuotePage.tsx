@@ -889,10 +889,23 @@ export const InstantQuotePage = () => {
     <div className="mx-auto w-full max-w-[1440px] px-4 py-12 md:px-8 md:py-16">
       <div className="max-w-4xl">
         <Badge>Instant Quote</Badge>
-        <h1 className="sr-only">Instant Quote</h1>
+        {currentStep === 'address' ? (
+          <>
+            <h1 className="mt-5 font-display text-3xl font-semibold tracking-tight text-ink md:text-5xl">
+              Let's start with an address
+            </h1>
+            <p className="mt-4 max-w-2xl text-sm leading-7 text-copy-muted md:text-base">
+              Your privacy is important to us. Your address and contact information stay with Autoscape and are used
+              only to confirm service availability, prepare your quote, and contact you about your request. We do not
+              sell your information or share it for advertising.
+            </p>
+          </>
+        ) : (
+          <h1 className="sr-only">Instant Quote</h1>
+        )}
       </div>
 
-      {currentStep !== 'choice' ? <QuoteProgressRail currentStep={currentStep} compactOnMobile /> : null}
+      {currentStep === 'map' ? <QuoteProgressRail currentStep={currentStep} compactOnMobile /> : null}
 
       {currentStep === 'address' ? (
         <div className="relative isolate z-50 mt-8 grid gap-6">
@@ -990,7 +1003,7 @@ export const InstantQuotePage = () => {
           ) : null}
         </div>
       ) : currentStep === 'choice' ? (
-        <div className="mt-8 grid min-w-0 gap-6">
+        <div className="mx-auto mt-8 grid w-full max-w-4xl min-w-0 gap-6">
           <div className="flex min-w-0 max-w-full flex-col gap-2 overflow-hidden rounded-2xl border border-stroke/80 bg-surface/70 px-4 py-3 text-sm shadow-soft sm:flex-row sm:items-center sm:justify-between sm:rounded-full sm:py-2">
             <p className="min-w-0 truncate text-copy-muted">{selectedAddress}</p>
             <Button
@@ -1029,7 +1042,7 @@ export const InstantQuotePage = () => {
               <Card className="group relative min-w-0 overflow-hidden bg-surface !p-2.5 sm:!p-5 md:!p-7">
                 <div className="absolute inset-x-0 top-0 h-1 bg-brand" aria-hidden="true" />
                 <div className="flex h-full flex-col">
-                  <div>
+                  <div className="min-h-[6.75rem]">
                     <h2 className="break-words pt-2 pb-1 text-center font-display text-sm font-semibold leading-tight text-ink sm:pt-0 sm:pb-0 sm:text-2xl md:text-3xl">
                       We create a quote
                     </h2>
@@ -1043,8 +1056,8 @@ export const InstantQuotePage = () => {
                     <li>Quick and easy</li>
                   </ul>
 
-                  <div className="mt-auto min-h-[6.125rem] pt-3 sm:min-h-0 sm:pt-6">
-                    <p className="mb-2 min-h-9 text-[0.58rem] leading-3 text-copy-soft sm:mb-3 sm:min-h-0 sm:text-xs sm:leading-5">
+                  <div className="mt-auto min-h-[6.125rem] pt-3 sm:min-h-[7.5rem] sm:pt-6">
+                    <p className="mb-2 min-h-9 text-[0.58rem] leading-3 text-copy-soft sm:mb-3 sm:min-h-10 sm:text-xs sm:leading-5">
                       Sign up required: We need your information to email you a quote.
                     </p>
                     <Button
@@ -1062,7 +1075,7 @@ export const InstantQuotePage = () => {
               <Card className="group relative min-w-0 overflow-hidden bg-surface !p-2.5 sm:!p-5 md:!p-7">
                 <div className="absolute inset-x-0 top-0 h-1 bg-ink" aria-hidden="true" />
                 <div className="flex h-full flex-col">
-                  <div>
+                  <div className="min-h-[6.75rem]">
                     <h2 className="break-words pt-2 pb-1 text-center font-display text-sm font-semibold leading-tight text-ink sm:pt-0 sm:pb-0 sm:text-2xl md:text-3xl">
                       You create a quote
                     </h2>
@@ -1076,8 +1089,8 @@ export const InstantQuotePage = () => {
                     <li>More complex</li>
                   </ul>
 
-                  <div className="mt-auto min-h-[6.125rem] pt-3 sm:min-h-0 sm:pt-6">
-                    <p className="mb-2 min-h-9 text-[0.58rem] leading-3 text-copy-soft sm:mb-3 sm:min-h-0 sm:text-xs sm:leading-5">
+                  <div className="mt-auto min-h-[6.125rem] pt-3 sm:min-h-[7.5rem] sm:pt-6">
+                    <p className="mb-2 min-h-9 text-[0.58rem] leading-3 text-copy-soft sm:mb-3 sm:min-h-10 sm:text-xs sm:leading-5">
                       Sign up required after quote.
                     </p>
                     <Button
