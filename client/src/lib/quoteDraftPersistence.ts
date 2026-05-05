@@ -7,7 +7,7 @@ import type {
 } from '../types';
 
 export type QuoteDraftUnitMode = 'metric' | 'imperial';
-export type QuoteDraftStep = 'address' | 'map';
+export type QuoteDraftStep = 'address' | 'choice' | 'map';
 
 export interface QuoteDraftPersistedState {
   addressInput: string;
@@ -125,7 +125,7 @@ const isPersistedState = (value: unknown): value is QuoteDraftPersistedState => 
     return false;
   }
 
-  if (!(value.currentStep === 'address' || value.currentStep === 'map')) {
+  if (!(value.currentStep === 'address' || value.currentStep === 'choice' || value.currentStep === 'map')) {
     return false;
   }
 

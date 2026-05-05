@@ -105,6 +105,15 @@ export const quoteContactPayloadSchema = z.object({
   attribution: attributionSchema
 });
 
+export const quoteRequestPayloadSchema = z.object({
+  address: z.string().trim().min(3).max(300),
+  location: z.object({
+    lat: z.number().min(-90).max(90),
+    lng: z.number().min(-180).max(180)
+  }),
+  attribution: attributionSchema
+});
+
 export const contactPayloadSchema = z.object({
   name: z.string().trim().min(2).max(100),
   email: z.string().trim().email().max(160),
@@ -130,6 +139,10 @@ export const serviceAreaRequestPayloadSchema = z.object({
 
 export const adminQuoteStatusSchema = z.object({
   status: z.enum(['draft', 'submitted', 'in_review', 'verified', 'rejected'])
+});
+
+export const adminQuoteRequestStatusSchema = z.object({
+  status: z.enum(['requested', 'in_progress', 'quoted', 'canceled'])
 });
 
 export const adminQuoteNoteSchema = z.object({
@@ -160,6 +173,7 @@ export const adminQuoteVersionCreateSchema = z.object({
 
 export const adminQuoteCreateSchema = z.object({
   quoteId: publicQuoteIdSchema.optional(),
+  quoteRequestId: z.string().trim().min(1).max(128).optional(),
   address: z.string().trim().min(3).max(300),
   location: z.object({
     lat: z.number().min(-90).max(90),

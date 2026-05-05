@@ -16,13 +16,15 @@ import {
   shouldShowQuoteHistory,
   shouldShowQuotePrice
 } from '../lib/dashboard';
-import type { AccountQuoteListItem } from '../types';
+import type { AccountQuoteListItem, AccountQuoteRequestListItem } from '../types';
 
 interface DashboardPageContentProps {
   customerName: string;
   customerEmail: string;
   quotes: AccountQuoteListItem[];
+  quoteRequests: AccountQuoteRequestListItem[];
   primaryQuote: AccountQuoteListItem | null;
+  primaryQuoteRequest: AccountQuoteRequestListItem | null;
   primaryQuoteDetail: NormalizedAccountQuote | null;
   loading: boolean;
   error: string | null;
@@ -34,7 +36,8 @@ interface DashboardPageContentProps {
   now?: Date;
 }
 
-const lifecycleSteps = ['Submit quote', 'Team review', 'Payment', 'Season ready'];
+const instantLifecycleSteps = ['Submit quote', 'Team review', 'Payment', 'Season ready'];
+const preparedQuoteLifecycleSteps = ['Request received', 'Quote prepared', 'Payment', 'Season ready'];
 
 const formatStatus = (value: string) =>
   value
@@ -54,12 +57,25 @@ const normalizeDisplayQuote = (quote: AccountQuoteListItem | NormalizedAccountQu
   };
 };
 
-const getDashboardActionContent = (quote: AccountQuoteListItem | null, now: Date) => {
+const getDashboardActionContent = (
+  quote: AccountQuoteListItem | null,
+  quoteRequest: AccountQuoteRequestListItem | null,
+  now: Date
+) => {
+  if (!quote && quoteRequest) {
+    return {
+      title: 'Autoscape is preparing your quote',
+      body: 'Your assisted quote request is in the queue. We will map the lawn and email payment options in less than 24 hours.',
+      ctaLabel: 'View request status',
+      ctaHref: '/dashboard'
+    };
+  }
+
   if (!quote) {
     return {
-      title: 'Get instant quote',
-      body: 'Start with your address, map your lawn, and we will turn it into a reviewed Autoscape quote.',
-      ctaLabel: 'Get instant quote',
+      title: 'Get a quote',
+      body: 'Start with your address, then choose whether Autoscape prepares the quote or you draw the lawn yourself.',
+      ctaLabel: 'Start quote',
       ctaHref: '/instant-quote'
     };
   }
@@ -124,7 +140,9 @@ export const DashboardPageContent = ({
   customerName,
   customerEmail,
   quotes,
+  quoteRequests,
   primaryQuote,
+  primaryQuoteRequest,
   primaryQuoteDetail,
   loading,
   error,
@@ -135,15 +153,22 @@ export const DashboardPageContent = ({
   onManageCard,
   now = new Date()
 }: DashboardPageContentProps) => {
-  const action = getDashboardActionContent(primaryQuote, now);
+  const action = getDashboardActionContent(primaryQuote, primaryQuoteRequest, now);
   const primaryQuoteState = primaryQuote ? getQuoteDashboardState(primaryQuote) : null;
   const activeQuote = primaryQuoteDetail ? normalizeDisplayQuote(primaryQuoteDetail) : primaryQuote ? normalizeDisplayQuote(primaryQuote) : null;
   const quoteHistory =
     primaryQuote && shouldShowQuoteHistory(quotes, primaryQuote)
       ? quotes.filter((quote) => quote.id !== primaryQuote.id)
       : [];
+  const lifecycleSteps =
+    primaryQuote?.origin === 'admin_generated' || primaryQuote?.origin === 'assisted_request'
+      ? preparedQuoteLifecycleSteps
+      : instantLifecycleSteps;
   const lifecycleStepIndex = primaryQuote ? getLifecycleStepIndex(primaryQuote) : 0;
   const cardOnFile = primaryQuoteDetail?.billing.cardOnFile ?? null;
+  const openQuoteRequests = quoteRequests.filter(
+    (request) => request.status !== 'quoted' && request.status !== 'canceled'
+  );
 
   return (
     <div className="mx-auto w-full max-w-7xl px-4 py-10 md:px-8 md:py-20">
@@ -262,6 +287,69 @@ export const DashboardPageContent = ({
               </div>
             </Card>
           </div>
+
+          {quoteRequests.length > 0 ? (
+            <Card className="bg-surface p-5 md:p-7">
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <div>
+                  <p className="text-xs font-semibold uppercase tracking-[0.14em] text-copy-soft">
+                    Assisted quote requests
+                  </p>
+                  <h2 className="mt-2 text-2xl font-semibold text-ink">Autoscape-prepared quotes</h2>
+                </div>
+                {openQuoteRequests.length > 0 ? (
+                  <span className="rounded-full border border-brand/25 bg-brand/10 px-3 py-1 text-xs font-semibold uppercase tracking-[0.14em] text-brand">
+                    {openQuoteRequests.length} active
+                  </span>
+                ) : null}
+              </div>
+
+              <div className="mt-5 grid gap-3">
+                {quoteRequests.map((request) => {
+                  const status =
+                    request.status === 'quoted'
+                      ? 'Quote ready'
+                      : request.status === 'in_progress'
+                        ? 'In progress'
+                        : request.status === 'canceled'
+                          ? 'Canceled'
+                          : 'Requested';
+                  const hasGeneratedQuote = Boolean(request.generatedQuoteId);
+
+                  return (
+                    <article key={request.id} className="rounded-xl border border-stroke bg-surface-raised p-4">
+                      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                        <div className="min-w-0">
+                          <p className="text-sm font-semibold text-ink">{request.address}</p>
+                          <p className="mt-1 text-[11px] uppercase tracking-[0.16em] text-copy-soft">
+                            Request ID: {request.id}
+                          </p>
+                          <p className="mt-2 text-sm text-copy-muted">
+                            {hasGeneratedQuote
+                              ? 'Autoscape prepared this quote. You can open the quote details and payment options now.'
+                              : 'Autoscape will map the lawn and email payment options in less than 24 hours.'}
+                          </p>
+                        </div>
+                        <div className="flex shrink-0 flex-col gap-2 sm:items-end">
+                          <span className="rounded-full border border-stroke bg-surface px-3 py-1 text-xs font-semibold uppercase tracking-[0.14em] text-copy-muted">
+                            {status}
+                          </span>
+                          {request.generatedQuoteId ? (
+                            <Link
+                              to={`/dashboard/quotes/${request.generatedQuoteId}`}
+                              className="text-xs font-semibold uppercase tracking-[0.14em] text-brand hover:text-ink"
+                            >
+                              Open quote
+                            </Link>
+                          ) : null}
+                        </div>
+                      </div>
+                    </article>
+                  );
+                })}
+              </div>
+            </Card>
+          ) : null}
 
           {primaryQuote && primaryQuoteState !== 'complete' ? (
             <section className="grid gap-6 lg:grid-cols-[minmax(0,1.2fr)_minmax(300px,0.8fr)]">
@@ -425,10 +513,10 @@ export const DashboardPageContent = ({
             </Card>
           ) : null}
 
-          {!loading && quotes.length === 0 ? (
+          {!loading && quotes.length === 0 && quoteRequests.length === 0 ? (
             <Card className="bg-surface p-7">
               <p className="text-sm text-copy-muted">
-                No quotes yet. Start your first instant quote to get an address-based property review and pricing.
+                No quotes yet. Start your first quote to choose an Autoscape-assisted request or the instant quote tool.
               </p>
             </Card>
           ) : null}
@@ -443,6 +531,7 @@ export const DashboardPage = () => {
   const { user } = useUser();
   const location = useLocation();
   const [quotes, setQuotes] = useState<AccountQuoteListItem[]>([]);
+  const [quoteRequests, setQuoteRequests] = useState<AccountQuoteRequestListItem[]>([]);
   const [primaryQuoteDetail, setPrimaryQuoteDetail] = useState<NormalizedAccountQuote | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -455,6 +544,11 @@ export const DashboardPage = () => {
   const customerName = user?.fullName?.trim() || user?.firstName?.trim() || 'Autoscape Customer';
   const customerEmail = user?.primaryEmailAddress?.emailAddress ?? 'No email on file';
   const primaryQuote = useMemo(() => selectPrimaryDashboardQuote(quotes), [quotes]);
+  const primaryQuoteRequest = useMemo(
+    () =>
+      quoteRequests.find((request) => request.status !== 'quoted' && request.status !== 'canceled') ?? null,
+    [quoteRequests]
+  );
   const primaryQuoteId = primaryQuote?.id ?? null;
 
   useEffect(() => {
@@ -463,6 +557,8 @@ export const DashboardPage = () => {
     }
 
     if (!isSignedIn || !profileHasRequiredPhone) {
+      setQuotes([]);
+      setQuoteRequests([]);
       setLoading(false);
       return;
     }
@@ -479,12 +575,16 @@ export const DashboardPage = () => {
           throw new ApiError('Authentication is required.', 401);
         }
 
-        const response = await api.getAccountQuotes(token);
+        const [quoteResponse, requestResponse] = await Promise.all([
+          api.getAccountQuotes(token),
+          api.getAccountQuoteRequests(token)
+        ]);
         if (!mounted) {
           return;
         }
 
-        setQuotes(response.items);
+        setQuotes(quoteResponse.items);
+        setQuoteRequests(requestResponse.items);
       } catch (loadError) {
         if (!mounted) {
           return;
@@ -625,7 +725,9 @@ export const DashboardPage = () => {
       customerName={customerName}
       customerEmail={customerEmail}
       quotes={quotes}
+      quoteRequests={quoteRequests}
       primaryQuote={primaryQuote}
+      primaryQuoteRequest={primaryQuoteRequest}
       primaryQuoteDetail={primaryQuoteDetail}
       loading={loading}
       error={error}

@@ -77,7 +77,7 @@
 
 ## Instant Quote: Draft + Finalize
 
-0. `/instant-quote` opens with a compact three-step progress rail that shows `Enter address` first, then `Map your lawn`, then `Review quote`.
+0. `/instant-quote` opens with a compact three-step progress rail that shows `Enter address` first, then `Map your lawn`, then `Review quote`; a valid address now inserts a quote-path choice before the map.
 
 ### Step 1: Address + Coverage Gate
 
@@ -91,11 +91,24 @@
 5. Client calls `POST /api/service-area/check`.
 6. Gate outcomes:
 
-- in area: proceed to map step
+- in area: show the quote-path choice cards
 - out of area: redirect `/service-unavailable`
 - check failure: redirect `/service-check-error`
 
-### Step 2: Geometry Mapping
+### Step 2: Choose Quote Path
+
+1. Client shows two matching Autoscape cards after an in-service address:
+
+- `Autoscape-Assisted Quote`: no drawing, account/phone required, Autoscape prepares the quote, payment email arrives in less than 24 hours.
+- `Draw It Yourself`: opens the existing satellite map tool, lets the customer see pricing before submission, then Autoscape reviews it.
+
+2. If the assisted card is selected while signed out, the draft address/choice state is preserved and the user is sent through sign-up.
+3. If the account has no phone, the user is sent through `/complete-profile/*`.
+4. Returning to `/instant-quote?assisted=1` auto-submits the saved request when auth/profile are ready.
+5. Client calls idempotent `POST /api/quote-requests`; server rechecks service area, writes `quote_requests`, syncs the address to account metadata, and returns a request ID.
+6. The page confirms the assisted request and links to `/dashboard`, where the request is tracked until an admin links a payable quote.
+
+### Step 3: Geometry Mapping
 
 1. User enters persistent freehand draw mode with either `Draw lawn` or `Draw obstacle`.
 2. While active, the selected draw button changes to `Stop drawing`; pointer down starts a stroke, pointer move samples it, and pointer up closes one polygon.
@@ -131,7 +144,7 @@
 - fixed visits: weekly=20 from May to September
 - seasonal default discount: 20%
 
-### Step 3: Review Quote
+### Step 4: Review Quote
 
 1. `Done` navigates to `/instant-quote/summary` only when the mapped draft passes the existing geometry guardrails.
 2. Review page removes the step progress rail and shows a two-section quote-ready layout: one top `Back to Map` action, a desktop top row with address-first quote details and top season/per-visit price cards separated by an `or` divider on the left, a desktop-only map preview with quiet whole-number area/perimeter metadata on the right, then a full-width lower payment-plan section.
@@ -181,10 +194,11 @@
 3. Client calls owner-scoped account APIs:
 
 - `GET /api/account/quotes`
+- `GET /api/account/quote-requests`
 - `GET /api/account/quotes/:quoteId`
 - `GET /api/quote/:quoteId` (owner/admin only)
 
-4. Dashboard ranks one primary quote by urgency: awaiting payment/payment issue first, then in review, then draft/contact-pending recovery, then paid/active.
+4. Dashboard ranks one primary quote by urgency: awaiting payment/payment issue first, then in review, then draft/contact-pending recovery, then paid/active. If there is no active quote but an assisted request exists, that request becomes the primary dashboard action.
 5. Dashboard shows an action-first customer home:
 
 - `Next action` panel with one of: get instant quote, finish submitting quote, quote is in review, waiting for payment, or all done
@@ -193,11 +207,13 @@
 - May-September schedule note and need-help contact panel
 - conditional quote history only when multiple quotes exist and the primary quote is still in progress
 - conditional Stripe `Card on file` panel only when Stripe returns a reusable saved/default payment method
+- tracked assisted request cards until Autoscape links a generated payable quote
 - account summary card with link to `/dashboard/account/*` for Clerk-managed password, profile, and security tasks
 - secondary quote detail screen (`/dashboard/quotes/:quoteId`) with grouped mobile-readable quote details
 - authenticated approved-quote payment screen (`/dashboard/quotes/:quoteId/payment`) that can start Stripe Checkout for the owned quote with full-width mobile actions
 6. On mobile, the dashboard and payment surfaces keep the amount/status/next CTA before secondary summaries and supporting account details.
 7. If a saved Stripe billing method exists, `POST /api/account/quotes/:quoteId/billing-portal` creates a Stripe Customer Portal session so the customer can update the card on file from the dashboard without a custom card form.
+8. Assisted/admin-generated payable quotes start at `customer_status=awaiting_payment`, so the dashboard uses prepared-quote lifecycle copy instead of asking the customer to wait through verification.
 
 ### Admin-Created Quote Claim
 
@@ -263,8 +279,22 @@
 
 ### Quote Inbox
 
-1. Load `GET /api/admin/quotes` (cursor pagination + search/filter/sort params); controls start inside a collapsed filter/sort disclosure.
-2. Admin actions:
+1. Load the Quotes workspace with nested tabs:
+
+- `All`: `GET /api/admin/quotes` plus `GET /api/admin/quote-requests`
+- `Manual quote requests`: `GET /api/admin/quote-requests`
+- `Instant quote tool quotes`: `GET /api/admin/quotes?origin=instant_tool`
+- `Admin generated quotes`: `GET /api/admin/quotes?origin=admin_generated`
+
+2. Controls start inside collapsed filter/sort disclosures, and request rows show customer, address, age/status, generated quote state, and actions.
+3. Manual request actions:
+
+- `Start quote` marks requested rows `in_progress` and opens `/quotes/new?requestId=...`
+- the quote creator preloads request address/location/customer context and locks that address context
+- saving maps valid geometry into a verified awaiting-payment quote with `origin=assisted_request`
+- server links the quote to the request, marks the request `quoted`, creates a payment link, and triggers the public payment email
+
+4. Admin actions:
 
 - create a quote on `/quotes/new`
   - reserve Quote ID (`POST /api/admin/quotes/reserve-id`)

@@ -33,8 +33,11 @@ Autoscape provides:
 1. Step 1 address selection (Canada/US suggestion scope), with the address input and continue action stacked on mobile.
    - Keyboard suggestion controls supported (`ArrowUp/ArrowDown/Enter/Escape`).
    - Clicking a suggestion, or pressing Enter on a highlighted suggestion, resolves that exact suggestion and immediately runs the coverage gate with a pending state to block duplicate checks.
-2. Coverage gate (`POST /api/service-area/check`) before entering map step.
-3. Step 2 geometry drawing uses persistent freehand capture with service + obstacle polygons.
+2. Coverage gate (`POST /api/service-area/check`) before showing quote-path choices.
+3. Step 2 shows two matching cards:
+   - `Autoscape-Assisted Quote` requires sign-up/phone, creates a `quote_requests` row, and tells the customer Autoscape maps the lawn and emails payment options in less than 24 hours.
+   - `Draw It Yourself` opens the existing satellite map tool and keeps the normal pricing/review handoff.
+4. Step 3 geometry drawing uses persistent freehand capture with service + obstacle polygons.
    - Top of map uses a thin address pill with a subtle `Change address` action.
    - `Draw lawn` / `Draw obstacle` toggle into `Stop drawing` while active.
    - Completed strokes automatically stop drawing mode.
@@ -61,7 +64,7 @@ Autoscape provides:
    - Floating top-right action cluster pairs a manual `Guide` help button with the primary `Done` completion action on desktop; mobile places them in the compact top dock so `Done` stays visible at 320px and 390px widths.
    - Drawing controls/panels use warm-light surfaces and high-contrast action states.
    - The detailed under-map area/perimeter/lawn/obstacle/unit/draft summary is desktop-only; mobile keeps blocking status messages above the map and leaves the lower map area clear.
-4. Review page owns billing selection before draft save; service frequency is weekly-only.
+5. Review page owns billing selection before draft save; service frequency is weekly-only.
    - Weekly service uses 20 visits from May to September.
    - Migration `20260415163000_weekly_only_service_frequency` normalizes stored non-weekly quote/version rows to the 20-visit weekly season before tightening the enum; older historical migrations remain unchanged.
    - Pricing formula: `max(20 + 0.05*A + 0.10*P + 1.0*D, 45)`.
@@ -71,16 +74,16 @@ Autoscape provides:
    - Draft persistence key/version is `autoscape.quoteDraft.v2`.
    - Legacy `serviceFrequency` fields in local draft snapshots are accepted and stripped during restore.
    - Saved draft can be reset from address or map panels.
-5. Review page (`/instant-quote/summary`) removes the step progress rail and shows a two-section quote-ready layout: one top `Back to Map` action, a desktop top row with address-first property details on the left, top season/per-visit price cards separated by an `or` divider, and a desktop-only fitted map preview with quiet whole-number area/perimeter metadata on the right, then a full-width lower section with radio billing plan cards separated by an `or` divider before any server draft is created. Seasonal savings sit inside the season plan card instead of a separate summary card.
-6. Draft save (`POST /api/quote/draft`) after review-page confirmation.
+6. Review page (`/instant-quote/summary`) removes the step progress rail and shows a two-section quote-ready layout: one top `Back to Map` action, a desktop top row with address-first property details on the left, top season/per-visit price cards separated by an `or` divider, and a desktop-only fitted map preview with quiet whole-number area/perimeter metadata on the right, then a full-width lower section with radio billing plan cards separated by an `or` divider before any server draft is created. Seasonal savings sit inside the season plan card instead of a separate summary card.
+7. Draft save (`POST /api/quote/draft`) after review-page confirmation.
    - `polygonSource` now requires `schemaVersion: 2` with `activePolygonId`, `polygons[]`, `ringPoints`, and nullable `rawStrokePoints`.
    - Server derives/stores canonical quote geometry from `ringPoints`; legacy source payloads are rejected.
    - If the API is unreachable, the review page keeps the local draft intact and shows a direct API reachability error instead of a generic submit failure.
    - After a successful draft response, the public client fires the Google Ads `Submit lead form` conversion `AW-17991079326/FqIMCOHXqYIcEJ6r6IJD` with the quote ID as the transaction ID.
-7. Confirmation handoff at `/quote-confirmation/:quoteId` (legacy `/quote-contact/:quoteId` redirects here).
-8. Signed-in draft creation records quote address in Clerk account metadata (`addressHistory` + `defaultAddress`).
-9. Authenticated user claim step (`POST /api/quote/:quoteId/claim`) links quote ownership and now requires the completed-phone profile gate.
-10. Confirmation page claims/finalizes the draft by calling `POST /api/quote/:quoteId/contact`.
+8. Confirmation handoff at `/quote-confirmation/:quoteId` (legacy `/quote-contact/:quoteId` redirects here).
+9. Signed-in draft creation records quote address in Clerk account metadata (`addressHistory` + `defaultAddress`).
+10. Authenticated user claim step (`POST /api/quote/:quoteId/claim`) links quote ownership and now requires the completed-phone profile gate.
+11. Confirmation page claims/finalizes the draft by calling `POST /api/quote/:quoteId/contact`.
 
 - Server derives name/email/phone from authenticated account.
 - Property address is derived from stored quote draft address (not a form field).
@@ -107,6 +110,7 @@ Autoscape provides:
 - Account quote detail responses now include conditional billing metadata so the dashboard can show the current card-on-file summary when Stripe has a reusable saved method.
 - Quote lookup APIs are owner-only unless caller is admin.
 - Admin-created quotes use `/claim-quote`: Quote ID-only public preview is allowed before sign-up, sign-up/sign-in returns through `/complete-profile`, the customer claims the quote by ID, chooses `seasonal` or `per_session`, and continues directly to Stripe Checkout.
+- Autoscape-assisted requests use `POST /api/quote-requests` plus `GET /api/account/quote-requests`; `/dashboard` tracks requested/in-progress assisted work until an admin links a payable quote, and assisted/admin-generated quotes skip the customer verification timeline and start in payment state.
 
 ### Out-of-Area Flow
 
@@ -128,6 +132,8 @@ Admin app (separate Vite frontend) supports:
 
 - fixed Autoscape light theme with a sticky sidebar + top utility bar layout
 - quote inbox with pending semantics (`in_review + pending`) and verified-awaiting-payment label
+- nested quote subtabs for `All`, `Manual quote requests`, `Instant quote tool quotes`, and `Admin generated quotes`
+- manual quote requests are `quote_requests` rows from the public assisted card; `/quotes/new?requestId=...` prefills address/customer context, saves a linked `origin=assisted_request` quote, marks the request quoted, and triggers the public payment email
 - polished route-based quote creator (`/quotes/new`) for anonymous admin-created quotes:
   - reserves and displays the real six-character easy Quote ID before save
   - provides `Copy ID`, generic `/claim-quote`, and direct `/claim-quote?quoteId=...` actions
@@ -168,6 +174,7 @@ Admin app (separate Vite frontend) supports:
   - Live status on 2026-05-02 UTC: staging app `autoscape-staging` is active in `tor`, `autoscape-staging-db` is PostgreSQL 16 in `tor1`, and migrations have run. Staging custom domains use self-managed GoDaddy CNAME records and are active. Authenticated staging smoke tests passed for customer quote finalization, admin review/verification, persistence after redeploy, approval-email resend, and Stripe sandbox Checkout/webhook payment confirmation for quote `Q-XFIZFLJX`. Production app `autoscape-production` is active in `tor` from `main`, uses a separate empty PostgreSQL 16 database `autoscape-production-db`, has GoDaddy DNS and HTTPS active for `autoscape.ca`, `www`, `api`, and `admin`, has live Clerk/Mapbox/Resend/Stripe env values set in DigitalOcean, and passes API health, public/admin, CORS, Clerk JWKS, service-area, migration, and live Stripe webhook checks.
 - Persistence: Prisma + Postgres + PostGIS (`server/prisma/schema.prisma`)
 - Approved quote verification creates tokenized Stripe payment links, attempts Resend delivery, records sent/failed delivery rows and audit events, and keeps approval successful if email or preview preflight fails. Tokenized preview images use server-proxied Mapbox satellite static imagery with approved, added, and removed area overlays.
+- Quotes carry `origin` (`instant_tool`, `admin_generated`, `assisted_request`) plus optional `assisted_request_id`; only quote rows with valid server-measured geometry can become payable.
 - Migrations:
   - `server/prisma/migrations/20260304120000_admin_platform_v1/migration.sql`
   - `server/prisma/migrations/20260305103000_quote_session_ranges/migration.sql`
@@ -177,6 +184,8 @@ Admin app (separate Vite frontend) supports:
   - `server/prisma/migrations/20260415163000_weekly_only_service_frequency/migration.sql`
   - `server/prisma/migrations/20260416130000_approved_quote_email_delivery/migration.sql`
   - `server/prisma/migrations/20260421110000_stripe_quote_payments/migration.sql`
+  - `server/prisma/migrations/20260501120000_admin_quote_creation_claim_flow/migration.sql`
+  - `server/prisma/migrations/20260505120000_assisted_quote_requests/migration.sql`
 - Idempotency table stores request hash + exact response replay payload.
 - In-memory fallback store remains for local runs without `DATABASE_URL`.
 - Dev cutover script: `npm --prefix server run cutover:freehand-reset-dev-data`

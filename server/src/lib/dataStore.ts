@@ -72,6 +72,7 @@ interface QuoteDraftInput {
 
 interface AdminQuoteCreateInput {
   quotePublicId?: string;
+  quoteRequestId?: string;
   addressText: string;
   location: {
     lat: number;
@@ -115,6 +116,21 @@ interface QuoteContactInput {
   phone: string;
   message?: string;
   marketingConsent?: boolean;
+  attribution?: AttributionInput;
+}
+
+interface QuoteRequestCreateInput {
+  idempotencyKey: string;
+  authUserId: string;
+  name?: string | null;
+  email?: string | null;
+  phone: string;
+  marketingConsent?: boolean;
+  addressText: string;
+  location: {
+    lat: number;
+    lng: number;
+  };
   attribution?: AttributionInput;
 }
 
@@ -179,6 +195,8 @@ interface QuotePublicRecord {
   status: string;
   customerStatus: 'pending' | 'updated' | 'verified' | 'awaiting_payment' | 'rejected';
   contactPending: boolean;
+  origin: QuoteOrigin;
+  assistedRequestId: string | null;
   submittedAt: string | null;
   verifiedAt: string | null;
   paymentPageUrl: string | null;
@@ -197,6 +215,12 @@ interface ListAccountQuotesInput {
   cursor?: string;
 }
 
+interface ListAccountQuoteRequestsInput {
+  authUserId: string;
+  limit: number;
+  cursor?: string;
+}
+
 interface ListQuotesInput {
   limit: number;
   cursor?: string;
@@ -204,11 +228,24 @@ interface ListQuotesInput {
   status?: string;
   serviceFrequency?: ServiceFrequency;
   contactPending?: boolean;
+  origin?: QuoteOrigin;
   createdFrom?: string;
   createdTo?: string;
   submittedFrom?: string;
   submittedTo?: string;
   sortBy?: 'createdAt' | 'submittedAt' | 'perSessionTotal' | 'seasonalTotalMax';
+  sortDir?: 'asc' | 'desc';
+  role: AdminRole;
+}
+
+interface ListQuoteRequestsInput {
+  limit: number;
+  cursor?: string;
+  q?: string;
+  status?: string;
+  createdFrom?: string;
+  createdTo?: string;
+  sortBy?: 'createdAt' | 'updatedAt';
   sortDir?: 'asc' | 'desc';
   role: AdminRole;
 }
@@ -322,6 +359,9 @@ interface UpdateQuoteBillingModeInput {
   authUserId: string;
   billingMode: BillingMode;
 }
+
+type QuoteOrigin = 'instant_tool' | 'admin_generated' | 'assisted_request';
+type QuoteRequestStatus = 'requested' | 'in_progress' | 'quoted' | 'canceled';
 
 interface SubmitQuoteVersionInput {
   quotePublicId: string;
@@ -514,7 +554,12 @@ interface IdempotentResult<T> {
   replayed: boolean;
 }
 
-type IdempotencyScope = 'quote_draft' | 'quote_contact' | 'service_area_request' | 'contact_submit';
+type IdempotencyScope =
+  | 'quote_draft'
+  | 'quote_contact'
+  | 'quote_request'
+  | 'service_area_request'
+  | 'contact_submit';
 
 interface MemoryLead {
   id: string;
@@ -575,6 +620,24 @@ interface MemoryQuote {
   submittedAt: string | null;
   verifiedAt: string | null;
   verifiedBy: string | null;
+  origin: QuoteOrigin;
+  assistedRequestId: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+interface MemoryQuoteRequest {
+  id: string;
+  leadId: string;
+  authUserId: string;
+  addressText: string;
+  location: {
+    lat: number;
+    lng: number;
+  };
+  status: QuoteRequestStatus;
+  assignedTo: string | null;
+  quotedAt: string | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -1535,6 +1598,7 @@ export class DataStore {
     stripeWebhookEvents: [] as MemoryStripeWebhookEvent[],
     contacts: [] as MemoryLeadContact[],
     requests: [] as MemoryServiceAreaRequest[],
+    quoteRequests: [] as MemoryQuoteRequest[],
     attributionTouches: [] as MemoryAttributionTouch[],
     quoteNotes: [] as MemoryQuoteNote[],
     auditLogs: [] as MemoryAuditLog[],
@@ -2127,6 +2191,8 @@ export class DataStore {
             submittedAt: null,
             verifiedAt: null,
             verifiedBy: null,
+            origin: 'instant_tool',
+            assistedRequestId: null,
             createdAt: now,
             updatedAt: now
           });
@@ -2415,6 +2481,159 @@ export class DataStore {
     );
   }
 
+  async createQuoteRequest(input: QuoteRequestCreateInput) {
+    return this.withDbIdempotency(
+      'quote_request',
+      input.idempotencyKey,
+      {
+        authUserId: input.authUserId,
+        name: input.name,
+        email: input.email,
+        phone: input.phone,
+        marketingConsent: input.marketingConsent === true,
+        addressText: input.addressText,
+        location: input.location,
+        attribution: cleanAttribution(input.attribution)
+      },
+      async () => {
+        if (!this.prisma) {
+          const now = nowIso();
+          const leadId = nanoid(14);
+          const requestId = nanoid(14);
+
+          this.memory.leads.set(leadId, {
+            id: leadId,
+            primaryName: input.name ?? null,
+            primaryEmail: input.email ?? null,
+            primaryPhone: input.phone,
+            consentMarketing: input.marketingConsent === true,
+            externalIds: null,
+            firstSeenAt: now,
+            lastSeenAt: now,
+            createdAt: now,
+            updatedAt: now
+          });
+
+          this.memory.quoteRequests.push({
+            id: requestId,
+            leadId,
+            authUserId: input.authUserId,
+            addressText: input.addressText,
+            location: input.location,
+            status: 'requested',
+            assignedTo: null,
+            quotedAt: null,
+            createdAt: now,
+            updatedAt: now
+          });
+
+          await this.attachLeadAttribution(leadId, input.attribution, undefined);
+
+          await this.writeAuditLog({
+            actor: {
+              userId: input.authUserId,
+              role: 'SYSTEM'
+            },
+            action: 'quote_request.created',
+            entityType: 'quote_request',
+            entityId: requestId,
+            changedFields: ['status', 'address_text'],
+            afterRedacted: {
+              status: 'requested',
+              address: maskAddress(input.addressText)
+            }
+          });
+
+          return {
+            statusCode: 201,
+            body: {
+              ok: true,
+              id: requestId,
+              status: 'requested',
+              address: input.addressText,
+              createdAt: now
+            },
+            resourceType: 'quote_request',
+            resourceId: requestId
+          };
+        }
+
+        const now = new Date();
+        const leadId = nanoid(14);
+        const requestId = nanoid(14);
+
+        await this.prisma.$transaction(async (tx) => {
+          await tx.lead.create({
+            data: {
+              id: leadId,
+              primaryName: input.name ?? null,
+              primaryEmail: input.email ?? null,
+              primaryPhone: input.phone,
+              consentMarketing: input.marketingConsent === true,
+              firstSeenAt: now,
+              lastSeenAt: now
+            }
+          });
+
+          await tx.$executeRaw(
+            Prisma.sql`
+              INSERT INTO "quote_requests" (
+                "id",
+                "lead_id",
+                "auth_user_id",
+                "address_text",
+                "location_geog",
+                "status",
+                "created_at",
+                "updated_at"
+              )
+              VALUES (
+                ${requestId},
+                ${leadId},
+                ${input.authUserId},
+                ${input.addressText},
+                ST_SetSRID(ST_MakePoint(${input.location.lng}, ${input.location.lat}), 4326)::geography,
+                'requested'::"QuoteRequestStatus",
+                now(),
+                now()
+              )
+            `
+          );
+        });
+
+        await this.attachLeadAttribution(leadId, input.attribution, undefined);
+
+        await this.writeAuditLog({
+          actor: {
+            userId: input.authUserId,
+            role: 'SYSTEM'
+          },
+          action: 'quote_request.created',
+          entityType: 'quote_request',
+          entityId: requestId,
+          changedFields: ['status', 'address_text'],
+          afterRedacted: {
+            status: 'requested',
+            address: maskAddress(input.addressText)
+          }
+        });
+
+        return {
+          statusCode: 201,
+          body: {
+            ok: true,
+            id: requestId,
+            status: 'requested',
+            address: input.addressText,
+            createdAt: now.toISOString()
+          },
+          resourceType: 'quote_request',
+          resourceId: requestId
+        };
+      }
+    );
+  }
+
   async createAdminQuote(input: AdminQuoteCreateInput) {
     const normalizedSource = normalizePolygonSource(input.polygonSourceJson);
     if (!normalizedSource) {
@@ -2462,28 +2681,40 @@ export class DataStore {
     const overrideReason = input.overrideReason?.trim() || null;
 
     if (!this.prisma) {
-      const leadId = nanoid(14);
+      const quoteRequest = input.quoteRequestId
+        ? this.memory.quoteRequests.find((request) => request.id === input.quoteRequestId) ?? null
+        : null;
+      if (input.quoteRequestId && !quoteRequest) {
+        throw new Error('QUOTE_REQUEST_NOT_FOUND');
+      }
+      if (quoteRequest?.status === 'quoted') {
+        throw new Error('QUOTE_REQUEST_ALREADY_QUOTED');
+      }
+
+      const leadId = quoteRequest?.leadId ?? nanoid(14);
       const quoteId = nanoid(14);
       const now = nowIso();
 
-      this.memory.leads.set(leadId, {
-        id: leadId,
-        primaryName: null,
-        primaryEmail: null,
-        primaryPhone: null,
-        consentMarketing: false,
-        externalIds: null,
-        firstSeenAt: now,
-        lastSeenAt: now,
-        createdAt: now,
-        updatedAt: now
-      });
+      if (!quoteRequest) {
+        this.memory.leads.set(leadId, {
+          id: leadId,
+          primaryName: null,
+          primaryEmail: null,
+          primaryPhone: null,
+          consentMarketing: false,
+          externalIds: null,
+          firstSeenAt: now,
+          lastSeenAt: now,
+          createdAt: now,
+          updatedAt: now
+        });
+      }
 
       this.memory.quotes.set(quoteId, {
         id: quoteId,
         publicQuoteId,
         leadId,
-        authUserId: null,
+        authUserId: quoteRequest?.authUserId ?? null,
         addressText: input.addressText,
         location: input.location,
         locationSource: 'address_geocode',
@@ -2519,9 +2750,18 @@ export class DataStore {
         submittedAt: now,
         verifiedAt: now,
         verifiedBy: input.actor.userId,
+        origin: input.quoteRequestId ? 'assisted_request' : 'admin_generated',
+        assistedRequestId: input.quoteRequestId ?? null,
         createdAt: now,
         updatedAt: now
       });
+
+      if (quoteRequest) {
+        quoteRequest.status = 'quoted';
+        quoteRequest.assignedTo = input.actor.userId;
+        quoteRequest.quotedAt = now;
+        quoteRequest.updatedAt = now;
+      }
 
       this.memory.quoteVersions.push({
         id: nanoid(14),
@@ -2576,6 +2816,8 @@ export class DataStore {
         status: 'verified',
         customerStatus: 'awaiting_payment',
         contactPending: false,
+        origin: input.quoteRequestId ? 'assisted_request' : 'admin_generated',
+        assistedRequestId: input.quoteRequestId ?? null,
         version: 1,
         perSessionTotal: pricing.perSessionTotal,
         seasonalTotalMax: pricing.seasonalTotalMax,
@@ -2585,19 +2827,46 @@ export class DataStore {
       };
     }
 
-    const leadId = nanoid(14);
+    const quoteRequestRows = input.quoteRequestId
+      ? await this.prisma.$queryRaw<
+          Array<{
+            id: string;
+            lead_id: string;
+            auth_user_id: string;
+            status: QuoteRequestStatus;
+          }>
+        >(
+          Prisma.sql`
+            SELECT "id", "lead_id", "auth_user_id", "status"::text AS status
+            FROM "quote_requests"
+            WHERE "id" = ${input.quoteRequestId}
+            LIMIT 1
+          `
+        )
+      : [];
+    const quoteRequest = quoteRequestRows[0] ?? null;
+    if (input.quoteRequestId && !quoteRequest) {
+      throw new Error('QUOTE_REQUEST_NOT_FOUND');
+    }
+    if (quoteRequest?.status === 'quoted') {
+      throw new Error('QUOTE_REQUEST_ALREADY_QUOTED');
+    }
+
+    const leadId = quoteRequest?.lead_id ?? nanoid(14);
     const quoteId = nanoid(14);
     const polygonGeoJson = JSON.stringify(normalized);
     const polygonSourceJson = JSON.stringify(clonePolygonSource(normalizedSource));
 
     await this.prisma.$transaction(async (tx) => {
-      await tx.lead.create({
-        data: {
-          id: leadId,
-          firstSeenAt: new Date(),
-          lastSeenAt: new Date()
-        }
-      });
+      if (!quoteRequest) {
+        await tx.lead.create({
+          data: {
+            id: leadId,
+            firstSeenAt: new Date(),
+            lastSeenAt: new Date()
+          }
+        });
+      }
 
       const dbMetrics = await tx.$queryRaw<
         Array<{ is_valid: boolean; area_m2: number; perimeter_m: number }>
@@ -2631,6 +2900,7 @@ export class DataStore {
             "id",
             "public_quote_id",
             "lead_id",
+            "auth_user_id",
             "address_text",
             "location_geog",
             "location_source",
@@ -2665,6 +2935,8 @@ export class DataStore {
             "submitted_at",
             "verified_at",
             "verified_by",
+            "origin",
+            "assisted_request_id",
             "created_at",
             "updated_at"
           )
@@ -2672,6 +2944,7 @@ export class DataStore {
             ${quoteId},
             ${publicQuoteId},
             ${leadId},
+            ${quoteRequest?.auth_user_id ?? null},
             ${input.addressText},
             ST_SetSRID(ST_MakePoint(${input.location.lng}, ${input.location.lat}), 4326)::geography,
             'address_geocode'::"LocationSource",
@@ -2706,11 +2979,27 @@ export class DataStore {
             now(),
             now(),
             ${input.actor.userId},
+            ${input.quoteRequestId ? 'assisted_request' : 'admin_generated'}::"QuoteOrigin",
+            ${input.quoteRequestId ?? null},
             now(),
             now()
           )
         `
       );
+
+      if (quoteRequest) {
+        await tx.$executeRaw(
+          Prisma.sql`
+            UPDATE "quote_requests"
+            SET
+              "status" = 'quoted'::"QuoteRequestStatus",
+              "assigned_to" = ${input.actor.userId},
+              "quoted_at" = now(),
+              "updated_at" = now()
+            WHERE "id" = ${quoteRequest.id}
+          `
+        );
+      }
 
       await tx.$executeRaw(
         Prisma.sql`
@@ -2800,6 +3089,8 @@ export class DataStore {
       status: 'verified',
       customerStatus: 'awaiting_payment',
       contactPending: false,
+      origin: input.quoteRequestId ? 'assisted_request' : 'admin_generated',
+      assistedRequestId: input.quoteRequestId ?? null,
       version: 1,
       perSessionTotal: pricing.perSessionTotal,
       seasonalTotalMax: pricing.seasonalTotalMax,
@@ -3525,6 +3816,8 @@ export class DataStore {
         status: quote.status,
         customerStatus: quote.customerStatus,
         contactPending: quote.contactPending,
+        origin: quote.origin,
+        assistedRequestId: quote.assistedRequestId,
         submittedAt: quote.submittedAt,
         verifiedAt: quote.verifiedAt,
         paymentPageUrl: links.paymentPageUrl ?? null,
@@ -3600,6 +3893,8 @@ export class DataStore {
       status: quote.status,
       customerStatus: quote.customerStatus,
       contactPending: quote.contactPending,
+      origin: (quote.origin ?? 'instant_tool') as QuoteOrigin,
+      assistedRequestId: quote.assistedRequestId ?? null,
       submittedAt: quote.submittedAt ? quote.submittedAt.toISOString() : null,
       verifiedAt: quote.verifiedAt?.toISOString() ?? null,
       paymentPageUrl: links.paymentPageUrl ?? null,
@@ -3665,6 +3960,8 @@ export class DataStore {
           status: quote.status,
           customerStatus: quote.customerStatus,
           contactPending: quote.contactPending,
+          origin: quote.origin,
+          assistedRequestId: quote.assistedRequestId,
           serviceFrequency: quote.serviceFrequency,
           perSessionTotal: quote.perSessionTotal,
           seasonalTotalMin: quote.seasonalTotalMin,
@@ -3746,6 +4043,8 @@ export class DataStore {
           status: row.status,
           customerStatus: row.customerStatus,
           contactPending: row.contactPending,
+          origin: (row.origin ?? 'instant_tool') as QuoteOrigin,
+          assistedRequestId: row.assistedRequestId ?? null,
           serviceFrequency: normalizeServiceFrequency(row.serviceFrequency),
           perSessionTotal: parseDecimal(row.perSessionTotal),
           seasonalTotalMin: parseDecimal(row.seasonalTotalMin),
@@ -3785,6 +4084,123 @@ export class DataStore {
     };
   }
 
+  async listAccountQuoteRequests(input: ListAccountQuoteRequestsInput): Promise<PaginatedResponse<Record<string, unknown>>> {
+    const cursor = decodeCursor(input.cursor);
+
+    if (!this.prisma) {
+      const filtered = this.memory.quoteRequests
+        .filter((request) => request.authUserId === input.authUserId)
+        .sort((left, right) => compareText(right.createdAt, left.createdAt));
+      const cursorIndex =
+        cursor === null
+          ? -1
+          : filtered.findIndex((request) => request.createdAt === cursor.createdAt && request.id === cursor.id);
+      const startIndex = cursorIndex >= 0 ? cursorIndex + 1 : 0;
+      const window = filtered.slice(startIndex, startIndex + input.limit + 1);
+      const hasNext = window.length > input.limit;
+      const items = window.slice(0, input.limit).map((request) => {
+        const generatedQuote = [...this.memory.quotes.values()].find(
+          (quote) => quote.assistedRequestId === request.id
+        );
+
+        return {
+          id: request.id,
+          createdAt: request.createdAt,
+          updatedAt: request.updatedAt,
+          address: request.addressText,
+          status: request.status,
+          quotedAt: request.quotedAt,
+          generatedQuoteId: generatedQuote?.publicQuoteId ?? null,
+          generatedQuoteStatus: generatedQuote?.status ?? null,
+          generatedQuoteCustomerStatus: generatedQuote?.customerStatus ?? null
+        };
+      });
+
+      return {
+        items,
+        nextCursor: hasNext ? encodeCursor(window[input.limit].createdAt, window[input.limit].id) : null,
+        meta: {
+          generatedAt: nowIso(),
+          rowCount: items.length,
+          filters: {
+            owner: input.authUserId
+          }
+        }
+      };
+    }
+
+    const cursorSql =
+      cursor !== null
+        ? Prisma.sql`
+            AND (
+              qr."created_at" < ${new Date(cursor.createdAt)}
+              OR (qr."created_at" = ${new Date(cursor.createdAt)} AND qr."id" < ${cursor.id})
+            )
+          `
+        : Prisma.empty;
+
+    const rows = await this.prisma.$queryRaw<
+      Array<{
+        id: string;
+        address_text: string;
+        status: QuoteRequestStatus;
+        created_at: Date;
+        updated_at: Date;
+        quoted_at: Date | null;
+        generated_quote_id: string | null;
+        generated_quote_status: string | null;
+        generated_quote_customer_status: string | null;
+      }>
+    >(
+      Prisma.sql`
+        SELECT
+          qr."id",
+          qr."address_text",
+          qr."status"::text AS status,
+          qr."created_at",
+          qr."updated_at",
+          qr."quoted_at",
+          q."public_quote_id" AS generated_quote_id,
+          q."status"::text AS generated_quote_status,
+          q."customer_status"::text AS generated_quote_customer_status
+        FROM "quote_requests" qr
+        LEFT JOIN "quotes" q ON q."assisted_request_id" = qr."id"
+        WHERE qr."auth_user_id" = ${input.authUserId}
+          ${cursorSql}
+        ORDER BY qr."created_at" DESC, qr."id" DESC
+        LIMIT ${input.limit + 1}
+      `
+    );
+
+    const hasNext = rows.length > input.limit;
+    const pageRows = rows.slice(0, input.limit);
+
+    return {
+      items: pageRows.map((row) => ({
+        id: row.id,
+        createdAt: row.created_at.toISOString(),
+        updatedAt: row.updated_at.toISOString(),
+        address: row.address_text,
+        status: row.status,
+        quotedAt: row.quoted_at?.toISOString() ?? null,
+        generatedQuoteId: row.generated_quote_id,
+        generatedQuoteStatus: row.generated_quote_status,
+        generatedQuoteCustomerStatus: row.generated_quote_customer_status
+      })),
+      nextCursor:
+        hasNext && pageRows.length > 0
+          ? encodeCursor(pageRows[pageRows.length - 1].created_at.toISOString(), pageRows[pageRows.length - 1].id)
+          : null,
+      meta: {
+        generatedAt: nowIso(),
+        rowCount: pageRows.length,
+        filters: {
+          owner: input.authUserId
+        }
+      }
+    };
+  }
+
   async listQuotes(input: ListQuotesInput): Promise<PaginatedResponse<Record<string, unknown>>> {
     const query = input.q?.trim() ?? '';
     const createdFrom = parseDateBound(input.createdFrom);
@@ -3807,6 +4223,10 @@ export class DataStore {
         }
 
         if (typeof input.contactPending === 'boolean' && quote.contactPending !== input.contactPending) {
+          return false;
+        }
+
+        if (input.origin && quote.origin !== input.origin) {
           return false;
         }
 
@@ -3884,6 +4304,8 @@ export class DataStore {
           status: quote.status,
           customerStatus: quote.customerStatus,
           contactPending: quote.contactPending,
+          origin: quote.origin,
+          assistedRequestId: quote.assistedRequestId,
           createdAt: quote.createdAt,
           submittedAt: quote.submittedAt,
           addressText: quote.addressText,
@@ -3921,6 +4343,7 @@ export class DataStore {
             status: input.status ?? null,
             serviceFrequency: input.serviceFrequency ?? null,
             contactPending: typeof input.contactPending === 'boolean' ? String(input.contactPending) : null,
+            origin: input.origin ?? null,
             sortBy,
             sortDir,
             role: input.role
@@ -3941,6 +4364,10 @@ export class DataStore {
 
     if (typeof input.contactPending === 'boolean') {
       whereAnd.push({ contactPending: input.contactPending });
+    }
+
+    if (input.origin) {
+      whereAnd.push({ origin: input.origin });
     }
 
     if (createdFrom || createdTo) {
@@ -4024,6 +4451,8 @@ export class DataStore {
         status: row.status,
         customerStatus: row.customerStatus,
         contactPending: row.contactPending,
+        origin: (row.origin ?? 'instant_tool') as QuoteOrigin,
+        assistedRequestId: row.assistedRequestId ?? null,
         createdAt: row.createdAt.toISOString(),
         submittedAt: row.submittedAt?.toISOString() ?? null,
         addressText: row.addressText,
@@ -4061,11 +4490,421 @@ export class DataStore {
           status: input.status ?? null,
           serviceFrequency: input.serviceFrequency ?? null,
           contactPending: typeof input.contactPending === 'boolean' ? String(input.contactPending) : null,
+          origin: input.origin ?? null,
           sortBy,
           sortDir,
           role: input.role
         }
       }
+    };
+  }
+
+  async listQuoteRequests(input: ListQuoteRequestsInput): Promise<PaginatedResponse<Record<string, unknown>>> {
+    const query = input.q?.trim() ?? '';
+    const createdFrom = parseDateBound(input.createdFrom);
+    const createdTo = parseDateBound(input.createdTo);
+    const sortBy = input.sortBy ?? 'createdAt';
+    const sortDir = input.sortDir ?? 'desc';
+    const direction = sortDir === 'asc' ? 1 : -1;
+    const cursor = sortBy === 'createdAt' ? decodeCursor(input.cursor) : null;
+
+    if (!this.prisma) {
+      const filtered = this.memory.quoteRequests.filter((request) => {
+        if (input.status && request.status !== input.status) {
+          return false;
+        }
+
+        const createdAt = new Date(request.createdAt);
+        if (createdFrom && createdAt < createdFrom) {
+          return false;
+        }
+        if (createdTo && createdAt > createdTo) {
+          return false;
+        }
+
+        if (query.length > 0) {
+          const lead = this.memory.leads.get(request.leadId);
+          const generatedQuote = [...this.memory.quotes.values()].find(
+            (quote) => quote.assistedRequestId === request.id
+          );
+          const matches =
+            includesText(request.id, query) ||
+            includesText(request.addressText, query) ||
+            includesText(lead?.primaryName, query) ||
+            includesText(lead?.primaryEmail, query) ||
+            includesText(lead?.primaryPhone, query) ||
+            includesText(generatedQuote?.publicQuoteId, query);
+
+          if (!matches) {
+            return false;
+          }
+        }
+
+        return true;
+      });
+
+      const sorted = filtered.sort((left, right) => {
+        if (sortBy === 'updatedAt') {
+          return direction * compareText(left.updatedAt, right.updatedAt);
+        }
+
+        return direction * compareText(left.createdAt, right.createdAt);
+      });
+      const cursorIndex =
+        cursor === null
+          ? -1
+          : sorted.findIndex((request) => request.createdAt === cursor.createdAt && request.id === cursor.id);
+      const page = sorted.slice(cursorIndex >= 0 ? cursorIndex + 1 : 0, (cursorIndex >= 0 ? cursorIndex + 1 : 0) + input.limit + 1);
+      const hasNext = page.length > input.limit;
+      const items = page.slice(0, input.limit).map((request) => {
+        const lead = this.memory.leads.get(request.leadId);
+        const generatedQuote = [...this.memory.quotes.values()].find(
+          (quote) => quote.assistedRequestId === request.id
+        );
+        const name = input.role === 'MARKETING' ? maskName(lead?.primaryName ?? null) : lead?.primaryName ?? null;
+        const email = input.role === 'MARKETING' ? maskEmail(lead?.primaryEmail ?? null) : lead?.primaryEmail ?? null;
+        const phone = input.role === 'MARKETING' ? maskPhone(lead?.primaryPhone ?? null) : lead?.primaryPhone ?? null;
+
+        return {
+          id: request.id,
+          status: request.status,
+          createdAt: request.createdAt,
+          updatedAt: request.updatedAt,
+          quotedAt: request.quotedAt,
+          addressText: request.addressText,
+          lat: request.location.lat,
+          lng: request.location.lng,
+          assignedTo: request.assignedTo,
+          generatedQuoteId: generatedQuote?.publicQuoteId ?? null,
+          generatedQuoteStatus: generatedQuote?.status ?? null,
+          generatedQuoteCustomerStatus: generatedQuote?.customerStatus ?? null,
+          lead: {
+            id: request.leadId,
+            name,
+            email,
+            phone
+          }
+        };
+      });
+
+      return {
+        items,
+        nextCursor: sortBy === 'createdAt' && hasNext ? encodeCursor(items[items.length - 1].createdAt, items[items.length - 1].id) : null,
+        meta: {
+          generatedAt: nowIso(),
+          rowCount: items.length,
+          filters: {
+            q: query || null,
+            status: input.status ?? null,
+            sortBy,
+            sortDir,
+            role: input.role
+          }
+        }
+      };
+    }
+
+    const cursorSql =
+      sortBy === 'createdAt' && cursor
+        ? Prisma.sql`
+            AND (
+              qr."created_at" ${sortDir === 'asc' ? Prisma.sql`>` : Prisma.sql`<`} ${new Date(cursor.createdAt)}
+              OR (qr."created_at" = ${new Date(cursor.createdAt)}
+                AND qr."id" ${sortDir === 'asc' ? Prisma.sql`>` : Prisma.sql`<`} ${cursor.id})
+            )
+          `
+        : Prisma.empty;
+    const statusSql = input.status
+      ? Prisma.sql`AND qr."status" = ${input.status}::"QuoteRequestStatus"`
+      : Prisma.empty;
+    const createdSql =
+      createdFrom || createdTo
+        ? Prisma.sql`
+            AND (${createdFrom ? Prisma.sql`qr."created_at" >= ${createdFrom}` : Prisma.sql`true`})
+            AND (${createdTo ? Prisma.sql`qr."created_at" <= ${createdTo}` : Prisma.sql`true`})
+          `
+        : Prisma.empty;
+    const querySql =
+      query.length > 0
+        ? Prisma.sql`
+            AND (
+              qr."id" ILIKE ${`%${query}%`}
+              OR qr."address_text" ILIKE ${`%${query}%`}
+              OR l."primary_name" ILIKE ${`%${query}%`}
+              OR l."primary_email" ILIKE ${`%${query}%`}
+              OR l."primary_phone" ILIKE ${`%${query}%`}
+              OR q."public_quote_id" ILIKE ${`%${query}%`}
+            )
+          `
+        : Prisma.empty;
+    const orderSql =
+      sortBy === 'updatedAt'
+        ? Prisma.sql`qr."updated_at" ${sortDir === 'asc' ? Prisma.sql`ASC` : Prisma.sql`DESC`}, qr."id" ${sortDir === 'asc' ? Prisma.sql`ASC` : Prisma.sql`DESC`}`
+        : Prisma.sql`qr."created_at" ${sortDir === 'asc' ? Prisma.sql`ASC` : Prisma.sql`DESC`}, qr."id" ${sortDir === 'asc' ? Prisma.sql`ASC` : Prisma.sql`DESC`}`;
+
+    const rows = await this.prisma.$queryRaw<
+      Array<{
+        id: string;
+        status: QuoteRequestStatus;
+        created_at: Date;
+        updated_at: Date;
+        quoted_at: Date | null;
+        address_text: string;
+        lat: number;
+        lng: number;
+        assigned_to: string | null;
+        lead_id: string;
+        primary_name: string | null;
+        primary_email: string | null;
+        primary_phone: string | null;
+        generated_quote_id: string | null;
+        generated_quote_status: string | null;
+        generated_quote_customer_status: string | null;
+      }>
+    >(
+      Prisma.sql`
+        SELECT
+          qr."id",
+          qr."status"::text AS status,
+          qr."created_at",
+          qr."updated_at",
+          qr."quoted_at",
+          qr."address_text",
+          ST_Y(qr."location_geog"::geometry) AS lat,
+          ST_X(qr."location_geog"::geometry) AS lng,
+          qr."assigned_to",
+          l."id" AS lead_id,
+          l."primary_name",
+          l."primary_email",
+          l."primary_phone",
+          q."public_quote_id" AS generated_quote_id,
+          q."status"::text AS generated_quote_status,
+          q."customer_status"::text AS generated_quote_customer_status
+        FROM "quote_requests" qr
+        INNER JOIN "leads" l ON l."id" = qr."lead_id"
+        LEFT JOIN "quotes" q ON q."assisted_request_id" = qr."id"
+        WHERE true
+          ${statusSql}
+          ${createdSql}
+          ${querySql}
+          ${cursorSql}
+        ORDER BY ${orderSql}
+        LIMIT ${input.limit + 1}
+      `
+    );
+
+    const hasNext = rows.length > input.limit;
+    const pageRows = rows.slice(0, input.limit);
+    const items = pageRows.map((row) => {
+      const name = input.role === 'MARKETING' ? maskName(row.primary_name) : row.primary_name;
+      const email = input.role === 'MARKETING' ? maskEmail(row.primary_email) : row.primary_email;
+      const phone = input.role === 'MARKETING' ? maskPhone(row.primary_phone) : row.primary_phone;
+
+      return {
+        id: row.id,
+        status: row.status,
+        createdAt: row.created_at.toISOString(),
+        updatedAt: row.updated_at.toISOString(),
+        quotedAt: row.quoted_at?.toISOString() ?? null,
+        addressText: row.address_text,
+        lat: row.lat,
+        lng: row.lng,
+        assignedTo: row.assigned_to,
+        generatedQuoteId: row.generated_quote_id,
+        generatedQuoteStatus: row.generated_quote_status,
+        generatedQuoteCustomerStatus: row.generated_quote_customer_status,
+        lead: {
+          id: row.lead_id,
+          name,
+          email,
+          phone
+        }
+      };
+    });
+
+    return {
+      items,
+      nextCursor:
+        sortBy === 'createdAt' && hasNext && pageRows.length > 0
+          ? encodeCursor(pageRows[pageRows.length - 1].created_at.toISOString(), pageRows[pageRows.length - 1].id)
+          : null,
+      meta: {
+        generatedAt: nowIso(),
+        rowCount: items.length,
+        filters: {
+          q: query || null,
+          status: input.status ?? null,
+          sortBy,
+          sortDir,
+          role: input.role
+        }
+      }
+    };
+  }
+
+  async getQuoteRequest(input: { requestId: string; role: AdminRole }) {
+    if (!this.prisma) {
+      const request = this.memory.quoteRequests.find((item) => item.id === input.requestId);
+      if (!request) {
+        throw new Error('QUOTE_REQUEST_NOT_FOUND');
+      }
+      const lead = this.memory.leads.get(request.leadId);
+      const generatedQuote = [...this.memory.quotes.values()].find((quote) => quote.assistedRequestId === request.id);
+
+      return {
+        id: request.id,
+        status: request.status,
+        createdAt: request.createdAt,
+        updatedAt: request.updatedAt,
+        quotedAt: request.quotedAt,
+        addressText: request.addressText,
+        lat: request.location.lat,
+        lng: request.location.lng,
+        assignedTo: request.assignedTo,
+        generatedQuoteId: generatedQuote?.publicQuoteId ?? null,
+        generatedQuoteStatus: generatedQuote?.status ?? null,
+        generatedQuoteCustomerStatus: generatedQuote?.customerStatus ?? null,
+        lead: {
+          id: request.leadId,
+          name: input.role === 'MARKETING' ? maskName(lead?.primaryName ?? null) : lead?.primaryName ?? null,
+          email: input.role === 'MARKETING' ? maskEmail(lead?.primaryEmail ?? null) : lead?.primaryEmail ?? null,
+          phone: input.role === 'MARKETING' ? maskPhone(lead?.primaryPhone ?? null) : lead?.primaryPhone ?? null
+        }
+      };
+    }
+
+    const rows = await this.prisma.$queryRaw<
+      Array<{
+        id: string;
+        status: QuoteRequestStatus;
+        created_at: Date;
+        updated_at: Date;
+        quoted_at: Date | null;
+        address_text: string;
+        lat: number;
+        lng: number;
+        assigned_to: string | null;
+        lead_id: string;
+        primary_name: string | null;
+        primary_email: string | null;
+        primary_phone: string | null;
+        generated_quote_id: string | null;
+        generated_quote_status: string | null;
+        generated_quote_customer_status: string | null;
+      }>
+    >(
+      Prisma.sql`
+        SELECT
+          qr."id",
+          qr."status"::text AS status,
+          qr."created_at",
+          qr."updated_at",
+          qr."quoted_at",
+          qr."address_text",
+          ST_Y(qr."location_geog"::geometry) AS lat,
+          ST_X(qr."location_geog"::geometry) AS lng,
+          qr."assigned_to",
+          l."id" AS lead_id,
+          l."primary_name",
+          l."primary_email",
+          l."primary_phone",
+          q."public_quote_id" AS generated_quote_id,
+          q."status"::text AS generated_quote_status,
+          q."customer_status"::text AS generated_quote_customer_status
+        FROM "quote_requests" qr
+        INNER JOIN "leads" l ON l."id" = qr."lead_id"
+        LEFT JOIN "quotes" q ON q."assisted_request_id" = qr."id"
+        WHERE qr."id" = ${input.requestId}
+        LIMIT 1
+      `
+    );
+    const row = rows[0];
+    if (!row) {
+      throw new Error('QUOTE_REQUEST_NOT_FOUND');
+    }
+
+    return {
+      id: row.id,
+      status: row.status,
+      createdAt: row.created_at.toISOString(),
+      updatedAt: row.updated_at.toISOString(),
+      quotedAt: row.quoted_at?.toISOString() ?? null,
+      addressText: row.address_text,
+      lat: row.lat,
+      lng: row.lng,
+      assignedTo: row.assigned_to,
+      generatedQuoteId: row.generated_quote_id,
+      generatedQuoteStatus: row.generated_quote_status,
+      generatedQuoteCustomerStatus: row.generated_quote_customer_status,
+      lead: {
+        id: row.lead_id,
+        name: input.role === 'MARKETING' ? maskName(row.primary_name) : row.primary_name,
+        email: input.role === 'MARKETING' ? maskEmail(row.primary_email) : row.primary_email,
+        phone: input.role === 'MARKETING' ? maskPhone(row.primary_phone) : row.primary_phone
+      }
+    };
+  }
+
+  async updateQuoteRequestStatus(input: { requestId: string; status: QuoteRequestStatus; actor: ActorContext }) {
+    if (!this.prisma) {
+      const request = this.memory.quoteRequests.find((item) => item.id === input.requestId);
+      if (!request) {
+        throw new Error('QUOTE_REQUEST_NOT_FOUND');
+      }
+      const before = request.status;
+      request.status = input.status;
+      request.assignedTo = input.status === 'in_progress' ? input.actor.userId : request.assignedTo;
+      request.updatedAt = nowIso();
+
+      await this.writeAuditLog({
+        actor: input.actor,
+        action: 'quote_request.status_updated',
+        entityType: 'quote_request',
+        entityId: request.id,
+        changedFields: ['status'],
+        beforeRedacted: { status: before },
+        afterRedacted: { status: request.status }
+      });
+
+      return {
+        id: request.id,
+        status: request.status,
+        updatedAt: request.updatedAt
+      };
+    }
+
+    const rows = await this.prisma.$queryRaw<Array<{ id: string; status: QuoteRequestStatus; updated_at: Date }>>(
+      Prisma.sql`
+        UPDATE "quote_requests"
+        SET
+          "status" = ${input.status}::"QuoteRequestStatus",
+          "assigned_to" = CASE
+            WHEN ${input.status}::"QuoteRequestStatus" = 'in_progress'::"QuoteRequestStatus" THEN ${input.actor.userId}
+            ELSE "assigned_to"
+          END,
+          "updated_at" = now()
+        WHERE "id" = ${input.requestId}
+        RETURNING "id", "status"::text AS status, "updated_at"
+      `
+    );
+    const row = rows[0];
+    if (!row) {
+      throw new Error('QUOTE_REQUEST_NOT_FOUND');
+    }
+
+    await this.writeAuditLog({
+      actor: input.actor,
+      action: 'quote_request.status_updated',
+      entityType: 'quote_request',
+      entityId: row.id,
+      changedFields: ['status'],
+      afterRedacted: { status: row.status }
+    });
+
+    return {
+      id: row.id,
+      status: row.status,
+      updatedAt: row.updated_at.toISOString()
     };
   }
 
@@ -7422,9 +8261,11 @@ export class DataStore {
         throw new Error('QUOTE_NOT_FOUND');
       }
 
-      const originalVersion = this.memory.quoteVersions
-        .filter((version) => version.quoteId === quote.id && version.actorType === 'client')
-        .sort((left, right) => left.versionNumber - right.versionNumber)[0];
+      const orderedVersions = this.memory.quoteVersions
+        .filter((version) => version.quoteId === quote.id)
+        .sort((left, right) => left.versionNumber - right.versionNumber);
+      const originalVersion =
+        orderedVersions.find((version) => version.actorType === 'client') ?? orderedVersions[0];
       const approvedVersion =
         this.memory.quoteVersions.find(
           (version) => version.quoteId === quote.id && version.versionNumber === approvedVersionNumber
@@ -7478,7 +8319,7 @@ export class DataStore {
       }
     });
 
-    const originalVersion = versionRows.find((row) => row.actorType === 'client') ?? null;
+    const originalVersion = versionRows.find((row) => row.actorType === 'client') ?? versionRows[0] ?? null;
     const approvedVersion = versionRows.find((row) => row.versionNumber === approvedVersionNumber) ?? null;
     if (!originalVersion || !approvedVersion) {
       return null;

@@ -1,4 +1,6 @@
 export type AdminRole = 'OWNER' | 'ADMIN' | 'REVIEWER' | 'MARKETING';
+export type AdminQuoteOrigin = 'instant_tool' | 'admin_generated' | 'assisted_request';
+export type AdminQuoteRequestStatus = 'requested' | 'in_progress' | 'quoted' | 'canceled';
 
 export type AuthTokenProvider = () => Promise<string | null>;
 
@@ -58,6 +60,8 @@ export interface AdminQuoteItem {
   status: string;
   customerStatus: string;
   contactPending: boolean;
+  origin: AdminQuoteOrigin;
+  assistedRequestId: string | null;
   createdAt: string;
   submittedAt: string | null;
   addressText: string;
@@ -70,6 +74,27 @@ export interface AdminQuoteItem {
   finalTotal: number;
   areaM2: number;
   perimeterM: number;
+  lead: {
+    id: string;
+    name: string | null;
+    email: string | null;
+    phone: string | null;
+  };
+}
+
+export interface AdminQuoteRequestItem {
+  id: string;
+  addressText: string;
+  lat: number;
+  lng: number;
+  status: AdminQuoteRequestStatus;
+  assignedTo: string | null;
+  quotedAt: string | null;
+  generatedQuoteId: string | null;
+  generatedQuoteStatus: string | null;
+  generatedQuoteCustomerStatus: string | null;
+  createdAt: string;
+  updatedAt: string;
   lead: {
     id: string;
     name: string | null;
@@ -295,12 +320,24 @@ export interface QuoteListParams {
   limit?: number;
   q?: string;
   status?: string;
+  origin?: AdminQuoteOrigin;
   contactPending?: boolean;
   createdFrom?: string;
   createdTo?: string;
   submittedFrom?: string;
   submittedTo?: string;
   sortBy?: 'createdAt' | 'submittedAt' | 'perSessionTotal' | 'seasonalTotalMax';
+  sortDir?: 'asc' | 'desc';
+}
+
+export interface QuoteRequestListParams {
+  cursor?: string;
+  limit?: number;
+  q?: string;
+  status?: AdminQuoteRequestStatus | '';
+  createdFrom?: string;
+  createdTo?: string;
+  sortBy?: 'createdAt' | 'updatedAt';
   sortDir?: 'asc' | 'desc';
 }
 
@@ -378,6 +415,7 @@ export const adminApi = {
     appendParam(query, 'limit', params.limit);
     appendParam(query, 'q', params.q);
     appendParam(query, 'status', params.status);
+    appendParam(query, 'origin', params.origin);
     appendParam(query, 'contactPending', params.contactPending);
     appendParam(query, 'createdFrom', params.createdFrom);
     appendParam(query, 'createdTo', params.createdTo);
@@ -387,6 +425,39 @@ export const adminApi = {
     appendParam(query, 'sortDir', params.sortDir);
 
     return request<CursorResponse<AdminQuoteItem>>(`/api/admin/quotes?${query.toString()}`, getToken);
+  },
+
+  listQuoteRequests(getToken: AuthTokenProvider, params: QuoteRequestListParams) {
+    const query = new URLSearchParams();
+    appendParam(query, 'cursor', params.cursor);
+    appendParam(query, 'limit', params.limit);
+    appendParam(query, 'q', params.q);
+    appendParam(query, 'status', params.status);
+    appendParam(query, 'createdFrom', params.createdFrom);
+    appendParam(query, 'createdTo', params.createdTo);
+    appendParam(query, 'sortBy', params.sortBy);
+    appendParam(query, 'sortDir', params.sortDir);
+
+    return request<CursorResponse<AdminQuoteRequestItem>>(`/api/admin/quote-requests?${query.toString()}`, getToken);
+  },
+
+  getQuoteRequest(getToken: AuthTokenProvider, requestId: string) {
+    return request<AdminQuoteRequestItem>(`/api/admin/quote-requests/${encodeURIComponent(requestId)}`, getToken);
+  },
+
+  updateQuoteRequestStatus(
+    getToken: AuthTokenProvider,
+    requestId: string,
+    status: AdminQuoteRequestStatus
+  ) {
+    return request<{ id: string; status: AdminQuoteRequestStatus }>(
+      `/api/admin/quote-requests/${encodeURIComponent(requestId)}/status`,
+      getToken,
+      {
+        method: 'PATCH',
+        body: JSON.stringify({ status })
+      }
+    );
   },
 
   checkServiceArea(getToken: AuthTokenProvider, payload: { lat: number; lng: number }) {
@@ -586,6 +657,7 @@ export const adminApi = {
       priceOverrideEnabled: boolean;
       overrideBasePerSessionTotal?: number;
       overrideReason?: string;
+      quoteRequestId?: string;
       serviceFrequency: 'weekly';
       pricingVersion: string;
       currency: string;
@@ -602,6 +674,12 @@ export const adminApi = {
       seasonalDiscountedTotal: number;
       globalDiscountRate: number;
       seasonalDiscountRate: number;
+      origin: AdminQuoteOrigin;
+      assistedRequestId: string | null;
+      approvedQuoteEmail?: {
+        deliveryStatus?: 'sent' | 'failed';
+        errorMessage?: string | null;
+      };
     }>('/api/admin/quotes', getToken, {
       method: 'POST',
       body: JSON.stringify(payload)

@@ -30,11 +30,11 @@ Primary domains:
 - Google Ads conversion helper: `client/src/lib/googleAds.ts` sends the `Submit lead form` conversion `AW-17991079326/FqIMCOHXqYIcEJ6r6IJD` only after successful public quote draft creation.
 - Contact page: `client/src/pages/ContactPage.tsx` (warm-light two-column contact surface with compact direct phone/email actions and the existing idempotent message form)
 - Services gallery: `client/src/pages/ServicesPage.tsx` + `client/src/components/service/ServiceIllustrations.tsx` (coverage-first entry page with a shorter mobile service-area map and five shared-style inline SVG service scenes)
-- Instant quote builder: `client/src/pages/InstantQuotePage.tsx` + `client/src/components/quote/QuoteMapDrawingToolbar.tsx` (badge-only header + compact-on-mobile non-interactive three-step progress rail, mobile-stacked address input/submit controls, address suggestion click/highlighted-Enter auto-continue through the coverage gate using the selected suggestion data directly with duplicate-check protection, full-width map builder, delayed map-guide modal shell for fresh address loads, cleaner editorial guide chrome with one white panel, responsive shorter mobile demo heights, a slowly fading unified demo-and-caption media unit, no divider or white caption box between SVG and guide text, a right-sized desktop demo viewport with the camera layer aligned to the map-body clip window so the SVG starts centered and the bottom remains visible, a tighter centered caption strip directly under the demo, equal-width toolbar buttons above the artwork, separate bottom navigation/progress chrome, looping first-step miniature draw-lawn demo using the refreshed brighter popup-house SVG background to draw both left-side lawn zones inside the same framed viewport treatment used by step 2, with a shared 1.6-second camera transform that does not slow cursor/edit phases, plus loop-edge fades that soften the demo restart, animated second-step SVG lesson that carries those two completed left-side lawns forward while drawing and correcting the right-side backyard zone with the same decoupled camera transform timing, matching framed background treatment, shorter `Add extra points` / `Delete extra points` captions, and the same loop-edge fade behavior, animated third-step SVG obstacle lesson that keeps that same house background and finished lawn state while clicking `Draw obstacle`, tracing a selected red obstacle polygon around the front tree in the bottom-left lawn, holding the completed obstacle scene for 2 seconds before looping again, and swapping the last-slide nav control from `Next` to a green `Done` button that slowly fades the popup back into the tool, desktop floating `Guide` plus `Done` action cluster, compact two-row mobile map dock, desktop-only under-map metrics/unit/draft summary, local draft autosave, and review handoff)
+- Instant quote builder: `client/src/pages/InstantQuotePage.tsx` + `client/src/components/quote/QuoteMapDrawingToolbar.tsx` (badge-only header + compact-on-mobile non-interactive three-step progress rail, mobile-stacked address input/submit controls, address suggestion click/highlighted-Enter auto-continue through the coverage gate using the selected suggestion data directly with duplicate-check protection, post-address choice cards for `Autoscape-Assisted Quote` and `Draw It Yourself`, full-width map builder for the self-serve branch, delayed map-guide modal shell for fresh address loads, cleaner editorial guide chrome with one white panel, responsive shorter mobile demo heights, a slowly fading unified demo-and-caption media unit, no divider or white caption box between SVG and guide text, a right-sized desktop demo viewport with the camera layer aligned to the map-body clip window so the SVG starts centered and the bottom remains visible, a tighter centered caption strip directly under the demo, equal-width toolbar buttons above the artwork, separate bottom navigation/progress chrome, looping first-step miniature draw-lawn demo using the refreshed brighter popup-house SVG background to draw both left-side lawn zones inside the same framed viewport treatment used by step 2, with a shared 1.6-second camera transform that does not slow cursor/edit phases, plus loop-edge fades that soften the demo restart, animated second-step SVG lesson that carries those two completed left-side lawns forward while drawing and correcting the right-side backyard zone with the same decoupled camera transform timing, matching framed background treatment, shorter `Add extra points` / `Delete extra points` captions, and the same loop-edge fade behavior, animated third-step SVG obstacle lesson that keeps that same house background and finished lawn state while clicking `Draw obstacle`, tracing a selected red obstacle polygon around the front tree in the bottom-left lawn, holding the completed obstacle scene for 2 seconds before looping again, and swapping the last-slide nav control from `Next` to a green `Done` button that slowly fades the popup back into the tool, desktop floating `Guide` plus `Done` action cluster, compact two-row mobile map dock, desktop-only under-map metrics/unit/draft summary, local draft autosave, assisted request creation, and review handoff)
 - Instant quote review: `client/src/pages/InstantQuoteSummaryPage.tsx` (two-section quote-ready review layout without the progress rail, one top `Back to Map` action, a desktop top row with address-first quote details plus top season/per-visit price cards separated by an `or` divider, a right-side desktop-only fitted property preview, quiet whole-number area/perimeter metadata, a full-width lower payment-plan section with accessible radio plan cards separated by an `or` divider, seasonal savings shown inside the season plan card instead of as a standalone summary tile, and `POST /api/quote/draft` trigger)
 - Quote claim page: `client/src/pages/ClaimQuotePage.tsx` (`/claim-quote`, optional `quoteId` query prefill, SMS-style six-character code entry, compact quote preview, auth/profile return flow, billing choice, and direct Stripe Checkout)
 - Admin app routes/state: `admin/src/App.tsx`
-- Admin quote creator: `admin/src/pages/QuoteCreatorPage.tsx` (`/quotes/new`, reserved six-character Quote ID, copyable claim links, Mapbox address search, Satellite Streets geometry drawing with building outline context, live stats/pricing, warning-only service-area check, and direct admin quote creation)
+- Admin quote creator: `admin/src/pages/QuoteCreatorPage.tsx` (`/quotes/new`, optional `requestId` assisted-request prefill, reserved six-character Quote ID, copyable claim links for standalone admin quotes, Mapbox address search, Satellite Streets geometry drawing with building outline context, live stats/pricing, warning-only service-area check, direct admin quote creation, and assisted request linking/payment-email trigger)
 - Admin quote editor map module: `admin/src/components/QuoteEditorMap.tsx` (Mapbox Satellite Streets basemap, public quote-map polygon styling/controls, building outlines where available, immediate freehand polygon source hydration, vertex dragging, outline-click vertex insertion, and the same shared draw-end simplifier used in public)
 - Public layout shell: `client/src/components/layout/SiteLayout.tsx` (`Navbar`, route-aware full/compact `Footer`, `ScrollToTop`; navbar/footer use the horizontal PNG brand mark from `client/public/images/brand/autoscape-horizontal-brand.png`, and signed-out desktop auth links use a slim divider rather than punctuation)
 - Public theming system: `client/tailwind.config.ts` + `client/src/index.css` (warm-light semantic tokens, shared form/focus/map-control styling)
@@ -57,12 +57,14 @@ Primary domains:
   - `server/prisma/migrations/20260416130000_approved_quote_email_delivery/migration.sql`
   - `server/prisma/migrations/20260421110000_stripe_quote_payments/migration.sql`
   - `server/prisma/migrations/20260501120000_admin_quote_creation_claim_flow/migration.sql`
+  - `server/prisma/migrations/20260505120000_assisted_quote_requests/migration.sql`
 
 Canonical tables:
 
 - `leads`
 - `lead_contacts`
 - `quotes`
+- `quote_requests`
 - `quote_versions` (append-only history)
 - `quote_id_reservations`
 - `approved_quote_email_deliveries`
@@ -86,6 +88,7 @@ Spatial storage:
 ### Quote
 
 - `POST /api/quote/draft` (idempotent)
+- `POST /api/quote-requests` (idempotent, auth + phone required; creates Autoscape-assisted/manual quote request after an in-service address)
 - `GET /api/quote-preview/:quoteId` (public Quote ID preview for verified awaiting-payment quotes)
 - `POST /api/quote/:quoteId/claim` (auth + completed phone required; associates `quotes.auth_user_id`)
 - `POST /api/quote/:quoteId/contact` (idempotent, auth required, optional notes payload only)
@@ -101,6 +104,7 @@ Spatial storage:
 ### Account
 
 - `GET /api/account/quotes` (auth required; returns owned quotes plus customer status, verification timing, payment summary, and dashboard payment-page URL)
+- `GET /api/account/quote-requests` (auth required; returns assisted requests until they are linked to payable quotes)
 - `GET /api/account/quotes/:quoteId` (auth required, owner scoped; returns quote detail plus conditional Stripe card-on-file metadata)
 - `POST /api/account/quotes/:quoteId/billing-mode` (auth + phone required, owner scoped; switches `seasonal` / `per_session` before payment starts)
 - `POST /api/account/quotes/:quoteId/billing-portal` (auth required, owner scoped; opens Stripe-hosted card management when a Stripe customer billing context exists)
@@ -190,6 +194,9 @@ All admin endpoints are under `/api/admin/*` and return cursor pagination payloa
 
 - `GET /api/admin/health`
 - `GET /api/admin/quotes`
+- `GET /api/admin/quote-requests`
+- `GET /api/admin/quote-requests/:id`
+- `PATCH /api/admin/quote-requests/:id/status`
 - `POST /api/admin/quotes/reserve-id`
 - `POST /api/admin/quotes`
 - `PATCH /api/admin/quotes/:id/status`
@@ -225,7 +232,7 @@ Admin list query model:
 
 - all list endpoints accept `q`, `sortBy`, `sortDir`, `limit`, `cursor`
 - each endpoint supports additional tab-specific filters (status, source, channel, actor role, etc.)
-- admin UI keeps these search/filter/sort controls in collapsed per-tab panels by default, labels the service-area queue `Area requests`, and keeps quote CSV export as a low-prominence bottom action
+- admin UI keeps these search/filter/sort controls in collapsed per-tab panels by default, labels the service-area queue `Area requests`, nests `All` / `Manual quote requests` / `Instant quote tool quotes` / `Admin generated quotes` inside the Quotes tab, and keeps quote CSV export as a low-prominence bottom action
 
 ## 6) Quote State Machine
 
@@ -244,6 +251,12 @@ Customer-facing `customer_status`:
 - `verified`
 - `awaiting_payment`
 - `rejected`
+
+Quote `origin`:
+
+- `instant_tool`: customer used the draw-it-yourself quote builder
+- `admin_generated`: admin created a standalone payable quote for Quote ID claim
+- `assisted_request`: admin generated a payable quote from a customer `quote_requests` row
 
 Allowed transitions:
 

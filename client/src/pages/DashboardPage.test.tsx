@@ -3,7 +3,7 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import { StaticRouter } from 'react-router-dom/server';
 import { describe, expect, it, vi } from 'vitest';
 import type { NormalizedAccountQuote } from '../lib/accountQuote';
-import type { AccountQuoteListItem } from '../types';
+import type { AccountQuoteListItem, AccountQuoteRequestListItem } from '../types';
 import { DashboardPageContent } from './DashboardPage';
 
 const createQuote = (overrides: Partial<AccountQuoteListItem> = {}): AccountQuoteListItem => ({
@@ -26,6 +26,21 @@ const createQuote = (overrides: Partial<AccountQuoteListItem> = {}): AccountQuot
   verifiedAt: null,
   paymentPageUrl: '/dashboard/quotes/Q-TEST1/payment',
   payment: null,
+  ...overrides
+});
+
+const createQuoteRequest = (
+  overrides: Partial<AccountQuoteRequestListItem> = {}
+): AccountQuoteRequestListItem => ({
+  id: 'qr_test1',
+  createdAt: '2026-04-28T10:00:00.000Z',
+  updatedAt: '2026-04-28T10:00:00.000Z',
+  address: '88 Assisted Lane, Vaughan, ON',
+  status: 'requested',
+  quotedAt: null,
+  generatedQuoteId: null,
+  generatedQuoteStatus: null,
+  generatedQuoteCustomerStatus: null,
   ...overrides
 });
 
@@ -83,7 +98,9 @@ const renderDashboard = (props: Partial<ComponentProps<typeof DashboardPageConte
         customerName="Jane Customer"
         customerEmail="jane@example.com"
         quotes={[]}
+        quoteRequests={[]}
         primaryQuote={null}
+        primaryQuoteRequest={null}
         primaryQuoteDetail={null}
         loading={false}
         error={null}
@@ -102,12 +119,26 @@ describe('DashboardPage', () => {
   it('renders the zero state with get instant quote and no card panel', () => {
     const markup = renderDashboard();
 
-    expect(markup).toContain('Get instant quote');
+    expect(markup).toContain('Get a quote');
     expect(markup).toContain('rounded-[1.75rem] bg-[#111813]');
     expect(markup).toContain('w-full min-w-0 max-w-3xl');
     expect(markup).toContain('No quotes yet.');
     expect(markup).not.toContain('Card on file');
     expect(markup).not.toContain('Where your quote stands');
+  });
+
+  it('tracks an assisted quote request before a payable quote exists', () => {
+    const quoteRequest = createQuoteRequest();
+    const markup = renderDashboard({
+      quoteRequests: [quoteRequest],
+      primaryQuoteRequest: quoteRequest
+    });
+
+    expect(markup).toContain('Autoscape is preparing your quote');
+    expect(markup).toContain('Assisted quote requests');
+    expect(markup).toContain('88 Assisted Lane');
+    expect(markup).toContain('Requested');
+    expect(markup).not.toContain('No quotes yet.');
   });
 
   it('renders the draft recovery state without pricing', () => {

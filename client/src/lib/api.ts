@@ -1,5 +1,6 @@
 import type {
   AccountQuoteListResponse,
+  AccountQuoteRequestListResponse,
   BillingPortalSessionResponse,
   AttributionPayload,
   ContactPayload,
@@ -14,6 +15,8 @@ import type {
   PaymentLinkResponse,
   QuoteLookupResponse,
   QuotePayload,
+  QuoteRequestPayload,
+  QuoteRequestResponse,
   QuoteResponse,
   ServiceAreaCheckResponse,
   ServiceAreaRequestPayload,
@@ -160,6 +163,25 @@ export const api = {
     }
 
     return request<AccountQuoteListResponse>(`/api/account/quotes?${query.toString()}`, {
+      authToken
+    });
+  },
+  createQuoteRequest(payload: QuoteRequestPayload, idempotencyKey: string, authToken: string) {
+    return request<QuoteRequestResponse>('/api/quote-requests', {
+      method: 'POST',
+      idempotencyKey,
+      authToken,
+      body: JSON.stringify(payload)
+    });
+  },
+  getAccountQuoteRequests(authToken: string, cursor?: string, limit = 25) {
+    const query = new URLSearchParams();
+    query.set('limit', String(limit));
+    if (cursor) {
+      query.set('cursor', cursor);
+    }
+
+    return request<AccountQuoteRequestListResponse>(`/api/account/quote-requests?${query.toString()}`, {
       authToken
     });
   },

@@ -51,6 +51,7 @@ Implementation:
 - `Idempotency-Key` required for:
   - quote draft
   - quote contact finalize
+  - assisted quote request
   - contact submit
   - service-area request
 - same payload replays exact stored response
@@ -220,11 +221,13 @@ Decision:
 Implementation:
 
 - `/quotes/new` is a standalone admin workbench with a black/white/light-neutral base, Autoscape green primary actions, a large Satellite Streets map workspace with building outline context where Mapbox has coverage, a sticky stats/pricing panel, and a compact top bar centered on the reserved six-character Quote ID.
+- `/quotes/new?requestId=...` switches the same workbench into assisted-request mode: the request address/customer context is preloaded, the saved quote links back to `quote_requests`, and the customer payment email is triggered automatically.
 - The creator reserves Quote IDs before save, exposes `Copy ID`, generic `/claim-quote`, and direct `/claim-quote?quoteId=...` actions, and saves directly to `status=verified` / `customer_status=awaiting_payment` with `auth_user_id=null`.
 - Stats are grouped into geometry, pricing, validation, override, and customer-handoff sections so admin users can scan area, perimeter, per-visit price, full season, seasonal discount, discounted seasonal total, service-area warnings, and blocking geometry errors quickly.
 - Service-area results warn but do not block admin quote creation; self-intersection, empty geometry, and missing valid lawn geometry block save.
 - `/claim-quote` intentionally allows Quote ID-only preview before sign-up. The generic entry uses six large SMS-code style boxes grouped 3+3; the loaded page shows only quote summary, a small map preview, the two billing cards, and one `Continue` button before direct Stripe Checkout.
 - Visual style uses restrained borders/shadows, 8px-radius operational surfaces, red only for blocking geometry errors, amber for out-of-area/admin warnings, and green for primary/save/valid states.
+- The Quotes admin tab is split into nested operational subtabs (`All`, `Manual quote requests`, `Instant quote tool quotes`, `Admin generated quotes`) so request queues, customer-drawn quotes, and staff-created quotes do not compete for the same mental model.
 
 ## 16) Launch-Ready Public Content
 
@@ -303,7 +306,9 @@ Implementation:
 - `/instant-quote` keeps only the `Instant Quote` badge above the working UI
 - top-of-page step chrome is a compact-on-mobile non-interactive three-step rail for `Enter address`, `Map your lawn`, and `Review quote`
 - rail states show `Current step`, `Complete`, and `Up next` instead of button-like cards
-- address step stacks the input and continue button on mobile, and the map step uses a thin low-contrast address pill instead of a larger step header/instruction card
+- address step stacks the input and continue button on mobile, then the in-service address choice step uses two matching cards for `Autoscape-Assisted Quote` and `Draw It Yourself`
+- the assisted card intentionally says account/phone are required, Autoscape maps the lawn, and payment options arrive by email in less than 24 hours; the self-serve card says users can use the satellite map now and see pricing before submitting for review
+- the map step uses a thin low-contrast address pill instead of a larger step header/instruction card
 - clicked address suggestions and highlighted Enter selections immediately run the service-area gate from the selected suggestion data, with a pending state to prevent duplicate coverage checks
 - after a fresh successful address-to-map transition, the map step reveals a centered guide modal shell 1 second after the map finishes loading
 - guide step 1 now plays a looping miniature of the real draw-lawn workspace, including the live toolbar styling, no mini address pill, the polished popup-house SVG as the live background, and a visible cursor
@@ -408,12 +413,26 @@ Implementation:
   - `/dashboard/quotes/:quoteId/payment`
 - `/dashboard` selects one primary quote by urgency (`awaiting payment/payment issue` -> `in review` -> `draft/contact pending` -> `paid/active`) and keeps quote history secondary so the page always leads with the next customer action, especially on mobile where amount/status/CTA sit before secondary details
 - the top dashboard panel uses a dark account shell with state-driven copy for `Get instant quote`, `Quote is in review`, `Waiting for payment`, `All done`, plus a draft recovery state for unfinished submissions
+- assisted requests get a dashboard tracking state before a payable quote exists, and assisted/admin-generated payable quotes skip the customer verification copy in favor of payment-ready lifecycle language
 - the active property card keeps the address prominent, quote ID subdued, price conditional on `contact_pending=false`, and action buttons full-width on mobile
 - incomplete quotes show a simple lifecycle timeline, May-September schedule note, and help panel; complete quotes swap the timeline for plan summary details
 - saved-card management is intentionally delegated to Stripe Customer Portal instead of a custom card editor, and the `Card on file` panel is hidden when Stripe has no reusable default payment method
 - public `/pay/:token` page uses the approved quote/payment visual language, shows the tokenized preview image when available, summarizes the exact approved payment terms in a task-first mobile layout, and sends the client to Stripe Checkout without a sign-in gate
 - seasonal payments present one final upfront amount; per-session payments present weekly billing terms, May 1/start-at-checkout timing, the approved visit cap, and the September 30 outer stop
 - `/dashboard/quotes/:quoteId/payment` uses the same approved payment visual language as an authenticated checkout surface for signed-in customers, with the amount/status/checkout action prioritized on mobile
+
+## 28) Autoscape-Assisted Quote Path
+
+Decision:
+
+- Reduce client intimidation by offering a staff-prepared quote path without weakening geometry or pricing integrity.
+
+Implementation:
+
+- Post-address `/instant-quote` now branches into `Autoscape-Assisted Quote` and `Draw It Yourself`.
+- Assisted selection preserves the address draft through Clerk sign-up and phone completion, then creates an idempotent `quote_requests` record.
+- `QuoteOrigin` separates `instant_tool`, `admin_generated`, and `assisted_request` rows so dashboards/admin filters can skip the wrong verification assumptions.
+- Admins fulfill assisted requests from the Manual quote requests tab; generated quotes are still real quote rows with valid server-measured geometry before payment links or emails exist.
 
 ## 23) Warm-Light Premium Public Refresh
 

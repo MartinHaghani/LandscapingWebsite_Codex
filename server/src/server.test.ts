@@ -490,6 +490,109 @@ describe('/api/contact', () => {
 });
 
 describe('quote draft + contact finalize flow', () => {
+  it('creates assisted quote requests for signed-in customers and lists them for dashboard/admin', async () => {
+    const recordedAddresses: Array<{ userId: string; addressText: string }> = [];
+    const { baseUrl } = await startServer({
+      recordAddress: async (input) => {
+        recordedAddresses.push(input);
+      }
+    });
+
+    const createResponse = await fetch(`${baseUrl}/api/quote-requests`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Idempotency-Key': 'assisted-request-1',
+        Authorization: 'Bearer customer-assisted'
+      },
+      body: JSON.stringify({
+        address: '101 Assisted Way, Dallas, TX',
+        location: {
+          lat: 32.8201,
+          lng: -96.8102
+        }
+      })
+    });
+    assert.equal(createResponse.status, 201);
+    const createBody = (await createResponse.json()) as {
+      id: string;
+      status: string;
+      address: string;
+      replayed: boolean;
+    };
+    assert.equal(createBody.status, 'requested');
+    assert.equal(createBody.address, '101 Assisted Way, Dallas, TX');
+    assert.equal(createBody.replayed, false);
+
+    const replayResponse = await fetch(`${baseUrl}/api/quote-requests`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Idempotency-Key': 'assisted-request-1',
+        Authorization: 'Bearer customer-assisted'
+      },
+      body: JSON.stringify({
+        address: '101 Assisted Way, Dallas, TX',
+        location: {
+          lat: 32.8201,
+          lng: -96.8102
+        }
+      })
+    });
+    assert.equal(replayResponse.status, 201);
+    const replayBody = (await replayResponse.json()) as { id: string; replayed: boolean };
+    assert.equal(replayBody.id, createBody.id);
+    assert.equal(replayBody.replayed, true);
+
+    const accountRequests = await fetch(`${baseUrl}/api/account/quote-requests`, {
+      headers: {
+        Authorization: 'Bearer customer-assisted'
+      }
+    });
+    assert.equal(accountRequests.status, 200);
+    const accountRequestsBody = (await accountRequests.json()) as {
+      items: Array<{
+        id: string;
+        address: string;
+        status: string;
+        generatedQuoteId: string | null;
+      }>;
+    };
+    const accountRequest = accountRequestsBody.items.find((item) => item.id === createBody.id);
+    assert.ok(accountRequest);
+    assert.equal(accountRequest.address, '101 Assisted Way, Dallas, TX');
+    assert.equal(accountRequest.status, 'requested');
+    assert.equal(accountRequest.generatedQuoteId, null);
+
+    const adminRequests = await fetch(`${baseUrl}/api/admin/quote-requests`, {
+      headers: {
+        Authorization: 'Bearer admin-admin'
+      }
+    });
+    assert.equal(adminRequests.status, 200);
+    const adminRequestsBody = (await adminRequests.json()) as {
+      items: Array<{
+        id: string;
+        status: string;
+        addressText: string;
+        lat: number;
+        lng: number;
+        lead: { email: string | null; phone: string | null };
+      }>;
+    };
+    const adminRequest = adminRequestsBody.items.find((item) => item.id === createBody.id);
+    assert.ok(adminRequest);
+    assert.equal(adminRequest.addressText, '101 Assisted Way, Dallas, TX');
+    assert.equal(adminRequest.status, 'requested');
+    assert.equal(adminRequest.lead.email, 'customer-assisted@example.com');
+    assert.equal(adminRequest.lead.phone, '+1 416 555 0100');
+    assert.equal(adminRequest.lat, 32.8201);
+    assert.equal(adminRequest.lng, -96.8102);
+    assert.deepEqual(recordedAddresses, [
+      { userId: 'customer-assisted', addressText: '101 Assisted Way, Dallas, TX' }
+    ]);
+  });
+
   it('creates draft quote with idempotent replay and finalizes contact', async () => {
     const { baseUrl } = await startServer();
     const draftRing: Array<[number, number]> = [
@@ -1198,6 +1301,157 @@ describe('admin quote editor workflow', () => {
     assert.equal(checkoutBody.checkoutSessionId, 'cs_test_1');
     assert.equal(sessions[0]?.mode, 'per_session_subscription');
     assert.equal(sessions[0]?.amountCents, 9000);
+  });
+
+  it('links assisted requests to admin-generated quotes and triggers the payment email', async () => {
+    const sentEmails: Array<{ to: string; subject: string; html: string; text: string }> = [];
+    const mapboxUrls: string[] = [];
+    const { baseUrl } = await startServer({
+      approvedQuoteEmailSender: {
+        async send(message) {
+          sentEmails.push(message);
+          return {
+            provider: 'resend',
+            messageId: `msg-assisted-${sentEmails.length}`
+          };
+        }
+      },
+      publicUrls: {
+        appBaseUrl: 'https://client.autoscape.test',
+        apiBaseUrl: 'https://api.autoscape.test'
+      },
+      approvedQuotePreview: {
+        mapboxAccessToken: 'test-mapbox-token',
+        fetchImpl: createMapboxImageFetch(mapboxUrls)
+      }
+    });
+
+    const requestResponse = await fetch(`${baseUrl}/api/quote-requests`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Idempotency-Key': 'assisted-link-request-1',
+        Authorization: 'Bearer customer-assisted-link'
+      },
+      body: JSON.stringify({
+        address: '222 Assisted Quote Lane, Dallas, TX',
+        location: {
+          lat: 32.8201,
+          lng: -96.8102
+        }
+      })
+    });
+    assert.equal(requestResponse.status, 201);
+    const requestBody = (await requestResponse.json()) as { id: string };
+
+    const assistedRing: Array<[number, number]> = [
+      [-96.8107, 32.81975],
+      [-96.8097, 32.81975],
+      [-96.8097, 32.82045],
+      [-96.8107, 32.82045]
+    ];
+
+    const createResponse = await fetch(`${baseUrl}/api/admin/quotes`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: 'Bearer admin-admin'
+      },
+      body: JSON.stringify({
+        quoteRequestId: requestBody.id,
+        address: '222 Assisted Quote Lane, Dallas, TX',
+        location: {
+          lat: 32.8201,
+          lng: -96.8102
+        },
+        polygon: createPolygonGeometry(assistedRing),
+        polygonSource: createPolygonSource('assisted-service-1', assistedRing),
+        billingMode: 'seasonal',
+        globalDiscountRate: 0,
+        seasonalDiscountRate: 0.2,
+        priceOverrideEnabled: false,
+        serviceFrequency: 'weekly',
+        pricingVersion: 'v1',
+        currency: 'CAD'
+      })
+    });
+    assert.equal(createResponse.status, 201);
+    const createBody = (await createResponse.json()) as {
+      quoteId: string;
+      status: string;
+      customerStatus: string;
+      contactPending: boolean;
+      origin: string;
+      assistedRequestId: string | null;
+      approvedQuoteEmail?: { sent?: boolean; deliveryStatus?: string; paymentPageUrl?: string | null };
+    };
+    assert.equal(createBody.status, 'verified');
+    assert.equal(createBody.customerStatus, 'awaiting_payment');
+    assert.equal(createBody.contactPending, false);
+    assert.equal(createBody.origin, 'assisted_request');
+    assert.equal(createBody.assistedRequestId, requestBody.id);
+    assert.equal(createBody.approvedQuoteEmail?.sent, true);
+    assert.equal(sentEmails.length, 1);
+    assert.equal(sentEmails[0]?.to, 'customer-assisted-link@example.com');
+    assert.match(sentEmails[0]?.html ?? '', /https:\/\/client\.autoscape\.test\/pay\/[A-Za-z0-9_-]+/);
+
+    const accountQuotes = await fetch(`${baseUrl}/api/account/quotes`, {
+      headers: {
+        Authorization: 'Bearer customer-assisted-link'
+      }
+    });
+    assert.equal(accountQuotes.status, 200);
+    const accountQuotesBody = (await accountQuotes.json()) as {
+      items: Array<{
+        id: string;
+        origin: string;
+        assistedRequestId: string | null;
+        customerStatus: string;
+        contactPending: boolean;
+        payment: { status: string } | null;
+      }>;
+    };
+    const linkedQuote = accountQuotesBody.items.find((item) => item.id === createBody.quoteId);
+    assert.ok(linkedQuote);
+    assert.equal(linkedQuote.origin, 'assisted_request');
+    assert.equal(linkedQuote.assistedRequestId, requestBody.id);
+    assert.equal(linkedQuote.customerStatus, 'awaiting_payment');
+    assert.equal(linkedQuote.contactPending, false);
+    assert.equal(linkedQuote.payment?.status, 'awaiting_payment');
+
+    const accountRequests = await fetch(`${baseUrl}/api/account/quote-requests`, {
+      headers: {
+        Authorization: 'Bearer customer-assisted-link'
+      }
+    });
+    assert.equal(accountRequests.status, 200);
+    const accountRequestsBody = (await accountRequests.json()) as {
+      items: Array<{ id: string; status: string; generatedQuoteId: string | null }>;
+    };
+    const linkedRequest = accountRequestsBody.items.find((item) => item.id === requestBody.id);
+    assert.ok(linkedRequest);
+    assert.equal(linkedRequest.status, 'quoted');
+    assert.equal(linkedRequest.generatedQuoteId, createBody.quoteId);
+
+    const assistedQuoteList = await fetch(`${baseUrl}/api/admin/quotes?origin=assisted_request`, {
+      headers: {
+        Authorization: 'Bearer admin-admin'
+      }
+    });
+    assert.equal(assistedQuoteList.status, 200);
+    const assistedQuoteListBody = (await assistedQuoteList.json()) as {
+      items: Array<{ quoteId: string; origin: string; assistedRequestId: string | null }>;
+    };
+    assert.equal(assistedQuoteListBody.items.some((item) => item.quoteId === createBody.quoteId), true);
+
+    const instantQuoteList = await fetch(`${baseUrl}/api/admin/quotes?origin=instant_tool`, {
+      headers: {
+        Authorization: 'Bearer admin-admin'
+      }
+    });
+    assert.equal(instantQuoteList.status, 200);
+    const instantQuoteListBody = (await instantQuoteList.json()) as { items: Array<{ quoteId: string }> };
+    assert.equal(instantQuoteListBody.items.some((item) => item.quoteId === createBody.quoteId), false);
   });
 
   it('rejects admin quote creation with invalid self-intersecting geometry', async () => {

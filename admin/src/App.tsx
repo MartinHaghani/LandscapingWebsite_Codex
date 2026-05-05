@@ -11,6 +11,7 @@ import {
   type AdminContactItem,
   type AdminLeadItem,
   type AdminQuoteItem,
+  type AdminQuoteRequestItem,
   type AdminRequestItem,
   type AdminRequestMapResponse,
   type AdminRole,
@@ -19,8 +20,17 @@ import {
   type ContactListParams,
   type LeadListParams,
   type QuoteListParams,
+  type QuoteRequestListParams,
   type RequestListParams
 } from './lib/api';
+import {
+  formatQuoteOrigin,
+  quoteOriginForSubtab,
+  quoteRequestStartPath,
+  quoteRequestStatusLabel,
+  quoteSubtabs,
+  type QuoteSubtabKey
+} from './lib/quoteWorkspace';
 
 type TabKey = 'quotes' | 'requests' | 'contacts' | 'leads' | 'attribution' | 'audit';
 
@@ -41,6 +51,23 @@ const toCurrency = (value: number) =>
     currency: 'CAD',
     maximumFractionDigits: 2
   }).format(value);
+
+const formatAge = (value: string) => {
+  const ageMs = Date.now() - new Date(value).getTime();
+  if (!Number.isFinite(ageMs) || ageMs < 0) {
+    return 'just now';
+  }
+
+  const hours = Math.floor(ageMs / 3_600_000);
+  if (hours < 1) {
+    return 'under 1 hour';
+  }
+  if (hours < 24) {
+    return `${hours}h`;
+  }
+
+  return `${Math.floor(hours / 24)}d`;
+};
 
 const quoteStatusLabel = (status: string, customerStatus: string) => {
   if (status === 'in_review' && customerStatus === 'pending') {
@@ -197,6 +224,7 @@ const App = () => {
     [isSignedIn, getToken, adminOrgId]
   );
   const [tab, setTab] = useState<TabKey>('quotes');
+  const [quoteSubtab, setQuoteSubtab] = useState<QuoteSubtabKey>('all');
 
   const [health, setHealth] = useState<{
     role: AdminRole;
@@ -212,6 +240,9 @@ const App = () => {
   const [quotes, setQuotes] = useState<AdminQuoteItem[]>([]);
   const [quoteCursor, setQuoteCursor] = useState<string | null>(null);
   const [loadingQuotes, setLoadingQuotes] = useState(false);
+  const [quoteRequests, setQuoteRequests] = useState<AdminQuoteRequestItem[]>([]);
+  const [quoteRequestCursor, setQuoteRequestCursor] = useState<string | null>(null);
+  const [loadingQuoteRequests, setLoadingQuoteRequests] = useState(false);
 
   const [requests, setRequests] = useState<AdminRequestItem[]>([]);
   const [requestMap, setRequestMap] = useState<AdminRequestMapResponse>({ points: [], hotspots: [], meta: { generatedAt: '', pointCount: 0, filters: {} } });
@@ -239,6 +270,13 @@ const App = () => {
     q: '',
     status: '',
     contactPending: undefined,
+    sortBy: 'createdAt',
+    sortDir: 'desc'
+  });
+
+  const [quoteRequestFilters, setQuoteRequestFilters] = useState<QuoteRequestListParams>({
+    q: '',
+    status: '',
     sortBy: 'createdAt',
     sortDir: 'desc'
   });
@@ -299,6 +337,7 @@ const App = () => {
       const response = await adminApi.listQuotes(activeSession, {
         ...quoteFilters,
         status: quoteFilters.status || undefined,
+        origin: quoteOriginForSubtab(quoteSubtab),
         q: quoteFilters.q || undefined,
         cursor: options?.cursor,
         limit: 25
@@ -311,6 +350,51 @@ const App = () => {
     } finally {
       setLoadingQuotes(false);
     }
+  };
+
+  const loadQuoteRequests = async (
+    activeSession: AuthTokenProvider,
+    options?: { append?: boolean; cursor?: string }
+  ) => {
+    setLoadingQuoteRequests(true);
+    setError(null);
+
+    try {
+      const response = await adminApi.listQuoteRequests(activeSession, {
+        ...quoteRequestFilters,
+        q: quoteRequestFilters.q || undefined,
+        status: quoteRequestFilters.status || undefined,
+        cursor: options?.cursor,
+        limit: 25
+      });
+
+      setQuoteRequests((current) =>
+        options?.append ? [...current, ...response.items] : response.items
+      );
+      setQuoteRequestCursor(response.nextCursor);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Unable to load assisted quote requests.');
+    } finally {
+      setLoadingQuoteRequests(false);
+    }
+  };
+
+  const loadQuoteWorkspace = async (activeSession: AuthTokenProvider) => {
+    if (quoteSubtab === 'manual_requests') {
+      setQuotes([]);
+      setQuoteCursor(null);
+      await loadQuoteRequests(activeSession);
+      return;
+    }
+
+    if (quoteSubtab === 'all') {
+      await Promise.all([loadQuotes(activeSession), loadQuoteRequests(activeSession)]);
+      return;
+    }
+
+    setQuoteRequests([]);
+    setQuoteRequestCursor(null);
+    await loadQuotes(activeSession);
   };
 
   const loadRequests = async (activeSession: AuthTokenProvider, options?: { append?: boolean; cursor?: string }) => {
@@ -426,7 +510,7 @@ const App = () => {
 
   const loadTab = async (activeSession: AuthTokenProvider, activeTab: TabKey) => {
     if (activeTab === 'quotes') {
-      await loadQuotes(activeSession);
+      await loadQuoteWorkspace(activeSession);
       return;
     }
     if (activeTab === 'requests') {
@@ -453,6 +537,7 @@ const App = () => {
     if (!session) {
       setHealth(null);
       setQuotes([]);
+      setQuoteRequests([]);
       setRequests([]);
       setContacts([]);
       setLeads([]);
@@ -463,7 +548,7 @@ const App = () => {
 
     void loadHealth(session);
     void loadTab(session, activeTabForUi);
-  }, [session, activeTabForUi]);
+  }, [session, activeTabForUi, quoteSubtab]);
 
   const stats = useMemo(() => {
     const pending = quotes.filter(
@@ -478,9 +563,10 @@ const App = () => {
       pending,
       inReview,
       verifiedAwaitingPayment,
-      requestsOpen: requests.filter((request) => request.status === 'open').length
+      requestsOpen: requests.filter((request) => request.status === 'open').length,
+      manualQuoteRequests: quoteRequests.filter((request) => request.status !== 'quoted').length
     };
-  }, [quotes, requests]);
+  }, [quotes, requests, quoteRequests]);
 
   const filteredAttribution = useMemo(() => {
     const query = attributionSearch.trim().toLowerCase();
@@ -609,7 +695,7 @@ const App = () => {
               <MetricCard label="Pending" value={stats.pending} />
               <MetricCard label="In Review" value={stats.inReview} />
               <MetricCard label="Verified (Awaiting Payment)" value={stats.verifiedAwaitingPayment} />
-              <MetricCard label="Open area requests" value={stats.requestsOpen} />
+              <MetricCard label="Manual quote requests" value={stats.manualQuoteRequests} />
             </section>
           </>
         ) : null}
@@ -639,162 +725,373 @@ const App = () => {
           />
         ) : tab === 'quotes' ? (
           <section className="panel">
-            <Toolbar
-              search={quoteFilters.q ?? ''}
-              onSearchChange={(value) => setQuoteFilters((current) => ({ ...current, q: value }))}
-              sortBy={quoteFilters.sortBy ?? 'createdAt'}
-              onSortByChange={(value) =>
-                setQuoteFilters((current) => ({
-                  ...current,
-                  sortBy: value as QuoteListParams['sortBy']
-                }))
-              }
-              sortDir={quoteFilters.sortDir ?? 'desc'}
-              onSortDirChange={(value) => setQuoteFilters((current) => ({ ...current, sortDir: value }))}
-              sortOptions={[
-                { label: 'Created', value: 'createdAt' },
-                { label: 'Submitted', value: 'submittedAt' },
-                { label: 'Per-visit price', value: 'perSessionTotal' },
-                { label: 'Seasonal max', value: 'seasonalTotalMax' }
-              ]}
-              onApply={() => {
-                void loadQuotes(session);
-              }}
-              onClear={() => {
-                setQuoteFilters({
-                  q: '',
-                  status: '',
-                  contactPending: undefined,
-                  sortBy: 'createdAt',
-                  sortDir: 'desc'
-                });
-                setTimeout(() => {
-                  void loadQuotes(session);
-                }, 0);
-              }}
-            >
-              <select
-                value={quoteFilters.status ?? ''}
-                onChange={(event) => setQuoteFilters((current) => ({ ...current, status: event.target.value }))}
-              >
-                <option value="">All status</option>
-                <option value="draft">Draft</option>
-                <option value="submitted">Submitted</option>
-                <option value="in_review">In review</option>
-                <option value="verified">Verified</option>
-                <option value="rejected">Rejected</option>
-              </select>
-              <select
-                value={quoteFilters.contactPending === undefined ? '' : String(quoteFilters.contactPending)}
-                onChange={(event) =>
+            <div className="quote-subtabs" role="tablist" aria-label="Quote views">
+              {quoteSubtabs.map((item) => (
+                <button
+                  key={item.key}
+                  type="button"
+                  className={quoteSubtab === item.key ? 'active' : ''}
+                  onClick={() => setQuoteSubtab(item.key)}
+                >
+                  {item.label}
+                </button>
+              ))}
+            </div>
+
+            {quoteSubtab !== 'manual_requests' ? (
+              <Toolbar
+                search={quoteFilters.q ?? ''}
+                onSearchChange={(value) => setQuoteFilters((current) => ({ ...current, q: value }))}
+                sortBy={quoteFilters.sortBy ?? 'createdAt'}
+                onSortByChange={(value) =>
                   setQuoteFilters((current) => ({
                     ...current,
-                    contactPending: parseBoolFilter(event.target.value)
+                    sortBy: value as QuoteListParams['sortBy']
                   }))
                 }
+                sortDir={quoteFilters.sortDir ?? 'desc'}
+                onSortDirChange={(value) => setQuoteFilters((current) => ({ ...current, sortDir: value }))}
+                sortOptions={[
+                  { label: 'Created', value: 'createdAt' },
+                  { label: 'Submitted', value: 'submittedAt' },
+                  { label: 'Per-visit price', value: 'perSessionTotal' },
+                  { label: 'Seasonal max', value: 'seasonalTotalMax' }
+                ]}
+                onApply={() => {
+                  void loadQuotes(session);
+                }}
+                onClear={() => {
+                  setQuoteFilters({
+                    q: '',
+                    status: '',
+                    contactPending: undefined,
+                    sortBy: 'createdAt',
+                    sortDir: 'desc'
+                  });
+                  setTimeout(() => {
+                    void loadQuotes(session);
+                  }, 0);
+                }}
               >
-                <option value="">All contact states</option>
-                <option value="true">Contact pending</option>
-                <option value="false">Contact complete</option>
-              </select>
-            </Toolbar>
-
-            <div className="table-wrap">
-              <table>
-                <thead>
-                  <tr>
-                    <th>Quote</th>
-                    <th>Status</th>
-                    <th>Lead</th>
-                    <th>Address</th>
-                    <th>Per Visit</th>
-                    <th>Seasonal Range</th>
-                    <th>Created</th>
-                    <th>Actions</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {quotes.map((quote) => (
-                    <tr key={quote.quoteId}>
-                      <td>{quote.quoteId}</td>
-                      <td>
-                        {quoteStatusLabel(quote.status, quote.customerStatus)}
-                        <br />
-                        <small>{quote.status} / {quote.customerStatus}</small>
-                      </td>
-                      <td>
-                        <div>{quote.lead.name ?? 'N/A'}</div>
-                        <div>{quote.lead.email ?? 'N/A'}</div>
-                        <div>{quote.lead.phone ?? 'N/A'}</div>
-                      </td>
-                      <td>{quote.addressText}</td>
-                      <td>{toCurrency(quote.perSessionTotal)}</td>
-                      <td>
-                        {toCurrency(quote.seasonalTotalMin)} - {toCurrency(quote.seasonalTotalMax)}
-                        <br />
-                        <small>
-                          {quote.sessionsMax} visits, May to September
-                        </small>
-                      </td>
-                      <td>{formatDate(quote.createdAt)}</td>
-                      <td>
-                        <div className="actions">
-                          <button
-                            type="button"
-                            className="button"
-                            disabled={!(quote.status === 'in_review' || quote.status === 'submitted')}
-                            onClick={() => {
-                              navigate(`/quotes/${encodeURIComponent(quote.quoteId)}/edit`);
-                            }}
-                          >
-                            Edit
-                          </button>
-
-                          <button
-                            type="button"
-                            className="button"
-                            onClick={async () => {
-                              const note = window.prompt('Add internal quote note:', '');
-                              if (!note || note.trim().length === 0) {
-                                return;
-                              }
-
-                              try {
-                                await adminApi.addQuoteNote(session, quote.quoteId, note.trim());
-                                await loadAudit(session);
-                              } catch (err) {
-                                setError(err instanceof Error ? err.message : 'Unable to add note.');
-                              }
-                            }}
-                          >
-                            Add Note
-                          </button>
-                        </div>
-                      </td>
-                    </tr>
-                  ))}
-                  {quotes.length === 0 && !loadingQuotes ? (
-                    <tr>
-                      <td colSpan={8}>No quotes found.</td>
-                    </tr>
-                  ) : null}
-                </tbody>
-              </table>
-            </div>
-
-            <div className="panel-footer">
-              <button type="button" className="button" onClick={() => void loadQuotes(session)} disabled={loadingQuotes}>
-                {loadingQuotes ? 'Loading...' : 'Refresh'}
-              </button>
-              <button
-                type="button"
-                className="button"
-                onClick={() => quoteCursor && void loadQuotes(session, { append: true, cursor: quoteCursor })}
-                disabled={!quoteCursor || loadingQuotes}
+                <select
+                  value={quoteFilters.status ?? ''}
+                  onChange={(event) => setQuoteFilters((current) => ({ ...current, status: event.target.value }))}
+                >
+                  <option value="">All status</option>
+                  <option value="draft">Draft</option>
+                  <option value="submitted">Submitted</option>
+                  <option value="in_review">In review</option>
+                  <option value="verified">Verified</option>
+                  <option value="rejected">Rejected</option>
+                </select>
+                <select
+                  value={quoteFilters.contactPending === undefined ? '' : String(quoteFilters.contactPending)}
+                  onChange={(event) =>
+                    setQuoteFilters((current) => ({
+                      ...current,
+                      contactPending: parseBoolFilter(event.target.value)
+                    }))
+                  }
+                >
+                  <option value="">All contact states</option>
+                  <option value="true">Contact pending</option>
+                  <option value="false">Contact complete</option>
+                </select>
+              </Toolbar>
+            ) : (
+              <Toolbar
+                search={quoteRequestFilters.q ?? ''}
+                onSearchChange={(value) => setQuoteRequestFilters((current) => ({ ...current, q: value }))}
+                sortBy={quoteRequestFilters.sortBy ?? 'createdAt'}
+                onSortByChange={(value) =>
+                  setQuoteRequestFilters((current) => ({
+                    ...current,
+                    sortBy: value as QuoteRequestListParams['sortBy']
+                  }))
+                }
+                sortDir={quoteRequestFilters.sortDir ?? 'desc'}
+                onSortDirChange={(value) => setQuoteRequestFilters((current) => ({ ...current, sortDir: value }))}
+                sortOptions={[
+                  { label: 'Created', value: 'createdAt' },
+                  { label: 'Updated', value: 'updatedAt' }
+                ]}
+                onApply={() => {
+                  void loadQuoteRequests(session);
+                }}
+                onClear={() => {
+                  setQuoteRequestFilters({
+                    q: '',
+                    status: '',
+                    sortBy: 'createdAt',
+                    sortDir: 'desc'
+                  });
+                  setTimeout(() => {
+                    void loadQuoteRequests(session);
+                  }, 0);
+                }}
               >
-                Load more
-              </button>
-            </div>
+                <select
+                  value={quoteRequestFilters.status ?? ''}
+                  onChange={(event) =>
+                    setQuoteRequestFilters((current) => ({
+                      ...current,
+                      status: event.target.value as QuoteRequestListParams['status']
+                    }))
+                  }
+                >
+                  <option value="">All request status</option>
+                  <option value="requested">Requested</option>
+                  <option value="in_progress">In progress</option>
+                  <option value="quoted">Quoted</option>
+                  <option value="canceled">Canceled</option>
+                </select>
+              </Toolbar>
+            )}
+
+            {quoteSubtab === 'all' || quoteSubtab === 'manual_requests' ? (
+              <section className="quote-request-section" aria-label="Manual quote requests">
+                <div className="quote-request-heading">
+                  <div>
+                    <h3>Manual quote requests</h3>
+                    <p className="hint">Assisted requests that need Autoscape mapping and an emailed payment quote.</p>
+                  </div>
+                  <button
+                    type="button"
+                    className="button"
+                    onClick={() => void loadQuoteRequests(session)}
+                    disabled={loadingQuoteRequests}
+                  >
+                    {loadingQuoteRequests ? 'Loading...' : 'Refresh requests'}
+                  </button>
+                </div>
+
+                <div className="table-wrap">
+                  <table>
+                    <thead>
+                      <tr>
+                        <th>Request</th>
+                        <th>Status</th>
+                        <th>Customer</th>
+                        <th>Address</th>
+                        <th>Age</th>
+                        <th>Generated quote</th>
+                        <th>Actions</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {quoteRequests.map((request) => (
+                        <tr key={request.id}>
+                          <td>{request.id}</td>
+                          <td>
+                            {quoteRequestStatusLabel(request.status)}
+                            <br />
+                            <small>{formatDate(request.updatedAt)}</small>
+                          </td>
+                          <td>
+                            <div>{request.lead.name ?? 'N/A'}</div>
+                            <div>{request.lead.email ?? 'N/A'}</div>
+                            <div>{request.lead.phone ?? 'N/A'}</div>
+                          </td>
+                          <td>{request.addressText}</td>
+                          <td>{formatAge(request.createdAt)}</td>
+                          <td>
+                            {request.generatedQuoteId ? (
+                              <>
+                                {request.generatedQuoteId}
+                                <br />
+                                <small>
+                                  {request.generatedQuoteStatus ?? 'unknown'} /{' '}
+                                  {request.generatedQuoteCustomerStatus ?? 'unknown'}
+                                </small>
+                              </>
+                            ) : (
+                              'Not created'
+                            )}
+                          </td>
+                          <td>
+                            <div className="actions">
+                              {request.generatedQuoteId ? (
+                                <button
+                                  type="button"
+                                  className="button"
+                                  onClick={() => {
+                                    navigate(`/quotes/${encodeURIComponent(request.generatedQuoteId ?? '')}/edit`);
+                                  }}
+                                >
+                                  Open quote
+                                </button>
+                              ) : (
+                                <button
+                                  type="button"
+                                  className="button primary"
+                                  onClick={async () => {
+                                    try {
+                                      if (request.status === 'requested') {
+                                        await adminApi.updateQuoteRequestStatus(session, request.id, 'in_progress');
+                                      }
+                                      navigate(quoteRequestStartPath(request.id));
+                                    } catch (err) {
+                                      setError(err instanceof Error ? err.message : 'Unable to start assisted quote.');
+                                    }
+                                  }}
+                                >
+                                  Start quote
+                                </button>
+                              )}
+                              {request.status !== 'canceled' && !request.generatedQuoteId ? (
+                                <button
+                                  type="button"
+                                  className="button"
+                                  onClick={async () => {
+                                    try {
+                                      await adminApi.updateQuoteRequestStatus(session, request.id, 'canceled');
+                                      await loadQuoteRequests(session);
+                                    } catch (err) {
+                                      setError(err instanceof Error ? err.message : 'Unable to cancel request.');
+                                    }
+                                  }}
+                                >
+                                  Cancel
+                                </button>
+                              ) : null}
+                            </div>
+                          </td>
+                        </tr>
+                      ))}
+                      {quoteRequests.length === 0 && !loadingQuoteRequests ? (
+                        <tr>
+                          <td colSpan={7}>No manual quote requests found.</td>
+                        </tr>
+                      ) : null}
+                    </tbody>
+                  </table>
+                </div>
+
+                <div className="panel-footer">
+                  <button
+                    type="button"
+                    className="button"
+                    onClick={() =>
+                      quoteRequestCursor &&
+                      void loadQuoteRequests(session, { append: true, cursor: quoteRequestCursor })
+                    }
+                    disabled={!quoteRequestCursor || loadingQuoteRequests}
+                  >
+                    Load more requests
+                  </button>
+                </div>
+              </section>
+            ) : null}
+
+            {quoteSubtab !== 'manual_requests' ? (
+              <>
+                <div className="table-wrap">
+                  <table>
+                    <thead>
+                      <tr>
+                        <th>Quote</th>
+                        <th>Origin</th>
+                        <th>Status</th>
+                        <th>Lead</th>
+                        <th>Address</th>
+                        <th>Per Visit</th>
+                        <th>Seasonal Range</th>
+                        <th>Created</th>
+                        <th>Actions</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {quotes.map((quote) => (
+                        <tr key={quote.quoteId}>
+                          <td>{quote.quoteId}</td>
+                          <td>
+                            {formatQuoteOrigin(quote.origin)}
+                            {quote.assistedRequestId ? (
+                              <>
+                                <br />
+                                <small>Request {quote.assistedRequestId}</small>
+                              </>
+                            ) : null}
+                          </td>
+                          <td>
+                            {quoteStatusLabel(quote.status, quote.customerStatus)}
+                            <br />
+                            <small>
+                              {quote.status} / {quote.customerStatus}
+                            </small>
+                          </td>
+                          <td>
+                            <div>{quote.lead.name ?? 'N/A'}</div>
+                            <div>{quote.lead.email ?? 'N/A'}</div>
+                            <div>{quote.lead.phone ?? 'N/A'}</div>
+                          </td>
+                          <td>{quote.addressText}</td>
+                          <td>{toCurrency(quote.perSessionTotal)}</td>
+                          <td>
+                            {toCurrency(quote.seasonalTotalMin)} - {toCurrency(quote.seasonalTotalMax)}
+                            <br />
+                            <small>{quote.sessionsMax} visits, May to September</small>
+                          </td>
+                          <td>{formatDate(quote.createdAt)}</td>
+                          <td>
+                            <div className="actions">
+                              <button
+                                type="button"
+                                className="button"
+                                onClick={() => {
+                                  navigate(`/quotes/${encodeURIComponent(quote.quoteId)}/edit`);
+                                }}
+                              >
+                                Open
+                              </button>
+
+                              <button
+                                type="button"
+                                className="button"
+                                onClick={async () => {
+                                  const note = window.prompt('Add internal quote note:', '');
+                                  if (!note || note.trim().length === 0) {
+                                    return;
+                                  }
+
+                                  try {
+                                    await adminApi.addQuoteNote(session, quote.quoteId, note.trim());
+                                    await loadAudit(session);
+                                  } catch (err) {
+                                    setError(err instanceof Error ? err.message : 'Unable to add note.');
+                                  }
+                                }}
+                              >
+                                Add Note
+                              </button>
+                            </div>
+                          </td>
+                        </tr>
+                      ))}
+                      {quotes.length === 0 && !loadingQuotes ? (
+                        <tr>
+                          <td colSpan={9}>No quotes found.</td>
+                        </tr>
+                      ) : null}
+                    </tbody>
+                  </table>
+                </div>
+
+                <div className="panel-footer">
+                  <button type="button" className="button" onClick={() => void loadQuotes(session)} disabled={loadingQuotes}>
+                    {loadingQuotes ? 'Loading...' : 'Refresh quotes'}
+                  </button>
+                  <button
+                    type="button"
+                    className="button"
+                    onClick={() => quoteCursor && void loadQuotes(session, { append: true, cursor: quoteCursor })}
+                    disabled={!quoteCursor || loadingQuotes}
+                  >
+                    Load more quotes
+                  </button>
+                </div>
+              </>
+            ) : null}
           </section>
         ) : null}
 

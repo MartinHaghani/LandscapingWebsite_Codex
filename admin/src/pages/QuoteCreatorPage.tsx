@@ -1,8 +1,10 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { useLocation } from 'react-router-dom';
 import { QuoteEditorMap } from '../components/QuoteEditorMap';
 import {
   adminApi,
   type AdminPolygonSource,
+  type AdminQuoteRequestItem,
   type AuthTokenProvider
 } from '../lib/api';
 import { fetchAddressSuggestions, type MapboxSuggestion } from '../lib/geocoding';
@@ -142,7 +144,12 @@ const summarizeActivePolygon = (polygon: EditablePolygon | null) => {
 };
 
 export const QuoteCreatorPage = ({ getToken, onBack, onOpenQuote }: QuoteCreatorPageProps) => {
+  const routerLocation = useLocation();
   const polygonCounterRef = useRef(0);
+  const sourceQuoteRequestId = useMemo(
+    () => new URLSearchParams(routerLocation.search).get('requestId'),
+    [routerLocation.search]
+  );
   const [quoteId, setQuoteId] = useState<string | null>(null);
   const [quoteIdExpiresAt, setQuoteIdExpiresAt] = useState<string | null>(null);
   const [addressQuery, setAddressQuery] = useState('');
@@ -167,6 +174,8 @@ export const QuoteCreatorPage = ({ getToken, onBack, onOpenQuote }: QuoteCreator
   const [billingMode, setBillingMode] = useState<'seasonal' | 'per_session'>('seasonal');
   const [saving, setSaving] = useState(false);
   const [savedQuoteId, setSavedQuoteId] = useState<string | null>(null);
+  const [sourceQuoteRequest, setSourceQuoteRequest] = useState<AdminQuoteRequestItem | null>(null);
+  const [sourceQuoteRequestLoading, setSourceQuoteRequestLoading] = useState(false);
   const [copyStatus, setCopyStatus] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -230,12 +239,16 @@ export const QuoteCreatorPage = ({ getToken, onBack, onOpenQuote }: QuoteCreator
     metrics.selfIntersecting ? 'Boundary edges cross. Adjust vertices before saving.' : null,
     metrics.effectiveGeometryEmpty ? 'Obstacles remove the entire lawn area.' : null,
     !location ? 'Select an address suggestion so the quote has a mapped location.' : null,
+    sourceQuoteRequestId && !sourceQuoteRequest ? 'Load the assisted request before saving.' : null,
+    sourceQuoteRequest?.generatedQuoteId ? 'This assisted request already has a generated quote.' : null,
     !metrics.geometry ? 'The quote needs a valid measured service geometry.' : null,
     !activeOverrideInputValid ? 'Override price must be a valid non-negative amount.' : null
   ].filter(Boolean);
   const canSave =
     Boolean(quoteId) &&
     Boolean(location) &&
+    (!sourceQuoteRequestId || Boolean(sourceQuoteRequest)) &&
+    !sourceQuoteRequest?.generatedQuoteId &&
     metrics.validServicePolygonCount > 0 &&
     !metrics.selfIntersecting &&
     !metrics.effectiveGeometryEmpty &&
@@ -271,7 +284,52 @@ export const QuoteCreatorPage = ({ getToken, onBack, onOpenQuote }: QuoteCreator
   }, [getToken]);
 
   useEffect(() => {
-    if (!MAPBOX_TOKEN || addressQuery.trim().length < 2 || savedQuoteId) {
+    if (!sourceQuoteRequestId) {
+      setSourceQuoteRequest(null);
+      return;
+    }
+
+    let cancelled = false;
+
+    const loadSourceQuoteRequest = async () => {
+      setSourceQuoteRequestLoading(true);
+      setError(null);
+
+      try {
+        const request = await adminApi.getQuoteRequest(getToken, sourceQuoteRequestId);
+        if (cancelled) {
+          return;
+        }
+
+        setSourceQuoteRequest(request);
+        setAddressQuery(request.addressText);
+        setLocation({ lat: request.lat, lng: request.lng });
+        setCenter([request.lng, request.lat]);
+
+        if (request.generatedQuoteId) {
+          setError(`This request is already linked to quote ${request.generatedQuoteId}. Open the existing quote instead.`);
+        }
+      } catch (err) {
+        if (!cancelled) {
+          setError(err instanceof Error ? err.message : 'Unable to load assisted request.');
+          setSourceQuoteRequest(null);
+        }
+      } finally {
+        if (!cancelled) {
+          setSourceQuoteRequestLoading(false);
+        }
+      }
+    };
+
+    void loadSourceQuoteRequest();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [getToken, sourceQuoteRequestId]);
+
+  useEffect(() => {
+    if (!MAPBOX_TOKEN || addressQuery.trim().length < 2 || savedQuoteId || sourceQuoteRequest) {
       setAddressSuggestions([]);
       return;
     }
@@ -305,7 +363,7 @@ export const QuoteCreatorPage = ({ getToken, onBack, onOpenQuote }: QuoteCreator
       cancelled = true;
       window.clearTimeout(timeout);
     };
-  }, [addressQuery, center, savedQuoteId]);
+  }, [addressQuery, center, savedQuoteId, sourceQuoteRequest]);
 
   useEffect(() => {
     if (!clearAllConfirmation) {
@@ -510,6 +568,7 @@ export const QuoteCreatorPage = ({ getToken, onBack, onOpenQuote }: QuoteCreator
         priceOverrideEnabled: overrideEnabled,
         overrideBasePerSessionTotal: overrideEnabled ? pricing.basePerSessionTotal : undefined,
         overrideReason: overrideReason.trim() || undefined,
+        quoteRequestId: sourceQuoteRequestId ?? undefined,
         serviceFrequency: SERVICE_FREQUENCY,
         pricingVersion: 'v1',
         currency: 'CAD'
@@ -517,7 +576,15 @@ export const QuoteCreatorPage = ({ getToken, onBack, onOpenQuote }: QuoteCreator
 
       setSavedQuoteId(response.quoteId);
       setQuoteId(response.quoteId);
-      setCopyStatus(`Saved ${response.quoteId}.`);
+      setCopyStatus(
+        `Saved ${response.quoteId}.${
+          response.approvedQuoteEmail?.deliveryStatus === 'sent'
+            ? ' Payment email sent.'
+            : response.approvedQuoteEmail
+              ? ' Payment email could not be sent automatically.'
+              : ''
+        }`
+      );
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Unable to create admin quote.');
     } finally {
@@ -566,6 +633,14 @@ export const QuoteCreatorPage = ({ getToken, onBack, onOpenQuote }: QuoteCreator
       {error ? <p className="error-banner">{error}</p> : null}
       {copyStatus ? <p className="quote-creator-success">{copyStatus}</p> : null}
       {serviceAreaWarning ? <p className="quote-creator-warning">{serviceAreaWarning}</p> : null}
+      {sourceQuoteRequest ? (
+        <p className="quote-creator-success">
+          Manual request {sourceQuoteRequest.id} loaded for {sourceQuoteRequest.lead.name ?? sourceQuoteRequest.lead.email ?? 'customer'}.
+          Saving this quote links it to the customer request and sends the public payment email.
+        </p>
+      ) : sourceQuoteRequestLoading ? (
+        <p className="quote-creator-warning">Loading assisted request context...</p>
+      ) : null}
 
       <div className="quote-creator-workbench">
         <div className="quote-creator-map-column">
@@ -581,7 +656,7 @@ export const QuoteCreatorPage = ({ getToken, onBack, onOpenQuote }: QuoteCreator
                     setSavedQuoteId(null);
                   }}
                   placeholder="Start typing an address"
-                  disabled={Boolean(savedQuoteId)}
+                  disabled={Boolean(savedQuoteId) || Boolean(sourceQuoteRequest)}
                 />
                 {addressSuggestions.length > 0 || suggestionsLoading ? (
                   <div className="quote-creator-suggestions">

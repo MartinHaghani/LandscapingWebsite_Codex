@@ -16,10 +16,12 @@ import {
   adminQuoteNoteSchema,
   adminQuoteCreateSchema,
   adminQuoteRevisionSchema,
+  adminQuoteRequestStatusSchema,
   adminQuoteStatusSchema,
   adminQuoteVersionCreateSchema,
   accountQuoteBillingModeSchema,
   contactPayloadSchema,
+  quoteRequestPayloadSchema,
   quoteDraftPayloadSchema,
   quoteContactPayloadSchema,
   serviceAreaCheckSchema,
@@ -298,6 +300,16 @@ const mapStoreError = (error: unknown): { statusCode: number; message: string } 
       return {
         statusCode: 404,
         message: 'Quote not found.'
+      };
+    case 'QUOTE_REQUEST_NOT_FOUND':
+      return {
+        statusCode: 404,
+        message: 'Quote request not found.'
+      };
+    case 'QUOTE_REQUEST_ALREADY_QUOTED':
+      return {
+        statusCode: 409,
+        message: 'Quote request already has a generated quote.'
       };
     case 'LEAD_NOT_FOUND':
       return {
@@ -1142,6 +1154,7 @@ export const createServer = (options: CreateServerOptions = {}) => {
       method === 'POST' &&
       (pathname === '/api/quote' ||
         pathname === '/api/quote/draft' ||
+        pathname === '/api/quote-requests' ||
         pathname.match(/^\/api\/quote\/[^/]+\/contact$/) ||
         pathname.match(/^\/api\/quote\/[^/]+\/claim$/) ||
         pathname.match(/^\/api\/account\/quotes\/[^/]+\/billing-mode$/) ||
@@ -1149,6 +1162,7 @@ export const createServer = (options: CreateServerOptions = {}) => {
         pathname.match(/^\/api\/account\/quotes\/[^/]+\/payment\/checkout$/) ||
         pathname === '/api/admin/quotes' ||
         pathname === '/api/admin/quotes/reserve-id' ||
+        pathname.match(/^\/api\/admin\/quote-requests\/[^/]+\/status$/) ||
         pathname === '/api/contact' ||
         pathname === '/api/service-area/request')
     ) {
@@ -1452,6 +1466,83 @@ export const createServer = (options: CreateServerOptions = {}) => {
       }
     }
 
+    if (method === 'POST' && pathname === '/api/quote-requests') {
+      try {
+        const customerIdentity = await customerIdentityResolver(req);
+        if (!customerIdentity) {
+          throw new Error('AUTH_REQUIRED');
+        }
+        assertCustomerPhoneProfile(customerIdentity);
+
+        const idempotencyKey = getIdempotencyKey(req);
+        if (!idempotencyKey) {
+          json(res, 400, { error: 'Missing Idempotency-Key header.' });
+          return;
+        }
+
+        const body = await readJson(req);
+        const parsed = quoteRequestPayloadSchema.safeParse(body);
+        if (!parsed.success) {
+          json(res, 400, {
+            error: 'Invalid quote request payload.',
+            details: parsed.error.flatten()
+          });
+          return;
+        }
+
+        const point: [number, number] = [parsed.data.location.lng, parsed.data.location.lat];
+        const cached = getCachedServiceArea();
+        const inServiceArea = cached.payload.features.some((feature) =>
+          pointInGeometry(point, feature.geometry)
+        );
+
+        if (!inServiceArea) {
+          json(res, 409, { error: 'Autoscape-assisted quotes are available only inside the current service area.' });
+          return;
+        }
+
+        const result = await dataStore.createQuoteRequest({
+          idempotencyKey,
+          authUserId: customerIdentity.userId,
+          name: customerIdentity.name,
+          email: customerIdentity.email,
+          phone: customerIdentity.phone,
+          marketingConsent: customerIdentity.emailMarketingConsent === true,
+          addressText: parsed.data.address,
+          location: parsed.data.location,
+          attribution: parsed.data.attribution
+        });
+
+        if (!result.replayed) {
+          void customerAddressRecorder({
+            userId: customerIdentity.userId,
+            addressText: parsed.data.address
+          }).catch((error) => {
+            console.warn('Failed to update customer address metadata from quote request:', error);
+          });
+        }
+
+        json(res, result.statusCode, {
+          ...result.body,
+          replayed: result.replayed
+        });
+        return;
+      } catch (error) {
+        if (error instanceof SyntaxError) {
+          json(res, 400, { error: 'Invalid JSON body.' });
+          return;
+        }
+        if (error instanceof Error && error.message === 'Payload too large.') {
+          json(res, 413, { error: 'Payload too large.' });
+          return;
+        }
+
+        const mapped = mapStoreError(error);
+        json(res, mapped.statusCode, { error: mapped.message });
+        return;
+      }
+    }
+
     if (method === 'POST' && (pathname === '/api/quote/draft' || pathname === '/api/quote')) {
       try {
         const idempotencyKey = getIdempotencyKey(req);
@@ -1624,6 +1715,31 @@ export const createServer = (options: CreateServerOptions = {}) => {
           return;
         }
 
+        const mapped = mapStoreError(error);
+        json(res, mapped.statusCode, { error: mapped.message });
+        return;
+      }
+    }
+
+    if (method === 'GET' && pathname === '/api/account/quote-requests') {
+      try {
+        const customerIdentity = await customerIdentityResolver(req);
+        if (!customerIdentity) {
+          throw new Error('AUTH_REQUIRED');
+        }
+        assertCustomerPhoneProfile(customerIdentity);
+
+        const limit = parseLimit(url.searchParams.get('limit'), 25, 100);
+        const cursor = url.searchParams.get('cursor') ?? undefined;
+        const result = await dataStore.listAccountQuoteRequests({
+          authUserId: customerIdentity.userId,
+          limit,
+          cursor
+        });
+
+        json(res, 200, result);
+        return;
+      } catch (error) {
         const mapped = mapStoreError(error);
         json(res, mapped.statusCode, { error: mapped.message });
         return;
@@ -2092,6 +2208,7 @@ export const createServer = (options: CreateServerOptions = {}) => {
 
           const result = await dataStore.createAdminQuote({
             quotePublicId: parsed.data.quoteId,
+            quoteRequestId: parsed.data.quoteRequestId,
             addressText: parsed.data.address,
             location: parsed.data.location,
             polygon: parsed.data.polygon,
@@ -2115,7 +2232,20 @@ export const createServer = (options: CreateServerOptions = {}) => {
             actor
           });
 
-          json(res, 201, result);
+          const approvedQuoteEmail = parsed.data.quoteRequestId
+            ? await deliverApprovedQuoteEmail({
+                req,
+                quotePublicId: result.quoteId,
+                approvedVersionNumber: result.version,
+                triggerSource: 'approval',
+                actor
+              })
+            : null;
+
+          json(res, 201, {
+            ...result,
+            approvedQuoteEmail
+          });
           return;
         }
 
@@ -2124,6 +2254,11 @@ export const createServer = (options: CreateServerOptions = {}) => {
           const cursor = url.searchParams.get('cursor') ?? undefined;
           const q = url.searchParams.get('q') ?? undefined;
           const status = url.searchParams.get('status') ?? undefined;
+          const originRaw = url.searchParams.get('origin');
+          const origin =
+            originRaw === 'instant_tool' || originRaw === 'admin_generated' || originRaw === 'assisted_request'
+              ? originRaw
+              : undefined;
           const serviceFrequency = url.searchParams.get('serviceFrequency') ?? undefined;
           const contactPending = parseBooleanParam(url.searchParams.get('contactPending'));
           const createdFrom = url.searchParams.get('createdFrom') ?? undefined;
@@ -2143,6 +2278,7 @@ export const createServer = (options: CreateServerOptions = {}) => {
             cursor,
             q,
             status,
+            origin,
             serviceFrequency: serviceFrequency === 'weekly' ? 'weekly' : undefined,
             contactPending,
             createdFrom,
@@ -2152,6 +2288,76 @@ export const createServer = (options: CreateServerOptions = {}) => {
             sortBy,
             sortDir,
             role: identity.role
+          });
+
+          json(res, 200, result);
+          return;
+        }
+
+        if (method === 'GET' && pathname === '/api/admin/quote-requests') {
+          const limit = parseLimit(url.searchParams.get('limit'), 25, 100);
+          const cursor = url.searchParams.get('cursor') ?? undefined;
+          const q = url.searchParams.get('q') ?? undefined;
+          const status = url.searchParams.get('status') ?? undefined;
+          const createdFrom = url.searchParams.get('createdFrom') ?? undefined;
+          const createdTo = url.searchParams.get('createdTo') ?? undefined;
+          const sortBy = (url.searchParams.get('sortBy') ?? undefined) as
+            | 'createdAt'
+            | 'updatedAt'
+            | undefined;
+          const sortDir = parseSortDir(url.searchParams.get('sortDir'));
+
+          const result = await dataStore.listQuoteRequests({
+            limit,
+            cursor,
+            q,
+            status,
+            createdFrom,
+            createdTo,
+            sortBy,
+            sortDir,
+            role: identity.role
+          });
+
+          json(res, 200, result);
+          return;
+        }
+
+        const adminQuoteRequestId = getPathMatch(pathname, /^\/api\/admin\/quote-requests\/([^/]+)$/);
+        if (method === 'GET' && adminQuoteRequestId) {
+          const result = await dataStore.getQuoteRequest({
+            requestId: adminQuoteRequestId,
+            role: identity.role
+          });
+
+          json(res, 200, result);
+          return;
+        }
+
+        const adminQuoteRequestStatusId = getPathMatch(
+          pathname,
+          /^\/api\/admin\/quote-requests\/([^/]+)\/status$/
+        );
+        if (method === 'PATCH' && adminQuoteRequestStatusId) {
+          if (!canMutateQuotes) {
+            json(res, 403, { error: 'Forbidden.' });
+            return;
+          }
+
+          const body = await readJson(req);
+          const parsed = adminQuoteRequestStatusSchema.safeParse(body);
+          if (!parsed.success) {
+            json(res, 400, {
+              error: 'Invalid quote request status payload.',
+              details: parsed.error.flatten()
+            });
+            return;
+          }
+
+          const result = await dataStore.updateQuoteRequestStatus({
+            requestId: adminQuoteRequestStatusId,
+            status: parsed.data.status,
+            actor
           });
 
           json(res, 200, result);

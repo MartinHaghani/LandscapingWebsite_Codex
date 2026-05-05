@@ -1,5 +1,6 @@
+import { useAuth, useUser } from '@clerk/clerk-react';
 import { useEffect, useMemo, useRef, useState, type FormEvent, type KeyboardEvent } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { QuoteGuideModal } from '../components/quote/QuoteGuideModal';
 import { QuoteMap } from '../components/quote/QuoteMap';
 import { QuoteMapActionCluster } from '../components/quote/QuoteMapActionCluster';
@@ -7,7 +8,9 @@ import { QuoteProgressRail } from '../components/quote/QuoteProgressRail';
 import { Badge } from '../components/ui/Badge';
 import { Button } from '../components/ui/Button';
 import { Card } from '../components/ui/Card';
-import { api } from '../lib/api';
+import { hasRequiredPhone } from '../lib/accountProfile';
+import { api, ApiError, createIdempotencyKey } from '../lib/api';
+import { getAttributionSnapshot } from '../lib/attribution';
 import { cn } from '../lib/cn';
 import { fetchAddressSuggestions } from '../lib/geocoding';
 import { formatNumber, toFt, toFt2 } from '../lib/geometry';
@@ -55,7 +58,7 @@ const MAPBOX_TOKEN = import.meta.env?.VITE_MAPBOX_TOKEN;
 const DEFAULT_CENTER: LngLat = [-96.797, 32.7767];
 
 type UnitMode = 'metric' | 'imperial';
-type QuoteStep = 'address' | 'map';
+type QuoteStep = 'address' | 'choice' | 'map';
 
 const EMPTY_EDITOR_STATE: PolygonEditorState = {
   polygons: [],
@@ -82,9 +85,14 @@ const createPolygonId = () => {
 
 export const InstantQuotePage = () => {
   const navigate = useNavigate();
+  const location = useLocation();
+  const { isLoaded, isSignedIn, getToken } = useAuth();
+  const { user } = useUser();
   const polygonCounterRef = useRef(0);
   const mapStepRef = useRef<HTMLDivElement | null>(null);
   const guideRevealTimeoutRef = useRef<number | null>(null);
+  const assistedRequestIdempotencyKeyRef = useRef<string | null>(null);
+  const assistedAutoStartedRef = useRef(false);
 
   const [addressInput, setAddressInput] = useState('');
   const [selectedAddress, setSelectedAddress] = useState('');
@@ -114,10 +122,16 @@ export const InstantQuotePage = () => {
   const [quoteGuideWaitingForMapReady, setQuoteGuideWaitingForMapReady] = useState(false);
   const [quoteGuideVisible, setQuoteGuideVisible] = useState(false);
   const [quoteGuideActiveStepIndex, setQuoteGuideActiveStepIndex] = useState(0);
+  const [assistedRequestSubmitting, setAssistedRequestSubmitting] = useState(false);
+  const [assistedRequestResult, setAssistedRequestResult] = useState<{
+    id: string;
+    address: string;
+  } | null>(null);
 
   const editorState = polygonHistory.present;
   const polygons = editorState.polygons;
   const activePolygonId = editorState.activePolygonId;
+  const profileHasRequiredPhone = hasRequiredPhone(user);
 
   const metrics = useMemo(() => computeMultiPolygonMetrics(polygons), [polygons]);
   const canUndo = polygonHistory.past.length > 0;
@@ -455,8 +469,8 @@ export const InstantQuotePage = () => {
       return;
     }
 
-    setCurrentStep('map');
-    beginQuoteGuideSession();
+    setCurrentStep('choice');
+    resetQuoteGuideState();
     setSelection({ kind: 'none' });
     setStatusMessage(null);
   };
@@ -468,11 +482,110 @@ export const InstantQuotePage = () => {
 
   const goToAddressStep = () => {
     resetQuoteGuideState();
+    setAssistedRequestResult(null);
     setCurrentStep('address');
     setDrawMode(null);
     setClearAllConfirmation(false);
     setSelection({ kind: 'none' });
   };
+
+  const goToManualMapStep = () => {
+    setAssistedRequestResult(null);
+    setCurrentStep('map');
+    beginQuoteGuideSession();
+    setSelection({ kind: 'none' });
+    setStatusMessage(null);
+  };
+
+  const getAssistedReturnUrl = () => encodeURIComponent('/instant-quote?assisted=1');
+
+  const submitAssistedQuoteRequest = async () => {
+    if (assistedRequestSubmitting || assistedRequestResult) {
+      return;
+    }
+
+    if (!isLoaded) {
+      return;
+    }
+
+    const returnUrl = getAssistedReturnUrl();
+    if (!isSignedIn) {
+      persistCurrentDraft('choice');
+      navigate(`/sign-up?redirect_url=${returnUrl}`);
+      return;
+    }
+
+    if (!profileHasRequiredPhone) {
+      persistCurrentDraft('choice');
+      navigate(`/complete-profile?redirect_url=${returnUrl}`);
+      return;
+    }
+
+    const resolvedAddress = await resolveAddressSelection();
+    if (!resolvedAddress) {
+      return;
+    }
+
+    assistedRequestIdempotencyKeyRef.current ??= createIdempotencyKey();
+    setAssistedRequestSubmitting(true);
+    setStatusMessage(null);
+
+    try {
+      const token = await getToken();
+      if (!token) {
+        throw new ApiError('Authentication is required.', 401);
+      }
+
+      const result = await api.createQuoteRequest(
+        {
+          address: resolvedAddress.address,
+          location: {
+            lat: resolvedAddress.center[1],
+            lng: resolvedAddress.center[0]
+          },
+          attribution: getAttributionSnapshot()
+        },
+        assistedRequestIdempotencyKeyRef.current,
+        token
+      );
+
+      setAssistedRequestResult({
+        id: result.id,
+        address: result.address
+      });
+      setCurrentStep('choice');
+      assistedRequestIdempotencyKeyRef.current = null;
+      setStatusMessage(null);
+
+      if (typeof window !== 'undefined') {
+        clearQuoteDraftState(window.localStorage);
+      }
+    } catch (err) {
+      setStatusMessage({
+        type: 'error',
+        text: err instanceof ApiError ? err.message : 'Unable to submit assisted quote request.'
+      });
+    } finally {
+      setAssistedRequestSubmitting(false);
+    }
+  };
+
+  useEffect(() => {
+    const params = new URLSearchParams(location.search);
+    if (
+      params.get('assisted') !== '1' ||
+      assistedAutoStartedRef.current ||
+      !draftHydrated ||
+      !isLoaded ||
+      currentStep !== 'choice' ||
+      assistedRequestResult
+    ) {
+      return;
+    }
+
+    assistedAutoStartedRef.current = true;
+    void submitAssistedQuoteRequest();
+  });
 
   const handleAddressInputKeyDown = (event: KeyboardEvent<HTMLInputElement>) => {
     if (suggestions.length === 0) {
@@ -730,7 +843,7 @@ export const InstantQuotePage = () => {
     return () => window.clearTimeout(timeout);
   }, [clearAllConfirmation]);
 
-  const persistCurrentDraft = () => {
+  const persistCurrentDraft = (draftStep: QuoteStep = 'map') => {
     if (typeof window === 'undefined') {
       return;
     }
@@ -740,7 +853,7 @@ export const InstantQuotePage = () => {
       selectedAddress,
       selectedAddressKey,
       center,
-      currentStep: 'map',
+      currentStep: draftStep,
       polygonHistory,
       billingMode,
       distanceToNearestStationKm,
@@ -779,7 +892,7 @@ export const InstantQuotePage = () => {
         <h1 className="sr-only">Instant Quote</h1>
       </div>
 
-      <QuoteProgressRail currentStep={currentStep} compactOnMobile />
+      {currentStep !== 'choice' ? <QuoteProgressRail currentStep={currentStep} compactOnMobile /> : null}
 
       {currentStep === 'address' ? (
         <div className="relative isolate z-50 mt-8 grid gap-6">
@@ -842,7 +955,7 @@ export const InstantQuotePage = () => {
                   disabled={!canContinueToMap}
                   className="w-full shrink-0 whitespace-nowrap px-5 py-3 sm:w-auto"
                 >
-                  Continue to Map
+                  Continue
                 </Button>
               </div>
             </form>
@@ -876,9 +989,9 @@ export const InstantQuotePage = () => {
             </Card>
           ) : null}
         </div>
-      ) : (
-        <div ref={mapStepRef} className="mt-8 grid gap-6">
-          <div className="flex flex-col gap-2 rounded-2xl border border-stroke/80 bg-surface/70 px-4 py-3 text-sm shadow-soft sm:flex-row sm:items-center sm:justify-between sm:rounded-full sm:py-2">
+      ) : currentStep === 'choice' ? (
+        <div className="mt-8 grid min-w-0 gap-6">
+          <div className="flex min-w-0 max-w-full flex-col gap-2 overflow-hidden rounded-2xl border border-stroke/80 bg-surface/70 px-4 py-3 text-sm shadow-soft sm:flex-row sm:items-center sm:justify-between sm:rounded-full sm:py-2">
             <p className="min-w-0 truncate text-copy-muted">{selectedAddress}</p>
             <Button
               type="button"
@@ -887,6 +1000,137 @@ export const InstantQuotePage = () => {
               className="min-h-0 w-full shrink-0 px-3 py-1.5 text-xs uppercase tracking-[0.14em] sm:w-auto"
             >
               Change Address
+            </Button>
+          </div>
+
+          {assistedRequestResult ? (
+            <Card className="border-brand/35 bg-brand/10">
+              <p className="text-xs font-semibold uppercase tracking-[0.15em] text-brand">
+                Assisted request received
+              </p>
+              <h2 className="mt-3 font-display text-2xl font-semibold text-ink md:text-3xl">
+                Autoscape will prepare your quote within 24 hours.
+              </h2>
+              <p className="mt-3 text-sm leading-7 text-copy-muted">
+                We saved the request for {assistedRequestResult.address}. You can track it in your dashboard while
+                the team maps the lawn and prepares payment options.
+              </p>
+              <div className="mt-5 flex flex-col gap-3 sm:flex-row">
+                <Link to="/dashboard" className="w-full sm:w-auto">
+                  <Button className="w-full sm:w-auto">Open dashboard</Button>
+                </Link>
+                <Button type="button" variant="secondary" onClick={goToManualMapStep} className="w-full sm:w-auto">
+                  Draw it myself instead
+                </Button>
+              </div>
+            </Card>
+          ) : (
+            <div className="grid min-w-0 max-w-full grid-cols-[minmax(0,1fr)_minmax(0,1fr)] gap-2 sm:gap-5">
+              <Card className="group relative min-w-0 overflow-hidden bg-surface !p-2.5 sm:!p-5 md:!p-7">
+                <div className="absolute inset-x-0 top-0 h-1 bg-brand" aria-hidden="true" />
+                <div className="flex h-full flex-col">
+                  <div>
+                    <h2 className="break-words pt-2 pb-1 text-center font-display text-sm font-semibold leading-tight text-ink sm:pt-0 sm:pb-0 sm:text-2xl md:text-3xl">
+                      We create a quote
+                    </h2>
+                    <p className="mt-2 text-[0.68rem] leading-4 text-copy-muted sm:mt-4 sm:text-sm sm:leading-7">
+                      Give us 24 hours and we will email you a quote.
+                    </p>
+                  </div>
+
+                  <ul className="mt-2.5 list-disc space-y-1 pl-4 text-[0.64rem] leading-4 text-copy-muted sm:mt-5 sm:space-y-2 sm:text-sm sm:leading-6">
+                    <li>Within 24 hours</li>
+                    <li>Quick and easy</li>
+                  </ul>
+
+                  <div className="mt-auto min-h-[6.125rem] pt-3 sm:min-h-0 sm:pt-6">
+                    <p className="mb-2 min-h-9 text-[0.58rem] leading-3 text-copy-soft sm:mb-3 sm:min-h-0 sm:text-xs sm:leading-5">
+                      Sign up required: We need your information to email you a quote.
+                    </p>
+                    <Button
+                      type="button"
+                      onClick={() => void submitAssistedQuoteRequest()}
+                      disabled={assistedRequestSubmitting || !isLoaded}
+                      className="!min-h-10 w-full whitespace-normal !px-2 !py-1.5 text-center !text-[0.66rem] leading-tight sm:!min-h-[44px] sm:!px-5 sm:!py-2.5 sm:!text-sm"
+                    >
+                      {assistedRequestSubmitting ? 'Submitting...' : 'Let Autoscape quote it'}
+                    </Button>
+                  </div>
+                </div>
+              </Card>
+
+              <Card className="group relative min-w-0 overflow-hidden bg-surface !p-2.5 sm:!p-5 md:!p-7">
+                <div className="absolute inset-x-0 top-0 h-1 bg-ink" aria-hidden="true" />
+                <div className="flex h-full flex-col">
+                  <div>
+                    <h2 className="break-words pt-2 pb-1 text-center font-display text-sm font-semibold leading-tight text-ink sm:pt-0 sm:pb-0 sm:text-2xl md:text-3xl">
+                      You create a quote
+                    </h2>
+                    <p className="mt-2 text-[0.68rem] leading-4 text-copy-muted sm:mt-4 sm:text-sm sm:leading-7">
+                      Use the satellite map and trace your lawn for an instant quote.
+                    </p>
+                  </div>
+
+                  <ul className="mt-2.5 list-disc space-y-1 pl-4 text-[0.64rem] leading-4 text-copy-muted sm:mt-5 sm:space-y-2 sm:text-sm sm:leading-6">
+                    <li>Instant</li>
+                    <li>More complex</li>
+                  </ul>
+
+                  <div className="mt-auto min-h-[6.125rem] pt-3 sm:min-h-0 sm:pt-6">
+                    <p className="mb-2 min-h-9 text-[0.58rem] leading-3 text-copy-soft sm:mb-3 sm:min-h-0 sm:text-xs sm:leading-5">
+                      Sign up required after quote.
+                    </p>
+                    <Button
+                      type="button"
+                      variant="secondary"
+                      onClick={goToManualMapStep}
+                      className="!min-h-10 w-full whitespace-normal !px-2 !py-1.5 text-center !text-[0.66rem] leading-tight sm:!min-h-[44px] sm:!px-5 sm:!py-2.5 sm:!text-sm"
+                    >
+                      Open map tool
+                    </Button>
+                  </div>
+                </div>
+              </Card>
+            </div>
+          )}
+
+          {statusMessage ? (
+            <p
+              className={
+                statusMessage.type === 'error'
+                  ? 'text-sm text-red-700'
+                  : 'text-sm text-copy-muted'
+              }
+            >
+              {statusMessage.text}
+            </p>
+          ) : null}
+        </div>
+      ) : (
+        <div ref={mapStepRef} className="mt-8 grid min-w-0 max-w-full gap-6">
+          <div className="flex min-w-0 max-w-full flex-col gap-2 rounded-2xl border border-stroke/80 bg-surface/70 px-4 py-3 text-sm shadow-soft sm:flex-row sm:items-center sm:justify-between sm:rounded-full sm:py-2">
+            <p className="min-w-0 truncate text-copy-muted">{selectedAddress}</p>
+            <Button
+              type="button"
+              variant="ghost"
+              onClick={goToAddressStep}
+              className="min-h-0 w-full shrink-0 px-3 py-1.5 text-xs uppercase tracking-[0.14em] sm:w-auto"
+            >
+              Change Address
+            </Button>
+          </div>
+
+          <div className="flex min-w-0 max-w-full flex-col gap-3 rounded-2xl border border-brand/25 bg-brand/10 px-4 py-3 text-sm shadow-soft sm:flex-row sm:items-center sm:justify-between">
+            <p className="text-copy-muted">
+              <span className="font-semibold text-ink">Skip the drawing.</span> We can create the quote for you.
+            </p>
+            <Button
+              type="button"
+              onClick={() => void submitAssistedQuoteRequest()}
+              disabled={assistedRequestSubmitting || !isLoaded}
+              className="w-full whitespace-normal px-4 py-2 text-center text-xs sm:w-auto sm:text-sm"
+            >
+              {assistedRequestSubmitting ? 'Submitting...' : 'Too complicated? We can do it for you'}
             </Button>
           </div>
 

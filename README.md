@@ -138,6 +138,9 @@ Current live status: `autoscape-staging` is active in Toronto with `autoscape-st
 - Instant Quote flow is now draft-first:
   - intro chrome uses a badge-only heading and a compact-on-mobile three-step progress rail instead of marketing helper copy
   - address entry stacks the address input and continue button on mobile, clicked suggestions and highlighted Enter selections immediately run the coverage gate before continuing, and a pending state prevents duplicate coverage checks
+  - after a valid in-service address, the flow shows two matching choice cards:
+    - `Autoscape-Assisted Quote` requires sign-up plus phone, creates a tracked assisted request, and tells customers Autoscape maps the lawn and emails payment options in less than 24 hours
+    - `Draw It Yourself` opens the existing satellite map tool, lets customers see pricing before submission, and then routes through the normal team-review handoff
   - the map step uses a thin address pill instead of a large step header card
   - geometry capture is persistent freehand drawing, not point-by-point vertex placement
     - `Draw lawn` and `Draw obstacle` toggle into `Stop drawing`
@@ -185,14 +188,16 @@ Current live status: `autoscape-staging` is active in Toronto with `autoscape-st
     - server derives/stores canonical quote geometry from `ringPoints` and remeasures it server-side
     - legacy point-list `schemaVersion: 1` source payloads are no longer accepted at runtime
   - users can clear geometry or reset saved draft from the quote UI
-  1. `/instant-quote/summary` reviews pricing and preferences before any server draft is created
-  2. `POST /api/quote/draft`
-  3. Draft handoff continues to `/quote-confirmation/:quoteId` (legacy `/quote-contact/:quoteId` links redirect here)
-  4. Signed-in draft saves quote address to Clerk account metadata (`addressHistory`, latest as `defaultAddress`)
-  5. `POST /api/quote/:quoteId/claim` links quote to authenticated account
-  6. `/quote-confirmation/:quoteId` handles sign-in and required phone gating before review handoff
-  7. `POST /api/quote/:quoteId/contact` finalizes contact + sets status `in_review` (`customer_status=pending`)
-  8. Confirmation page `/quote-confirmation/:quoteId`
+  1. assisted branch gates through Clerk sign-up/phone completion, calls `POST /api/quote-requests`, and shows dashboard-tracked confirmation
+  2. draw-it-yourself branch opens the map tool and continues to `/instant-quote/summary`
+  3. `/instant-quote/summary` reviews pricing and preferences before any server draft is created
+  4. `POST /api/quote/draft`
+  5. Draft handoff continues to `/quote-confirmation/:quoteId` (legacy `/quote-contact/:quoteId` links redirect here)
+  6. Signed-in draft saves quote address to Clerk account metadata (`addressHistory`, latest as `defaultAddress`)
+  7. `POST /api/quote/:quoteId/claim` links quote to authenticated account
+  8. `/quote-confirmation/:quoteId` handles sign-in and required phone gating before review handoff
+  9. `POST /api/quote/:quoteId/contact` finalizes contact + sets status `in_review` (`customer_status=pending`)
+  10. Confirmation page `/quote-confirmation/:quoteId`
 - Admin-created quote claim flow:
   - admins can open `/quotes/new`, reserve a real six-character easy Quote ID before save, draw lawn/obstacle geometry on the Mapbox Satellite Streets quote map with building outline context where available, and save an anonymous payable quote directly as `status=verified`, `customer_status=awaiting_payment`, `contact_pending=false`
   - admin-created quotes stay in the existing `quotes` table with `auth_user_id=null` until the customer claims them; version 1 is stored in `quote_versions` with `actor_type=admin`
@@ -201,7 +206,8 @@ Current live status: `autoscape-staging` is active in Toronto with `autoscape-st
 - Customer dashboard:
   - `/complete-profile/*` captures required phone number for any auth method
     - it also stores optional email marketing opt-in at `unsafeMetadata.autoscapeProfile.emailMarketingConsent`, which the API propagates to lead records during quote claim/finalize
-  - `/dashboard` is now an action-first customer home with mobile-first CTA placement, a primary quote state, lifecycle timeline, May-September schedule note, support panel, conditional quote history, and conditional card-on-file panel
+  - `/dashboard` is now an action-first customer home with mobile-first CTA placement, a primary quote state, lifecycle timeline, May-September schedule note, support panel, conditional quote history, conditional card-on-file panel, and tracked Autoscape-assisted requests before they become payable quotes
+  - assisted/admin-generated quotes use prepared-quote dashboard copy and go directly to the payment lifecycle state instead of the customer verification timeline
   - `/dashboard/account/*` renders Clerk profile/security/password management with the shared Autoscape Clerk appearance inside the dashboard area
   - `/dashboard/quotes/:quoteId` for owned quote detail with grouped mobile-readable quote summaries
   - `/dashboard/quotes/:quoteId/payment` is the authenticated approved-quote payment surface with task-first mobile CTAs and can start Stripe Checkout for owned quotes
@@ -228,6 +234,8 @@ Current live status: `autoscape-staging` is active in Toronto with `autoscape-st
 Admin endpoints under `/api/admin/*` include:
 
 - quotes inbox (`/quotes`) with cursor pagination
+- nested quote subtabs inside the Quotes tab: `All`, `Manual quote requests`, `Instant quote tool quotes`, and `Admin generated quotes`
+- assisted quote request APIs (`/api/quote-requests`, `/api/account/quote-requests`, `/api/admin/quote-requests`) backed by `quote_requests`; `/quotes/new?requestId=...` prefills request address/customer context, links the saved quote to the request, marks it quoted, and triggers the public payment email
 - new polished admin quote creator (`/quotes/new`) with reserved six-character Quote ID, copyable generic/direct claim links, Mapbox address search, Satellite Streets property context, warning-only service-area check, live area/perimeter/lawn/obstacle/vertex stats, global + seasonal discounts, and admin price override mode
 - quote editor (`/quotes/:quoteId/edit`) with full polygon tools, calculated vs actual quote panel, and version history
   - Mapbox Satellite Streets basemap in editor for property verification context, with building outlines where available

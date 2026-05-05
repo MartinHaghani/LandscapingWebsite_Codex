@@ -1,6 +1,7 @@
 export type LngLat = [number, number];
 export type ServiceFrequency = 'weekly';
 export type BillingMode = 'seasonal' | 'per_session';
+export type QuoteOrigin = 'instant_tool' | 'admin_generated' | 'assisted_request';
 
 export interface MapboxSuggestion {
   id: string;
@@ -73,6 +74,24 @@ export interface QuotePayload {
   legalAcceptance: LegalAcceptancePayload;
 }
 
+export interface QuoteRequestPayload {
+  address: string;
+  location: {
+    lat: number;
+    lng: number;
+  };
+  attribution?: AttributionPayload;
+}
+
+export interface QuoteRequestResponse {
+  ok: boolean;
+  id: string;
+  status: 'requested' | 'in_progress' | 'quoted' | 'canceled';
+  address: string;
+  createdAt: string;
+  replayed?: boolean;
+}
+
 export interface QuoteResponse {
   quoteId: string;
   status?: 'draft';
@@ -109,6 +128,8 @@ export interface QuoteLookupResponse {
   status: string;
   customerStatus?: string;
   contactPending: boolean;
+  origin?: QuoteOrigin;
+  assistedRequestId?: string | null;
   submittedAt: string | null;
   verifiedAt?: string | null;
   paymentPageUrl?: string | null;
@@ -255,6 +276,8 @@ export interface AccountQuoteListItem {
   status: string;
   customerStatus?: string;
   contactPending: boolean;
+  origin?: QuoteOrigin;
+  assistedRequestId?: string | null;
   serviceFrequency: ServiceFrequency;
   perSessionTotal: number;
   seasonalTotalMin: number;
@@ -272,6 +295,28 @@ export interface AccountQuoteListItem {
 
 export interface AccountQuoteListResponse {
   items: AccountQuoteListItem[];
+  nextCursor: string | null;
+  meta: {
+    generatedAt: string;
+    rowCount: number;
+    filters: Record<string, string | number | null | undefined>;
+  };
+}
+
+export interface AccountQuoteRequestListItem {
+  id: string;
+  createdAt: string;
+  updatedAt: string;
+  address: string;
+  status: 'requested' | 'in_progress' | 'quoted' | 'canceled';
+  quotedAt: string | null;
+  generatedQuoteId: string | null;
+  generatedQuoteStatus: string | null;
+  generatedQuoteCustomerStatus: string | null;
+}
+
+export interface AccountQuoteRequestListResponse {
+  items: AccountQuoteRequestListItem[];
   nextCursor: string | null;
   meta: {
     generatedAt: string;

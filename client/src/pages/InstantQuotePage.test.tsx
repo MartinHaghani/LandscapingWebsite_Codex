@@ -5,7 +5,12 @@ import { InstantQuotePage } from './InstantQuotePage';
 
 vi.mock('@clerk/clerk-react', () => ({
   useAuth: () => ({
+    isLoaded: true,
+    isSignedIn: false,
     getToken: async () => null
+  }),
+  useUser: () => ({
+    user: null
   })
 }));
 

@@ -343,6 +343,58 @@ textarea:focus {
   min-width: 0;
 }
 
+.quote-subtabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface-muted);
+  padding: 0.35rem;
+}
+
+.quote-subtabs button {
+  min-height: 40px;
+  border: 1px solid transparent;
+  border-radius: 7px;
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+  flex: 1 1 170px;
+  font-size: 0.82rem;
+  font-weight: 800;
+  padding: 0.5rem 0.75rem;
+}
+
+.quote-subtabs button.active {
+  border-color: rgba(50, 159, 91, 0.34);
+  background: var(--surface);
+  color: var(--brand-strong);
+  box-shadow: 0 10px 24px -22px rgba(16, 23, 19, 0.5);
+}
+
+.quote-request-section {
+  display: grid;
+  gap: 0.85rem;
+  border: 1px solid rgba(50, 159, 91, 0.18);
+  border-radius: 8px;
+  background: rgba(246, 250, 247, 0.86);
+  padding: 0.85rem;
+}
+
+.quote-request-heading {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.quote-request-heading h3 {
+  margin: 0;
+  font-family: 'Space Grotesk', 'Sora', system-ui, sans-serif;
+  font-size: 1.08rem;
+}
+
 .toolbar {
   background: var(--surface-muted);
   border: 1px solid rgba(214, 215, 207, 0.95);
@@ -1223,7 +1275,8 @@ small {
   }
 
   .topbar,
-  .export-panel {
+  .export-panel,
+  .quote-request-heading {
     flex-direction: column;
     align-items: stretch;
   }
