@@ -212,7 +212,8 @@ Current live status: `autoscape-staging` is active in Toronto with `autoscape-st
   - `/dashboard/quotes/:quoteId` for owned quote detail with grouped mobile-readable quote summaries
   - `/dashboard/quotes/:quoteId/payment` is the authenticated approved-quote payment surface with task-first mobile CTAs and can start Stripe Checkout for owned quotes
 - Public payment:
-  - approved quote emails now use a simplified Autoscape-styled transactional layout with one `/pay/:token` CTA, the actual selected payment amount/mode, quote details, Stripe reassurance, and the unchanged approved map preview
+  - instant-tool verified quote emails use the approved-quote layout with one `/pay/:token` CTA, payment amount/mode, quote details, Stripe reassurance, the approved map preview, and conditional review legend items
+  - assisted/admin-prepared quote emails use the same secure payment-link infrastructure but say the quote is ready to view, show only a `View your quote` CTA in the action block, keep the map preview, and omit visible payment amount/mode plus review legend/adjustment copy
   - public payment tokens are long random secrets stored only as SHA-256 hashes server-side
   - `GET /api/payment-links/:token` returns sanitized quote/payment details without requiring Clerk sign-in
   - `POST /api/payment-links/:token/checkout` creates or reuses a Stripe Checkout Session
@@ -235,7 +236,7 @@ Admin endpoints under `/api/admin/*` include:
 
 - quotes inbox (`/quotes`) with cursor pagination
 - nested quote subtabs inside the Quotes tab: `All`, `Manual quote requests`, `Instant quote tool quotes`, and `Admin generated quotes`
-- assisted quote request APIs (`/api/quote-requests`, `/api/account/quote-requests`, `/api/admin/quote-requests`) backed by `quote_requests`; `/quotes/new?requestId=...` prefills request address/customer context, links the saved quote to the request, marks it quoted, and triggers the public payment email
+- assisted quote request APIs (`/api/quote-requests`, `/api/account/quote-requests`, `/api/admin/quote-requests`) backed by `quote_requests`; creation requires a signed-in customer profile with phone, reuses an existing non-canceled request for the same customer/address/location, and `/quotes/new?requestId=...` prefills request context, links the saved quote, marks it quoted, and triggers the prepared quote email
 - new polished admin quote creator (`/quotes/new`) with reserved six-character Quote ID, copyable generic/direct claim links, Mapbox address search, Satellite Streets property context, warning-only service-area check, live area/perimeter/lawn/obstacle/vertex stats, global + seasonal discounts, and admin price override mode
 - quote editor (`/quotes/:quoteId/edit`) with full polygon tools, calculated vs actual quote panel, and version history
   - Mapbox Satellite Streets basemap in editor for property verification context, with building outlines where available

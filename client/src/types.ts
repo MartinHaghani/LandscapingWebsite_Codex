@@ -90,6 +90,7 @@ export interface QuoteRequestResponse {
   address: string;
   createdAt: string;
   replayed?: boolean;
+  existing?: boolean;
 }
 
 export interface QuoteResponse {

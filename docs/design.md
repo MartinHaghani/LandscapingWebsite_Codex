@@ -124,7 +124,7 @@ Transitions:
 - revision updates `customer_status` while remaining `in_review`
 - runtime finalize path moves `draft -> in_review` directly (while preserving enum compatibility for `submitted`)
 - selected version submit sets `status=verified`, `customer_status=awaiting_payment`
-- verified submit creates a fresh secure payment token, attempts a simplified payment-focused Resend email with one payment CTA and only the selected Stripe amount/mode, records sent/failed delivery state for auditability, keeps approval successful on delivery failure, and exposes manual resend for verified quotes awaiting payment
+- verified submit creates a fresh secure payment token, attempts a one-button Resend quote email using the quote-origin email variant, records sent/failed delivery state for auditability, keeps approval successful on delivery failure, and exposes manual resend for verified quotes awaiting payment
 - approved quote map previews are tokenized public image URLs backed by server-proxied Mapbox satellite static imagery; they show approved service area, added-by-admin area, and removed-by-admin area using the quote-tool color family, while email legends only include added/removed keys when those deltas exist
 - approved quote payment links are tokenized public URLs (`/pay/:token`) stored as hashes server-side; resend rotates the payment token, and superseded emailed URLs resolve to the current payment link without creating separate checkout state
 - public payment-link Checkout and authenticated dashboard Checkout share one post-payment completion page at `/payment-complete`, while cancellation returns customers to the originating payment page so retry remains clear
@@ -201,7 +201,7 @@ Implementation:
   - Mapbox satellite basemap to align map context with on-site property imagery
   - map surface mirrors the public instant quote editor controls, polygon colors, selected state, vertex markers, freehand drawing, and outline-click vertex insertion
   - immediate polygon hydration on load to avoid blank-editor states
-  - latest approved-quote email attempt is visible in the editor with manual resend support for verified quotes
+  - latest quote email attempt is visible in the editor with manual resend support for verified quotes
 - collapsed filter/sort disclosure on all tabs:
   - search
   - tab-specific filters
@@ -221,7 +221,8 @@ Decision:
 Implementation:
 
 - `/quotes/new` is a standalone admin workbench with a black/white/light-neutral base, Autoscape green primary actions, a large Satellite Streets map workspace with building outline context where Mapbox has coverage, a sticky stats/pricing panel, and a compact top bar centered on the reserved six-character Quote ID.
-- `/quotes/new?requestId=...` switches the same workbench into assisted-request mode: the request address/customer context is preloaded, the saved quote links back to `quote_requests`, and the customer payment email is triggered automatically.
+- `/quotes/new?requestId=...` switches the same workbench into assisted-request mode: the request address/customer context is preloaded, the saved quote links back to `quote_requests`, and the prepared quote email is triggered automatically.
+- Assisted request creation requires a signed-in customer profile with phone, reuses an existing non-canceled same customer/address/location request, and its email uses a `View your quote` CTA-only action block without visible payment amount/mode or map legend/adjustment language.
 - The creator reserves Quote IDs before save, exposes `Copy ID`, generic `/claim-quote`, and direct `/claim-quote?quoteId=...` actions, and saves directly to `status=verified` / `customer_status=awaiting_payment` with `auth_user_id=null`.
 - Stats are grouped into geometry, pricing, validation, override, and customer-handoff sections so admin users can scan area, perimeter, per-visit price, full season, seasonal discount, discounted seasonal total, service-area warnings, and blocking geometry errors quickly.
 - Service-area results warn but do not block admin quote creation; self-intersection, empty geometry, and missing valid lawn geometry block save.

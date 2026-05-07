@@ -167,6 +167,9 @@ export const QuoteEditorPage = ({ getToken, quoteId, onBack }: QuoteEditorPagePr
     !resendingApprovedEmail &&
     editor?.status === 'verified' &&
     editor?.customerStatus === 'awaiting_payment';
+  const isPreparedQuoteEmail =
+    editor?.origin === 'assisted_request' || editor?.origin === 'admin_generated';
+  const quoteEmailLabel = isPreparedQuoteEmail ? 'Prepared Quote Email' : 'Approved Quote Email';
 
   const loadEditor = async (options?: { message?: string; keepSelectedVersion?: number | null }) => {
     setLoading(true);
@@ -434,8 +437,8 @@ export const QuoteEditorPage = ({ getToken, quoteId, onBack }: QuoteEditorPagePr
       const response = await adminApi.submitQuoteVersion(getToken, quoteId, selectedVersionNumber);
       const emailMessage =
         response.approvedQuoteEmail?.deliveryStatus === 'failed'
-          ? ` Approved quote email failed: ${response.approvedQuoteEmail.errorMessage ?? 'unknown error'}.`
-          : ' Approved quote email sent.';
+          ? ` ${quoteEmailLabel} failed: ${response.approvedQuoteEmail.errorMessage ?? 'unknown error'}.`
+          : ` ${quoteEmailLabel} sent.`;
       await loadEditor({
         message: `Submitted version ${selectedVersionNumber}. Quote is now Verified (Awaiting Payment).${emailMessage}`,
         keepSelectedVersion: selectedVersionNumber
@@ -460,13 +463,13 @@ export const QuoteEditorPage = ({ getToken, quoteId, onBack }: QuoteEditorPagePr
       const emailMessage =
         response.approvedQuoteEmail?.deliveryStatus === 'failed'
           ? `Resend recorded as failed: ${response.approvedQuoteEmail.errorMessage ?? 'unknown error'}.`
-          : 'Approved quote email resent.';
+          : `${quoteEmailLabel} resent.`;
       await loadEditor({
         message: emailMessage,
         keepSelectedVersion: selectedVersionNumber
       });
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Unable to resend approved quote email.');
+      setError(err instanceof Error ? err.message : 'Unable to resend quote email.');
     } finally {
       setResendingApprovedEmail(false);
     }
@@ -752,7 +755,7 @@ export const QuoteEditorPage = ({ getToken, quoteId, onBack }: QuoteEditorPagePr
             </article>
 
             <article className="metric-card">
-              <p className="metric-label">Approved Quote Email</p>
+              <p className="metric-label">{quoteEmailLabel}</p>
               {editor?.approvedQuoteEmail ? (
                 <>
                   <p className="hint">
@@ -762,7 +765,7 @@ export const QuoteEditorPage = ({ getToken, quoteId, onBack }: QuoteEditorPagePr
                   <p className="hint">Trigger: {editor.approvedQuoteEmail.triggerSource}</p>
                   <p className="hint">Recipient: {editor.approvedQuoteEmail.recipientEmail ?? 'N/A'}</p>
                   <p className="hint">
-                    Approved version: v{editor.approvedQuoteEmail.approvedVersionNumber}
+                    Email version: v{editor.approvedQuoteEmail.approvedVersionNumber}
                   </p>
                   {editor.approvedQuoteEmail.errorMessage ? (
                     <p className="hint" style={{ color: 'var(--danger)' }}>
@@ -772,18 +775,18 @@ export const QuoteEditorPage = ({ getToken, quoteId, onBack }: QuoteEditorPagePr
                   <div style={{ display: 'flex', gap: '0.45rem', flexWrap: 'wrap', marginTop: '0.5rem' }}>
                     {editor.approvedQuoteEmail.previewImageUrl ? (
                       <a className="button" href={editor.approvedQuoteEmail.previewImageUrl} target="_blank" rel="noreferrer">
-                        Open Preview
+                        Open Map Preview
                       </a>
                     ) : null}
                     {editor.approvedQuoteEmail.paymentPageUrl ? (
                       <a className="button" href={editor.approvedQuoteEmail.paymentPageUrl} target="_blank" rel="noreferrer">
-                        Open Payment Page
+                        Open Customer Quote Page
                       </a>
                     ) : null}
                   </div>
                 </>
               ) : (
-                <p className="hint">No approved quote email attempt has been recorded yet.</p>
+                <p className="hint">No quote email attempt has been recorded yet.</p>
               )}
 
               <div style={{ display: 'flex', gap: '0.45rem', flexWrap: 'wrap', marginTop: '0.75rem' }}>
@@ -793,7 +796,7 @@ export const QuoteEditorPage = ({ getToken, quoteId, onBack }: QuoteEditorPagePr
                   onClick={resendApprovedQuoteEmail}
                   disabled={!canResendApprovedEmail}
                 >
-                  {resendingApprovedEmail ? 'Resending...' : 'Resend Approved Email'}
+                  {resendingApprovedEmail ? 'Resending...' : `Resend ${quoteEmailLabel}`}
                 </button>
               </div>
             </article>

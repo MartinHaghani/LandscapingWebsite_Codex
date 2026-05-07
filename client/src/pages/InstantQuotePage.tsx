@@ -127,6 +127,7 @@ export const InstantQuotePage = () => {
     id: string;
     address: string;
   } | null>(null);
+  const [assistedRequestIdempotencyKey, setAssistedRequestIdempotencyKey] = useState<string | null>(null);
 
   const editorState = polygonHistory.present;
   const polygons = editorState.polygons;
@@ -278,6 +279,8 @@ export const InstantQuotePage = () => {
     setBillingMode(restoredState.billingMode);
     setDistanceToNearestStationKm(restoredState.distanceToNearestStationKm);
     setUnitMode(restoredState.unitMode);
+    assistedRequestIdempotencyKeyRef.current = restoredState.assistedRequestIdempotencyKey ?? null;
+    setAssistedRequestIdempotencyKey(restoredState.assistedRequestIdempotencyKey ?? null);
     setDrawMode(null);
     setSelection({ kind: 'none' });
     setDraftHydrated(true);
@@ -316,6 +319,10 @@ export const InstantQuotePage = () => {
       return;
     }
 
+    if (assistedRequestResult) {
+      return;
+    }
+
     saveQuoteDraftState(window.localStorage, {
       addressInput,
       selectedAddress,
@@ -325,7 +332,8 @@ export const InstantQuotePage = () => {
       polygonHistory,
       billingMode,
       distanceToNearestStationKm,
-      unitMode
+      unitMode,
+      assistedRequestIdempotencyKey
     });
   }, [
     addressInput,
@@ -336,6 +344,8 @@ export const InstantQuotePage = () => {
     polygonHistory,
     billingMode,
     distanceToNearestStationKm,
+    assistedRequestIdempotencyKey,
+    assistedRequestResult,
     draftHydrated,
     unitMode
   ]);
@@ -358,6 +368,24 @@ export const InstantQuotePage = () => {
     setDistanceToNearestStationKm(0);
   };
 
+  const clearAssistedRequestIdempotencyKey = () => {
+    assistedRequestIdempotencyKeyRef.current = null;
+    setAssistedRequestIdempotencyKey(null);
+  };
+
+  const getOrCreateAssistedRequestIdempotencyKey = () => {
+    const existing = assistedRequestIdempotencyKeyRef.current ?? assistedRequestIdempotencyKey;
+    if (existing) {
+      assistedRequestIdempotencyKeyRef.current = existing;
+      return existing;
+    }
+
+    const nextKey = createIdempotencyKey();
+    assistedRequestIdempotencyKeyRef.current = nextKey;
+    setAssistedRequestIdempotencyKey(nextKey);
+    return nextKey;
+  };
+
   const selectSuggestion = (suggestion: MapboxSuggestion) => {
     const nextAddressKey = getAddressKey(suggestion);
     const isDifferentAddress = selectedAddressKey !== null && selectedAddressKey !== nextAddressKey;
@@ -371,6 +399,7 @@ export const InstantQuotePage = () => {
     setStatusMessage(null);
 
     if (isDifferentAddress) {
+      clearAssistedRequestIdempotencyKey();
       clearEditorForNewAddress();
       resetQuoteGuideState();
     }
@@ -508,15 +537,16 @@ export const InstantQuotePage = () => {
       return;
     }
 
+    const requestIdempotencyKey = getOrCreateAssistedRequestIdempotencyKey();
     const returnUrl = getAssistedReturnUrl();
     if (!isSignedIn) {
-      persistCurrentDraft('choice');
+      persistCurrentDraft('choice', { assistedRequestIdempotencyKey: requestIdempotencyKey });
       navigate(`/sign-up?redirect_url=${returnUrl}`);
       return;
     }
 
     if (!profileHasRequiredPhone) {
-      persistCurrentDraft('choice');
+      persistCurrentDraft('choice', { assistedRequestIdempotencyKey: requestIdempotencyKey });
       navigate(`/complete-profile?redirect_url=${returnUrl}`);
       return;
     }
@@ -526,7 +556,6 @@ export const InstantQuotePage = () => {
       return;
     }
 
-    assistedRequestIdempotencyKeyRef.current ??= createIdempotencyKey();
     setAssistedRequestSubmitting(true);
     setStatusMessage(null);
 
@@ -545,7 +574,7 @@ export const InstantQuotePage = () => {
           },
           attribution: getAttributionSnapshot()
         },
-        assistedRequestIdempotencyKeyRef.current,
+        requestIdempotencyKey,
         token
       );
 
@@ -554,11 +583,15 @@ export const InstantQuotePage = () => {
         address: result.address
       });
       setCurrentStep('choice');
-      assistedRequestIdempotencyKeyRef.current = null;
+      clearAssistedRequestIdempotencyKey();
       setStatusMessage(null);
 
       if (typeof window !== 'undefined') {
         clearQuoteDraftState(window.localStorage);
+      }
+
+      if (new URLSearchParams(location.search).get('assisted') === '1') {
+        navigate('/instant-quote', { replace: true });
       }
     } catch (err) {
       setStatusMessage({
@@ -634,6 +667,7 @@ export const InstantQuotePage = () => {
 
   const resetQuoteDraft = () => {
     resetQuoteGuideState();
+    clearAssistedRequestIdempotencyKey();
     setAddressInput('');
     setSelectedAddress('');
     setSelectedAddressKey(null);
@@ -843,7 +877,10 @@ export const InstantQuotePage = () => {
     return () => window.clearTimeout(timeout);
   }, [clearAllConfirmation]);
 
-  const persistCurrentDraft = (draftStep: QuoteStep = 'map') => {
+  const persistCurrentDraft = (
+    draftStep: QuoteStep = 'map',
+    options?: { assistedRequestIdempotencyKey?: string | null }
+  ) => {
     if (typeof window === 'undefined') {
       return;
     }
@@ -857,7 +894,11 @@ export const InstantQuotePage = () => {
       polygonHistory,
       billingMode,
       distanceToNearestStationKm,
-      unitMode
+      unitMode,
+      assistedRequestIdempotencyKey:
+        options && 'assistedRequestIdempotencyKey' in options
+          ? options.assistedRequestIdempotencyKey ?? null
+          : assistedRequestIdempotencyKey
     });
   };
 
@@ -923,6 +964,8 @@ export const InstantQuotePage = () => {
                       setAddressInput(event.target.value);
                       setSelectedAddress('');
                       setSelectedAddressKey(null);
+                      clearAssistedRequestIdempotencyKey();
+                      setAssistedRequestResult(null);
                       setHighlightedSuggestionIndex(-1);
                     }}
                     onKeyDown={handleAddressInputKeyDown}

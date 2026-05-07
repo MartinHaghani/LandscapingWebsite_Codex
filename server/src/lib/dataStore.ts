@@ -388,6 +388,7 @@ interface RecordApprovedQuoteEmailDeliveryInput {
 interface QuoteApprovedEmailContext {
   internalQuoteId: string;
   publicQuoteId: string;
+  origin: QuoteOrigin;
   recipientName: string | null;
   recipientEmail: string | null;
   addressText: string;
@@ -899,6 +900,19 @@ const maskAddress = (value: string | null) => {
 
   return `${normalized.slice(0, 8)}***`;
 };
+
+const QUOTE_REQUEST_DUPLICATE_LOCATION_TOLERANCE_M = 25;
+
+const normalizeQuoteRequestAddress = (value: string) => value.trim().replace(/\s+/g, ' ').toLowerCase();
+
+const isReusableQuoteRequestStatus = (status: QuoteRequestStatus) => status !== 'canceled';
+
+const isDuplicateQuoteRequestLocation = (
+  existing: { lat: number; lng: number },
+  incoming: { lat: number; lng: number }
+) =>
+  haversineDistanceM([existing.lng, existing.lat], [incoming.lng, incoming.lat]) <=
+  QUOTE_REQUEST_DUPLICATE_LOCATION_TOLERANCE_M;
 
 const hasAnyAttributionValue = (attribution?: AttributionInput) => {
   if (!attribution) {
@@ -2496,7 +2510,35 @@ export class DataStore {
         attribution: cleanAttribution(input.attribution)
       },
       async () => {
+        const normalizedAddress = normalizeQuoteRequestAddress(input.addressText);
+
         if (!this.prisma) {
+          const existingRequest = this.memory.quoteRequests
+            .filter(
+              (request) =>
+                request.authUserId === input.authUserId &&
+                isReusableQuoteRequestStatus(request.status) &&
+                normalizeQuoteRequestAddress(request.addressText) === normalizedAddress &&
+                isDuplicateQuoteRequestLocation(request.location, input.location)
+            )
+            .sort((left, right) => right.createdAt.localeCompare(left.createdAt))[0];
+
+          if (existingRequest) {
+            return {
+              statusCode: 200,
+              body: {
+                ok: true,
+                id: existingRequest.id,
+                status: existingRequest.status,
+                address: existingRequest.addressText,
+                createdAt: existingRequest.createdAt,
+                existing: true
+              },
+              resourceType: 'quote_request',
+              resourceId: existingRequest.id
+            };
+          }
+
           const now = nowIso();
           const leadId = nanoid(14);
           const requestId = nanoid(14);
@@ -2551,10 +2593,55 @@ export class DataStore {
               id: requestId,
               status: 'requested',
               address: input.addressText,
-              createdAt: now
+              createdAt: now,
+              existing: false
             },
             resourceType: 'quote_request',
             resourceId: requestId
+          };
+        }
+
+        const existingRows = await this.prisma.$queryRaw<
+          Array<{
+            id: string;
+            address_text: string;
+            status: QuoteRequestStatus;
+            created_at: Date;
+          }>
+        >(
+          Prisma.sql`
+            SELECT
+              "id",
+              "address_text",
+              "status",
+              "created_at"
+            FROM "quote_requests"
+            WHERE "auth_user_id" = ${input.authUserId}
+              AND "status" <> 'canceled'::"QuoteRequestStatus"
+              AND lower(regexp_replace(btrim("address_text"), '[[:space:]]+', ' ', 'g')) = ${normalizedAddress}
+              AND ST_DWithin(
+                "location_geog",
+                ST_SetSRID(ST_MakePoint(${input.location.lng}, ${input.location.lat}), 4326)::geography,
+                ${QUOTE_REQUEST_DUPLICATE_LOCATION_TOLERANCE_M}
+              )
+            ORDER BY "created_at" DESC
+            LIMIT 1
+          `
+        );
+        const existingRequest = existingRows[0] ?? null;
+        if (existingRequest) {
+          return {
+            statusCode: 200,
+            body: {
+              ok: true,
+              id: existingRequest.id,
+              status: existingRequest.status,
+              address: existingRequest.address_text,
+              createdAt: existingRequest.created_at.toISOString(),
+              existing: true
+            },
+            resourceType: 'quote_request',
+            resourceId: existingRequest.id
           };
         }
 
@@ -2625,7 +2712,8 @@ export class DataStore {
             id: requestId,
             status: 'requested',
             address: input.addressText,
-            createdAt: now.toISOString()
+            createdAt: now.toISOString(),
+            existing: false
           },
           resourceType: 'quote_request',
           resourceId: requestId
@@ -6021,6 +6109,7 @@ export class DataStore {
         quoteId: quote.publicQuoteId,
         status: quote.status,
         customerStatus: quote.customerStatus,
+        origin: quote.origin,
         createdAt: quote.createdAt,
         submittedAt: quote.submittedAt,
         verifiedAt: quote.verifiedAt,
@@ -6190,6 +6279,7 @@ export class DataStore {
       quoteId: quote.publicQuoteId,
       status: quote.status,
       customerStatus: quote.customerStatus,
+      origin: (quote.origin ?? 'instant_tool') as QuoteOrigin,
       createdAt: quote.createdAt.toISOString(),
       submittedAt: quote.submittedAt?.toISOString() ?? null,
       verifiedAt: quote.verifiedAt?.toISOString() ?? null,
@@ -8026,6 +8116,7 @@ export class DataStore {
       return {
         internalQuoteId: quote.id,
         publicQuoteId: quote.publicQuoteId,
+        origin: quote.origin,
         recipientName: lead?.primaryName ?? null,
         recipientEmail: lead?.primaryEmail ?? null,
         addressText: quote.addressText,
@@ -8063,6 +8154,7 @@ export class DataStore {
     return {
       internalQuoteId: quote.id,
       publicQuoteId: quote.publicQuoteId,
+      origin: (quote.origin ?? 'instant_tool') as QuoteOrigin,
       recipientName: quote.lead.primaryName,
       recipientEmail: quote.lead.primaryEmail,
       addressText: quote.addressText,

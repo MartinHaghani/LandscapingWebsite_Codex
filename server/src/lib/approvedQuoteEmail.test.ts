@@ -96,6 +96,39 @@ describe('buildApprovedQuoteEmail', () => {
     assert.match(changedMessage.html, /Removed after review/);
   });
 
+  it('renders prepared quote copy without review legend language', () => {
+    const message = buildApprovedQuoteEmail(
+      baseInput({
+        variant: 'prepared_quote',
+        mapLegend: {
+          hasAddedArea: true,
+          hasRemovedArea: true
+        }
+      })
+    );
+
+    assert.equal(message.subject, 'Your Autoscape quote is ready to view');
+    assert.match(message.html, /Quote prepared/);
+    assert.match(message.html, /View your quote/);
+    assert.match(message.html, /Prepared quote map preview/);
+    assert.doesNotMatch(message.html, /Seasonal payment/);
+    assert.doesNotMatch(message.html, /\$3,199\.84/);
+    assert.doesNotMatch(message.html, /20 planned weekly visits paid upfront/);
+    assert.doesNotMatch(message.html, /Billing/);
+    assert.doesNotMatch(message.html, /background:#FCFAF5;border:1px solid #D6D7CF;border-radius:8px/);
+    assert.doesNotMatch(message.html, /Approved service area/);
+    assert.doesNotMatch(message.html, /Added after review/);
+    assert.doesNotMatch(message.html, /Removed after review/);
+    assert.doesNotMatch(message.html, /Review and pay securely/);
+    assert.doesNotMatch(message.html, /has reviewed your lawn area/);
+    assert.match(message.text, /Your Autoscape quote is ready to view/);
+    assert.match(message.text, /Quote page:/);
+    assert.doesNotMatch(message.text, /Amount due/);
+    assert.doesNotMatch(message.text, /Payment type/);
+    assert.doesNotMatch(message.text, /Seasonal payment/);
+    assert.doesNotMatch(message.text, /ready for payment/);
+  });
+
   it('escapes customer-controlled fields in the HTML email', () => {
     const message = buildApprovedQuoteEmail(
       baseInput({

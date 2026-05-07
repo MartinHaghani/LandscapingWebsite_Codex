@@ -103,7 +103,7 @@ Autoscape provides:
   - `/dashboard/account/*` (Clerk-managed profile, password, and security settings)
   - `/dashboard/quotes/:quoteId` (owned quote detail with grouped mobile-readable summary data)
   - `/dashboard/quotes/:quoteId/payment` (authenticated approved-quote payment surface with task-first mobile CTAs that can start Stripe Checkout)
-- Approved quote emails link to public `/pay/:token` pages. Tokens are long random secrets stored only as SHA-256 hashes and are regenerated on approval/resend; superseded email tokens resolve to the current payment link instead of dead-ending while the quote is still payable.
+- Quote emails link to public `/pay/:token` pages. Tokens are long random secrets stored only as SHA-256 hashes and are regenerated on approval/resend; superseded email tokens resolve to the current payment link instead of dead-ending while the quote is still payable.
 - Successful Stripe Checkout for both public payment links and authenticated dashboard checkout redirects to `/payment-complete`, which thanks the customer and confirms same-week mowing start. Canceled Checkout returns to the originating payment page for retry.
 - Public/authenticated payment APIs are `GET /api/payment-links/:token`, `POST /api/payment-links/:token/checkout`, `POST /api/account/quotes/:quoteId/payment/checkout`, `POST /api/account/quotes/:quoteId/billing-portal`, and `POST /api/stripe/webhook`.
 - Seasonal quotes create one-time Stripe Checkout Sessions for the approved discounted seasonal total. Per-session quotes create weekly Stripe subscription Checkout Sessions, use a May 1 billing-cycle anchor before season or charge immediately during season, cap paid invoices at `sessionsMax`, and stop no later than September 30.
@@ -133,7 +133,7 @@ Admin app (separate Vite frontend) supports:
 - fixed Autoscape light theme with a sticky sidebar + top utility bar layout
 - quote inbox with pending semantics (`in_review + pending`) and verified-awaiting-payment label
 - nested quote subtabs for `All`, `Manual quote requests`, `Instant quote tool quotes`, and `Admin generated quotes`
-- manual quote requests are `quote_requests` rows from the public assisted card; `/quotes/new?requestId=...` prefills address/customer context, saves a linked `origin=assisted_request` quote, marks the request quoted, and triggers the public payment email
+- manual quote requests are `quote_requests` rows from the public assisted card; creation requires a signed-in customer profile with phone and reuses an existing non-canceled same customer/address/location request; `/quotes/new?requestId=...` prefills address/customer context, saves a linked `origin=assisted_request` quote, marks the request quoted, and triggers the prepared quote email
 - polished route-based quote creator (`/quotes/new`) for anonymous admin-created quotes:
   - reserves and displays the real six-character easy Quote ID before save
   - provides `Copy ID`, generic `/claim-quote`, and direct `/claim-quote?quoteId=...` actions
@@ -149,9 +149,10 @@ Admin app (separate Vite frontend) supports:
   - client draft creates version number `1` (`actorType=client`) using `polygonSource.schemaVersion=2`
   - admin edits create new versions (`actorType=admin`)
   - selected version submit sets `status=verified`, `customer_status=awaiting_payment`
-  - verified approval creates a fresh secure payment token, attempts a simplified payment-focused approved-quote email through Resend, and records delivery state without rolling back approval on failure
-  - the approved-quote payment email uses one secure `/pay/:token` CTA, shows only the actual selected Stripe payment amount/mode, includes the quote address/ID/schedule, and keeps the existing tokenized map preview with a minimal conditional legend
-  - manual approval email resend is available for verified quotes, rotates the public payment token, keeps older emailed `/pay/:token` URLs pointed at the current payment state, and the public preview endpoint serves the tokenized Mapbox satellite delta image used by the email/payment page
+  - verified approval creates a fresh secure payment token, attempts a one-button quote email through Resend, and records delivery state without rolling back approval on failure
+  - instant-tool quote emails use approved/reviewed copy, show only the actual selected Stripe payment amount/mode, include the quote address/ID/schedule, and keep the tokenized map preview with a minimal conditional legend
+  - assisted/admin-prepared quote emails use a `View your quote` CTA-only action block, keep the map preview, and omit visible payment amount/mode plus review legend/adjustment language
+  - manual quote email resend is available for verified quotes, rotates the public payment token, keeps older emailed `/pay/:token` URLs pointed at the current payment state, and the public preview endpoint serves the tokenized Mapbox satellite image used by the email/payment page
 - quote mutation endpoints are restricted to `OWNER`, `ADMIN`, and `REVIEWER` roles
 - quote notes
 - `Area requests` queue with heatmap + cluster map module and hotspot list

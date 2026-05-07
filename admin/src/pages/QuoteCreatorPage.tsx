@@ -579,9 +579,9 @@ export const QuoteCreatorPage = ({ getToken, onBack, onOpenQuote }: QuoteCreator
       setCopyStatus(
         `Saved ${response.quoteId}.${
           response.approvedQuoteEmail?.deliveryStatus === 'sent'
-            ? ' Payment email sent.'
+            ? ' Prepared quote email sent.'
             : response.approvedQuoteEmail
-              ? ' Payment email could not be sent automatically.'
+              ? ' Prepared quote email could not be sent automatically.'
               : ''
         }`
       );
@@ -636,7 +636,7 @@ export const QuoteCreatorPage = ({ getToken, onBack, onOpenQuote }: QuoteCreator
       {sourceQuoteRequest ? (
         <p className="quote-creator-success">
           Manual request {sourceQuoteRequest.id} loaded for {sourceQuoteRequest.lead.name ?? sourceQuoteRequest.lead.email ?? 'customer'}.
-          Saving this quote links it to the customer request and sends the public payment email.
+          Saving this quote links it to the customer request and sends the prepared quote email.
         </p>
       ) : sourceQuoteRequestLoading ? (
         <p className="quote-creator-warning">Loading assisted request context...</p>

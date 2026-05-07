@@ -19,6 +19,7 @@ export interface QuoteDraftPersistedState {
   billingMode: BillingMode;
   distanceToNearestStationKm: number;
   unitMode: QuoteDraftUnitMode;
+  assistedRequestIdempotencyKey?: string | null;
 }
 
 interface PersistedEnvelope {
@@ -129,6 +130,14 @@ const isPersistedState = (value: unknown): value is QuoteDraftPersistedState => 
     return false;
   }
 
+  if (
+    value.assistedRequestIdempotencyKey !== undefined &&
+    value.assistedRequestIdempotencyKey !== null &&
+    typeof value.assistedRequestIdempotencyKey !== 'string'
+  ) {
+    return false;
+  }
+
   if (!isPolygonHistoryState(value.polygonHistory)) {
     return false;
   }
@@ -199,7 +208,8 @@ export const loadQuoteDraftState = (storage: Storage): QuoteDraftPersistedState 
     return {
       ...stateWithoutLegacyFrequency,
       billingMode,
-      distanceToNearestStationKm
+      distanceToNearestStationKm,
+      assistedRequestIdempotencyKey: state.assistedRequestIdempotencyKey ?? null
     };
   } catch {
     return null;

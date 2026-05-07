@@ -93,7 +93,7 @@ Spatial storage:
 - `POST /api/quote/:quoteId/claim` (auth + completed phone required; associates `quotes.auth_user_id`)
 - `POST /api/quote/:quoteId/contact` (idempotent, auth required, optional notes payload only)
 - `GET /api/quote/:quoteId` (auth required, owner/admin only)
-- `GET /api/approved-quote-preview/:token` (public token, proxies the Mapbox satellite image for approved quote emails/payment pages)
+- `GET /api/approved-quote-preview/:token` (public token, proxies the Mapbox satellite image for quote emails/payment pages)
 - `GET /api/payment-links/:token` (public secure token, sanitized approved quote + payment state)
 - `POST /api/payment-links/:token/checkout` (creates/reuses Stripe Checkout)
 - `POST /api/account/quotes/:quoteId/payment/checkout` (authenticated owner checkout for dashboard payment page)
@@ -281,10 +281,10 @@ Revisions:
 - Revise endpoint treats per-visit total as canonical and recomputes seasonal range fields.
 - Quote editor versions include `actor_type` (`client` or `admin`) + `version_number` + `changed_at`.
 - Version submit endpoint applies selected version and sets `status=verified` + `customer_status=awaiting_payment`.
-- Successful verification creates a hashed public payment token, attempts the simplified one-button approved-quote payment email through Resend, and records `approval_email_sent` or `approval_email_failed`; approval is not rolled back if delivery or preview preflight fails.
-- Admins can manually resend via `POST /api/admin/quotes/:id/approval-email/resend` when a quote is verified and awaiting payment; resend rotates the public payment token, and superseded emailed tokens resolve to the latest payment link so old emails do not create separate checkout state.
+- Successful verification creates a hashed public payment token, attempts the one-button quote email through Resend, and records `approval_email_sent` or `approval_email_failed`; approval is not rolled back if delivery or preview preflight fails.
+- Admins can manually resend via `POST /api/admin/quotes/:id/approval-email/resend` when a quote is verified and awaiting payment; resend keeps the email variant tied to quote origin, rotates the public payment token, and superseded emailed tokens resolve to the latest payment link so old emails do not create separate checkout state.
 - Public `/pay/:token` pages and authenticated `/dashboard/quotes/:quoteId/payment` pages use task-first mobile layouts and Stripe Checkout. Seasonal quotes charge the approved discounted seasonal total once; per-session quotes create weekly subscriptions that use a May 1 billing-cycle anchor with no proration before season or charge at checkout during season, cap paid invoices at `sessionsMax`, and stop no later than September 30.
-- Approved-quote payment emails show only the payment-link amount/mode that will be sent to Stripe, include the approved map preview unchanged, and render added/removed map legend keys only when those preview deltas exist.
+- Instant-tool quote emails show only the payment-link amount/mode that will be sent to Stripe, include the approved map preview, and render added/removed map legend keys only when those preview deltas exist. Assisted/admin-prepared quote emails use a `View your quote` CTA-only action block and omit visible payment amount/mode plus review legend/adjustment language.
 - Hosted Checkout requires `STRIPE_SECRET_KEY` and `STRIPE_WEBHOOK_SECRET` on the API service only. Staging currently has both configured, uses Stripe webhook destination `we_1TSTjbFOk9B0ar2ot9otfd2x`, and has passed end-to-end sandbox Checkout/webhook smoke testing for quote `Q-XFIZFLJX`.
 - Quote lookup responses include verified status fields plus payment-page, payment-state, and tokenized preview-image metadata for the customer dashboard/payment page. Account quote detail responses also include conditional Stripe billing metadata so the dashboard can surface the current saved card and link into Stripe Customer Portal without duplicating card-management UI.
 - The customer dashboard ranks one primary quote by urgency (`awaiting payment/payment issue` -> `in review` -> `draft/contact pending` -> `paid/active`), renders task-first CTAs before secondary account data on mobile, and renders quote history only when multiple quotes exist and the primary quote is not complete.

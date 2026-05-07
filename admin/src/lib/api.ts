@@ -148,6 +148,7 @@ export interface AdminQuoteEditorResponse {
   quoteId: string;
   status: string;
   customerStatus: string;
+  origin: AdminQuoteOrigin;
   createdAt: string;
   submittedAt: string | null;
   verifiedAt: string | null;

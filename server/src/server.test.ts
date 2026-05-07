@@ -498,6 +498,39 @@ describe('quote draft + contact finalize flow', () => {
       }
     });
 
+    const unauthenticatedResponse = await fetch(`${baseUrl}/api/quote-requests`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Idempotency-Key': 'assisted-request-unauthenticated'
+      },
+      body: JSON.stringify({
+        address: '101 Assisted Way, Dallas, TX',
+        location: {
+          lat: 32.8201,
+          lng: -96.8102
+        }
+      })
+    });
+    assert.equal(unauthenticatedResponse.status, 401);
+
+    const incompleteProfileResponse = await fetch(`${baseUrl}/api/quote-requests`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Idempotency-Key': 'assisted-request-no-phone',
+        Authorization: 'Bearer customer-no-phone'
+      },
+      body: JSON.stringify({
+        address: '101 Assisted Way, Dallas, TX',
+        location: {
+          lat: 32.8201,
+          lng: -96.8102
+        }
+      })
+    });
+    assert.equal(incompleteProfileResponse.status, 400);
+
     const createResponse = await fetch(`${baseUrl}/api/quote-requests`, {
       method: 'POST',
       headers: {
@@ -543,6 +576,31 @@ describe('quote draft + contact finalize flow', () => {
     const replayBody = (await replayResponse.json()) as { id: string; replayed: boolean };
     assert.equal(replayBody.id, createBody.id);
     assert.equal(replayBody.replayed, true);
+
+    const duplicateResponse = await fetch(`${baseUrl}/api/quote-requests`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Idempotency-Key': 'assisted-request-new-key-same-address',
+        Authorization: 'Bearer customer-assisted'
+      },
+      body: JSON.stringify({
+        address: '101 Assisted Way, Dallas, TX',
+        location: {
+          lat: 32.8201,
+          lng: -96.8102
+        }
+      })
+    });
+    assert.equal(duplicateResponse.status, 200);
+    const duplicateBody = (await duplicateResponse.json()) as {
+      id: string;
+      replayed: boolean;
+      existing: boolean;
+    };
+    assert.equal(duplicateBody.id, createBody.id);
+    assert.equal(duplicateBody.replayed, false);
+    assert.equal(duplicateBody.existing, true);
 
     const accountRequests = await fetch(`${baseUrl}/api/account/quote-requests`, {
       headers: {
@@ -1393,7 +1451,34 @@ describe('admin quote editor workflow', () => {
     assert.equal(createBody.approvedQuoteEmail?.sent, true);
     assert.equal(sentEmails.length, 1);
     assert.equal(sentEmails[0]?.to, 'customer-assisted-link@example.com');
+    assert.equal(sentEmails[0]?.subject, 'Your Autoscape quote is ready to view');
+    assert.match(sentEmails[0]?.html ?? '', /Quote prepared/);
+    assert.match(sentEmails[0]?.html ?? '', /View your quote/);
+    assert.match(sentEmails[0]?.html ?? '', /Prepared quote map preview/);
+    assert.doesNotMatch(sentEmails[0]?.html ?? '', /Seasonal payment/);
+    assert.doesNotMatch(sentEmails[0]?.html ?? '', /planned weekly visits paid upfront/);
+    assert.doesNotMatch(sentEmails[0]?.html ?? '', /Approved service area/);
+    assert.doesNotMatch(sentEmails[0]?.html ?? '', /Added after review/);
+    assert.doesNotMatch(sentEmails[0]?.html ?? '', /Removed after review/);
+    assert.doesNotMatch(sentEmails[0]?.html ?? '', /Review and pay securely/);
+    assert.doesNotMatch(sentEmails[0]?.text ?? '', /ready for payment/);
     assert.match(sentEmails[0]?.html ?? '', /https:\/\/client\.autoscape\.test\/pay\/[A-Za-z0-9_-]+/);
+
+    const preparedResendResponse = await fetch(
+      `${baseUrl}/api/admin/quotes/${createBody.quoteId}/approval-email/resend`,
+      {
+        method: 'POST',
+        headers: {
+          Authorization: 'Bearer admin-admin'
+        }
+      }
+    );
+    assert.equal(preparedResendResponse.status, 200);
+    assert.equal(sentEmails.length, 2);
+    assert.equal(sentEmails[1]?.subject, 'Your Autoscape quote is ready to view');
+    assert.match(sentEmails[1]?.html ?? '', /View your quote/);
+    assert.doesNotMatch(sentEmails[1]?.html ?? '', /Seasonal payment/);
+    assert.doesNotMatch(sentEmails[1]?.html ?? '', /Approved service area/);
 
     const accountQuotes = await fetch(`${baseUrl}/api/account/quotes`, {
       headers: {

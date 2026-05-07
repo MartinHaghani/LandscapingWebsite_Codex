@@ -79,7 +79,8 @@ describe('quoteDraftPersistence', () => {
       },
       billingMode: 'seasonal' as const,
       distanceToNearestStationKm: 2.345,
-      unitMode: 'metric' as const
+      unitMode: 'metric' as const,
+      assistedRequestIdempotencyKey: 'assisted-idempotency-1'
     };
 
     saveQuoteDraftState(storage, state);
@@ -150,7 +151,37 @@ describe('quoteDraftPersistence', () => {
     const restored = loadQuoteDraftState(storage);
     expect(restored?.billingMode).toBe('seasonal');
     expect(restored?.distanceToNearestStationKm).toBe(0);
+    expect(restored?.assistedRequestIdempotencyKey).toBeNull();
     expect('serviceFrequency' in (restored ?? {})).toBe(false);
+  });
+
+  it('keeps the assisted request idempotency key across choice and map snapshots', () => {
+    const storage = createStorageMock();
+    const baseState = {
+      addressInput: '123 Greenway Blvd',
+      selectedAddress: '123 Greenway Blvd, Vaughan, ON',
+      selectedAddressKey: 'mapbox:place.123',
+      center: [-79.52, 43.84] as [number, number],
+      currentStep: 'choice' as const,
+      polygonHistory: {
+        past: [],
+        present: { polygons: [], activePolygonId: null },
+        future: []
+      },
+      billingMode: 'seasonal' as const,
+      distanceToNearestStationKm: 0,
+      unitMode: 'metric' as const,
+      assistedRequestIdempotencyKey: 'assisted-same-request'
+    };
+
+    saveQuoteDraftState(storage, baseState);
+    expect(loadQuoteDraftState(storage)?.assistedRequestIdempotencyKey).toBe('assisted-same-request');
+
+    saveQuoteDraftState(storage, {
+      ...baseState,
+      currentStep: 'map'
+    });
+    expect(loadQuoteDraftState(storage)?.assistedRequestIdempotencyKey).toBe('assisted-same-request');
   });
 
   it('clears the stored snapshot', () => {

@@ -778,6 +778,7 @@ export const createServer = (options: CreateServerOptions = {}) => {
       }
 
       const template = buildApprovedQuoteEmail({
+        variant: context.origin === 'instant_tool' ? 'verified_quote' : 'prepared_quote',
         quoteId: context.publicQuoteId,
         recipientName: context.recipientName,
         addressText: context.addressText,
@@ -1513,7 +1514,7 @@ export const createServer = (options: CreateServerOptions = {}) => {
           attribution: parsed.data.attribution
         });
 
-        if (!result.replayed) {
+        if (!result.replayed && result.body.existing !== true) {
           void customerAddressRecorder({
             userId: customerIdentity.userId,
             addressText: parsed.data.address

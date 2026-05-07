@@ -99,13 +99,13 @@
 
 1. Client shows two matching Autoscape cards after an in-service address:
 
-- `Autoscape-Assisted Quote`: no drawing, account/phone required, Autoscape prepares the quote, payment email arrives in less than 24 hours.
+- `Autoscape-Assisted Quote`: no drawing, account/phone required, Autoscape prepares the quote, prepared quote email arrives in less than 24 hours.
 - `Draw It Yourself`: opens the existing satellite map tool, lets the customer see pricing before submission, then Autoscape reviews it.
 
 2. If the assisted card is selected while signed out, the draft address/choice state is preserved and the user is sent through sign-up.
 3. If the account has no phone, the user is sent through `/complete-profile/*`.
 4. Returning to `/instant-quote?assisted=1` auto-submits the saved request when auth/profile are ready.
-5. Client calls idempotent `POST /api/quote-requests`; server rechecks service area, writes `quote_requests`, syncs the address to account metadata, and returns a request ID.
+5. Client calls idempotent `POST /api/quote-requests`; server rechecks service area, writes or reuses the same non-canceled customer/address/location `quote_requests` row, syncs new addresses to account metadata, and returns a request ID.
 6. The page confirms the assisted request and links to `/dashboard`, where the request is tracked until an admin links a payable quote.
 
 ### Step 3: Geometry Mapping
@@ -230,7 +230,9 @@
 
 ### Public Approved Quote Payment
 
-1. Admin approval or manual resend creates a fresh secure payment token and sends a simplified approved-quote payment email with one `/pay/:token` button, the actual selected payment amount/mode, quote details, and the unchanged approved map preview.
+1. Admin approval or manual resend creates a fresh secure payment token and sends a one-button `/pay/:token` quote email with quote details and the tokenized map preview.
+   - Instant-tool quotes use approved/reviewed copy and conditional map legend items for review deltas.
+   - Assisted/admin-prepared quotes use prepared-quote copy, only a `View your quote` action block, and no visible payment amount/mode or review legend/adjustment language.
 2. `GET /api/payment-links/:token` loads sanitized approved quote details, payment status, and the shared approved quote preview image without requiring sign-in; superseded email tokens resolve to the current payment link instead of showing a dead link while the quote is still payable.
 3. `POST /api/payment-links/:token/checkout` creates or reuses a Stripe Checkout Session. Signed-in customers can also create/reuse Checkout from `POST /api/account/quotes/:quoteId/payment/checkout`.
    - Public and dashboard payment pages link the checkout action to the Refund, Cancellation, and Payment Policy plus Terms.
@@ -292,7 +294,8 @@
 - `Start quote` marks requested rows `in_progress` and opens `/quotes/new?requestId=...`
 - the quote creator preloads request address/location/customer context and locks that address context
 - saving maps valid geometry into a verified awaiting-payment quote with `origin=assisted_request`
-- server links the quote to the request, marks the request `quoted`, creates a payment link, and triggers the public payment email
+- server links the quote to the request, marks the request `quoted`, creates a payment link, and triggers the prepared quote email
+- repeated assisted request submissions for the same signed-in customer/address/location return the existing non-canceled request instead of creating a duplicate
 
 4. Admin actions:
 
@@ -310,9 +313,9 @@
 - save new version (`POST /api/admin/quotes/:id/versions`)
 - submit selected version (`POST /api/admin/quotes/:id/versions/:versionNumber/submit`)
   - sets `status=verified`, `customer_status=awaiting_payment`
-  - creates a fresh secure payment token, attempts the one-button payment-focused approved-quote email through Resend, and records `approval_email_sent` or `approval_email_failed` without rolling back approval
+  - creates a fresh secure payment token, attempts the one-button quote email through Resend using the quote-origin email variant, and records `approval_email_sent` or `approval_email_failed` without rolling back approval
   - creates a tokenized approved-quote preview URL backed by the saved client/admin polygon sources and Mapbox satellite static imagery
-- resend approved quote email (`POST /api/admin/quotes/:id/approval-email/resend`) for verified quotes awaiting payment; resend rotates the payment token while older emailed `/pay/:token` URLs resolve to the current payment link
+- resend quote email (`POST /api/admin/quotes/:id/approval-email/resend`) for verified quotes awaiting payment; resend rotates the payment token, keeps the email variant tied to quote origin, and older emailed `/pay/:token` URLs resolve to the current payment link
 - public approved-quote preview image (`GET /api/approved-quote-preview/:token`) proxies the Mapbox image without exposing the Mapbox token
 - public approved-quote payment link (`/pay/:token`) opens Stripe Checkout through `POST /api/payment-links/:token/checkout`
 - quote editor shows the latest Stripe payment mode/status, paid invoice count, lifecycle timestamps, and related Stripe object IDs for support/debugging
