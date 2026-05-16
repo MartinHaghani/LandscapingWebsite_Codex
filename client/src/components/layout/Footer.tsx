@@ -8,6 +8,7 @@ interface FooterProps {
 
 const quickLinks = [
   { label: 'Services', to: '/services' },
+  { label: 'Gallery', to: '/gallery' },
   { label: 'Instant Quote', to: '/instant-quote' },
   { label: 'Contact', to: '/contact' },
   { label: 'How Pricing Works', to: '/how-rate-is-calculated' }

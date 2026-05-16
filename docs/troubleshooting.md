@@ -152,3 +152,50 @@ lsof -nP -iTCP:4000 -sTCP:LISTEN
 1. Start the API with `npm --prefix server run dev`.
 2. Confirm the public app points to the same API URL in `client/.env`.
 3. If Vite moved to a different loopback port, restart the frontend after updating env if needed. The API now reflects loopback origins across arbitrary local ports.
+
+## 9) Business Email Delivered To Spam
+
+### Symptom
+- Messages from `@autoscape.ca` land in customer spam/junk folders.
+- Approved quote emails may send successfully from the app, but human business email still has poor inbox placement.
+
+### Current DNS/Auth State
+- `autoscape.ca` MX points to Google Workspace.
+- Root SPF exists and authorizes Google Workspace through `_spf.google.com`.
+- DMARC exists at `_dmarc.autoscape.ca` with `p=quarantine`.
+- Resend reports `autoscape.ca` as verified for app quote emails, and `send.autoscape.ca` has the Resend/SES return-path SPF and MX records.
+- Google Workspace DKIM is not currently published at the common selectors checked for this domain, including `google._domainkey.autoscape.ca`.
+
+### Most Likely Cause
+Google Workspace outbound mail is missing domain-aligned DKIM signing. SPF can still pass for Google mail, but Gmail/Yahoo and other receivers increasingly use DKIM, DMARC alignment, complaint rate, and domain reputation together. Missing DKIM is a common spam-placement signal, especially on newer business domains or domains with strict DMARC.
+
+### Fix
+1. In Google Admin Console, go to `Apps > Google Workspace > Gmail > Authenticate email`.
+2. Select `autoscape.ca`.
+3. Generate a new DKIM record:
+   - key length: `2048`
+   - selector/prefix: `google`
+4. In GoDaddy DNS, add the TXT record Google provides:
+   - host/name: `google._domainkey`
+   - value: starts with `v=DKIM1; k=rsa; p=...`
+5. Wait for DNS propagation, then return to Google Admin Console and click `Start authentication`.
+6. Send a new external test email to a Gmail or Yahoo mailbox and inspect headers. Expected results:
+   - `spf=pass`
+   - `dkim=pass`, with `d=autoscape.ca`
+   - `dmarc=pass`
+
+### Verification Commands
+```bash
+dig +short MX autoscape.ca
+dig +short TXT autoscape.ca
+dig +short TXT _dmarc.autoscape.ca
+dig +short TXT google._domainkey.autoscape.ca
+dig +short TXT send.autoscape.ca
+dig +short MX send.autoscape.ca
+```
+
+### Ongoing Deliverability Notes
+- Keep exactly one root SPF TXT record. If a new sender is added, merge its include into the existing SPF record instead of adding a second `v=spf1` TXT.
+- Keep transactional quote emails on Resend and human mailbox traffic on Google Workspace; do not route ad hoc campaigns through the contact mailbox.
+- For promotional or marketing email, use a provider that supports one-click unsubscribe headers and suppression lists before sending campaigns.
+- Monitor Google Postmaster Tools once there is enough Gmail volume to show reputation and spam-rate data.

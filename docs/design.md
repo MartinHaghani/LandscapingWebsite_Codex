@@ -238,10 +238,11 @@ Decision:
 
 Implementation:
 
-- home/services/contact pages now use production content
+- home/services/gallery/contact pages now use production content
 - contact page uses the warm-light section rhythm with phone and email promoted as compact direct actions beside the message form
 - desktop signed-out navigation uses a slim divider between `Sign In` and `Sign Up` instead of punctuation
-- services page uses five shared-style inline SVG illustrations and removes the old mixed photo/placeholder card treatment, including removal of `Multi-Zone Scheduling`
+- services page uses a top-of-page `Services included` section with four real PNG image cards for Autonomous Mowing, Smart Edging, Cleanup & Debris, and Performance Reporting, removing the old inline SVG/placeholder card treatment and Seasonal Maintenance
+- gallery page uses nine unique before/after PNGs in a restrained responsive grid, puts Richmond Hill examples first, removes per-image titles, and keeps captions to general Vaughan/Richmond Hill city labels plus `Before / After`
 - footer uses real contact links (`tel:` + `mailto:`), quick navigation links, and a compact variant for quote/auth/payment funnel routes
 - footer variants now expose core legal links and `/legal` indexes all launch legal documents rendered from Markdown source
 - contact, quote submit, complete-profile, claim-quote, and payment checkout surfaces include nearby legal links matched to the action
@@ -452,7 +453,26 @@ Implementation:
 - service-area coverage falls back to the default Vaughan station when no base-station env is provided, so deployment without station env still exposes non-empty approximate coverage
 - instant-quote mapping keeps satellite basemap default for property precision, with warm-light control and review panels
 
-## 24) Home Page Pricing Comparison
+## 24) Home Page Mower Action Video
+
+Decision:
+
+- Add a real mower footage section below the savings section so the price comparison is followed by proof of consistent maintenance without looking like an embedded video player.
+
+Implementation:
+
+- inserted directly below the pricing comparison and before the mower technology section
+- uses a compact warm-light ruled band with `max-w-6xl` section width, text on the left, and one restrained rounded media surface on the right
+- video asset comes from `/Users/martinhaghani/Downloads/Mower in action.mp4`, optimized to `client/public/videos/home/lawnmower-in-action.mp4`, with poster `client/public/videos/home/lawnmower-in-action-poster.png`
+- intro content uses:
+  - badge: `In Action`
+  - heading: `Reliable. Consistent. Every Time.`
+  - body: `Get the same clean cut every week, down to the centimetre. No rushed jobs, and no uneven patches, just steady and reliable maintenance that keeps your lawn looking sharp without you having to think about it.`
+- compact labels are removed
+- video autoplays muted, loops, plays inline, omits native controls, preloads metadata, and keeps an accessible label
+- video fills the warm media surface edge-to-edge with no black backing; the overflow-hidden wrapper applies `scale-[1.025] origin-top-left` to subtly trim the bottom-right edge
+
+## 25) Home Page Pricing Comparison
 
 Decision:
 
@@ -474,7 +494,7 @@ Implementation:
 - on desktop, the shared comparison panel stretches to match the sample context box height
 - footer copy keeps only the benchmark source and final-quote caveats close to the comparison in smaller grey supporting text, and the two price columns stay visually adjacent on mobile
 
-## 25) Streamlined Home Page Narrative
+## 26) Streamlined Home Page Narrative
 
 Decision:
 
@@ -482,11 +502,11 @@ Decision:
 
 Implementation:
 
-- home page now flows from hero to pricing comparison, then into the mower technology section, a three-card services overview with Autonomous Mowing, Edging, and Cleanup & Debris, an FAQ with larger answer text and bold key phrases, and the closing quote CTA, with the post-hero sections using a flatter warm-light border rhythm that better matches the hero
+- home page now flows from hero to pricing comparison, mower action video, then into the mower technology section, a three-card services overview with Autonomous Mowing, Edging, and Cleanup & Debris, an FAQ with larger answer text and bold key phrases, and the closing quote CTA, with the post-hero sections using a flatter warm-light border rhythm that better matches the hero
 - removed the standalone `Why Electric`, `How It Works`, `Why Autoscape`, and `Testimonials` sections
-- removed the separate `/about` page and its navbar link so the public marketing surface is limited to home, services, contact, and the quote flow
+- removed the separate `/about` page and its navbar link so the public marketing surface is limited to home, services, gallery, contact, and the quote flow
 
-## 26) Home Page Lawnmower Section
+## 27) Home Page Lawnmower Section
 
 Decision:
 
@@ -508,7 +528,7 @@ Implementation:
 - each spec uses a consistent line-style green icon: horizontal ruler, signal/sensor, flask/experiment, and safety shield
 - section remains informational only, with no CTA, and removes the boxed artwork treatment so the transparent mower sits directly in the page background with only restrained ambient shadow
 
-## 27) Legal Launch Surface
+## 28) Legal Launch Surface
 
 Decision:
 

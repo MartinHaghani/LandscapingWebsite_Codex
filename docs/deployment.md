@@ -256,6 +256,13 @@ Set `DATABASE_URL` on the `migrate` job as the same staging database URL/bindabl
 
 ## 6) External Service Setup
 
+Google Workspace / DNS:
+
+- `autoscape.ca` business mailbox traffic uses Google Workspace MX records.
+- Keep root SPF as a single TXT record that authorizes all legitimate senders; do not add duplicate `v=spf1` records.
+- Enable Google Workspace DKIM before relying on business email deliverability: generate the `google._domainkey` TXT record in Google Admin Console, publish it in GoDaddy DNS, then start authentication in Google Admin.
+- Keep DMARC active only after every legitimate sender is SPF/DKIM aligned. Current quote-email sender alignment depends on the verified Resend domain and `send.autoscape.ca` return path.
+
 Clerk:
 
 - Use staging/dev Clerk keys for staging.

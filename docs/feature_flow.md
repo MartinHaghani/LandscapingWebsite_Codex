@@ -3,18 +3,25 @@
 ## Public Shell
 
 1. User sees the horizontal Autoscape PNG brand mark in the navbar on entry and again in the footer.
-2. Navbar keeps desktop nav links, quote CTA, signed-out auth links with the slim divider, signed-in dashboard link, and mobile menu behavior.
+2. Navbar keeps desktop nav links with Gallery before Contact, quote CTA, signed-out auth links with the slim divider, signed-in dashboard link, and mobile menu behavior.
 3. Public page loads include the Google Ads tag `AW-17991079326` from the Vite HTML shell.
 4. Quote, auth, confirmation, payment, payment-complete, and dashboard-payment funnel routes render a compact footer; general marketing routes keep the full footer.
 5. Footer variants link to core legal pages, and `/legal` lists the Markdown legal documents rendered from `client/src/content/legal/`.
 
-## Services: Coverage-First Entry
+## Services: Services Included Entry
 
 1. User opens `/services`.
-2. Page loads `GET /api/service-area` and renders approximate coverage overlay on a light basemap, with a shorter visible map on mobile.
+2. Page opens with the `Services included` section and four image-backed service cards: Autonomous Mowing, Smart Edging, Cleanup & Debris, and Performance Reporting.
+3. Below the cards, page loads `GET /api/service-area` and renders approximate coverage overlay on a light basemap, with a shorter visible map on mobile.
    - The API builds coverage from server-side base-station config and falls back to the default Vaughan station when no base-station env is provided.
-3. Page presents five illustrated service cards: Autonomous Mowing, Smart Edging, Cleanup & Debris, Seasonal Maintenance, and Performance Reporting.
 4. User clicks `Check my address` CTA to start Instant Quote.
+
+## Gallery: Before and After Work
+
+1. User opens `/gallery` from the public navbar or footer quick links.
+2. Page presents nine unique before/after project images in a responsive 1-column mobile, 2-column tablet, and 3-column desktop grid.
+3. Each card keeps the image unobstructed, puts Richmond Hill examples first, and shows only `Before / After` plus a general city caption for Vaughan or Richmond Hill.
+4. The page ends with restrained calls to start Instant Quote or contact the team.
 
 ## Home: Transparent Hero Graphic
 
@@ -43,6 +50,14 @@
    - `Per season`: centered `$720` with a top-right `20% off` badge lifted off the number vs `$1,100`
 6. Desktop layout stretches the shared comparison panel to match the sample box height, enlarges the `Per visit` and `Per season` row labels, and keeps only the bottom disclaimer in smaller grey supporting text.
 
+## Home: Mower Action Video
+
+1. User continues below the pricing comparison into a real mower video section.
+2. Section uses a compact warm-light ruled band:
+   - left: `In Action`, `Reliable. Consistent. Every Time.`, and reliability-focused maintenance copy
+   - right: one restrained rounded media surface using the optimized MP4 and poster from `client/public/videos/home/`
+3. Video autoplays muted, loops, plays inline, omits native controls, preloads metadata, and is visually cropped inside an overflow-hidden wrapper so the bottom-right edge is trimmed without changing the source media.
+
 ## Home: Lawnmower Section
 
 1. User continues below the pricing comparison into a dedicated `Meet our lawnmowers` section.
@@ -60,7 +75,7 @@
 
 ## Home: Streamlined Marketing Flow
 
-1. After the pricing comparison, the page moves into the mower technology section and then the services overview, with the remaining sections using flatter warm-light surfaces, restrained borders, and fewer rounded card treatments so they match the hero area.
+1. After the hero, the page moves into the pricing comparison, mower action video, mower technology section, and then the services overview, with the remaining sections using flatter warm-light surfaces, restrained borders, and fewer rounded card treatments so they match the hero area.
 2. Home services overview includes Autonomous Mowing, Edging, and Cleanup & Debris before the FAQ and final quote CTA.
 3. The retired Why Electric, How It Works, Why Autoscape, and Testimonials sections are no longer part of the landing-page flow.
 4. The FAQ answers cover cut cadence, Vaughan-area service coverage, home access, kids/pets safety, weather timing, and pricing, using larger answer text with bold key phrases.

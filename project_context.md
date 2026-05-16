@@ -12,20 +12,21 @@ Autoscape provides:
 
 ### Public App (`client/`)
 
-- `Services` page starts with Service Area map + large `Check my address` CTA.
+- `Services` page starts with the `Services included` image-card grid, then shows the Service Area map + large `Check my address` CTA below it.
 - Service map uses a light basemap with green `#329F5B` overlay for coverage clarity.
 - Coverage is explicitly approximate and privacy-hardened.
 - Service-area coverage uses server-side base-station config and falls back to the default Vaughan station when no base-station env is provided.
-- Services page keeps the coverage map prominent but shortens the visible map height on mobile before the five shared-style inline SVG illustrations: Autonomous Mowing, Smart Edging, Cleanup & Debris, Seasonal Maintenance, and Performance Reporting.
+- Services page presents four real-image service cards for Autonomous Mowing, Smart Edging, Cleanup & Debris, and Performance Reporting before the coverage map, which keeps the shorter visible map height on mobile.
 - Navigation includes the horizontal Autoscape PNG brand mark, mobile menu support, quote CTA, signed-out auth links separated by a slim divider, and a signed-in dashboard link styled with the standard site font/color treatment.
 - Public shell loads the Google Ads tag `AW-17991079326` from `client/index.html`; the admin shell is not tagged.
 - Footer repeats the horizontal Autoscape PNG brand mark and includes production contact details, internal quick links, and legal links; quote, auth, payment, confirmation, and dashboard-payment funnel routes use a compact footer variant with legal links preserved.
 - Legal pages are available at `/legal` and `/legal/:slug`, with Markdown source files in `client/src/content/legal/` and drafting evidence tracked in `docs/legal_evidence_report.md`.
-- Marketing pages (home/services/contact) use non-placeholder production copy and a warm-light readability-first design system; the contact page makes phone and email compact direct actions beside the message form.
+- Marketing pages (home/services/gallery/contact) use non-placeholder production copy and a warm-light readability-first design system; `/gallery` shows nine unique before/after work examples with Vaughan and Richmond Hill labels, and the contact page makes phone and email compact direct actions beside the message form.
 - Home hero uses a symmetric desktop split with copy/CTAs on the left, `No sign-up required.` helper text under the CTA row, a stacked CTA layout on narrow mobile screens, and a responsive animated lawn parcel on the right with a perimeter-learning wall trace, an 11-pass rounded horizontal infill raster with denser direction arrows, direct mowing spawn on the first scanline, mowing follow-through, visible CAD dimensions, a restrained under-shadow, and a dynamically sized ticker-flip status capsule centered under the full lawn graphic. On mobile, the lawn parcel is reordered under `Precise Cuts, Lower Costs` and above the CTA buttons.
 - Home page places a tighter pricing comparison section directly below the hero, using an unboxed sample-lawn context with a larger portrait lawn SVG and a muted two-column size/schedule row on the left, plus a flatter shared comparison panel on the right with a narrower row-label column and a top-right seasonal discount badge in the Autoscape season cell, so Autoscape and local competitors stay visually adjacent on mobile, the sample lawn avoids rounded bubble wrappers, and the same asymmetrical lawn-only mask, no interior decorative strokes, downward-facing driveway cutout, and brand-green fill treatment remain intact.
+- Home page places a reliability-focused mower action video section below pricing, using the optimized real footage at `client/public/videos/home/lawnmower-in-action.mp4` inside a compact ruled warm-light band with `Reliable. Consistent. Every Time.`, autoplay, mute, loop, no native controls, and a subtle visual crop that trims the bottom-right edge.
 - Home page adds a `Meet our lawnmowers` section below pricing, pairing four icon-led unnumbered selling points on the left with a cleaned transparent mower asset on the right; the sensor copy uses sensor fusion language. On mobile, that mower asset moves directly under the section heading before the highlight list.
-- Home page is streamlined to hero, pricing comparison, mower technology, a three-card services overview with Autonomous Mowing, Edging, and Cleanup & Debris, an FAQ covering cadence, service area, access, safety, weather, and pricing, and the closing instant-quote CTA, with the post-hero sections using a flatter warm-light rhythm that matches the landing area.
+- Home page is streamlined to hero, pricing comparison, mower action video, mower technology, a three-card services overview with Autonomous Mowing, Edging, and Cleanup & Debris, an FAQ covering cadence, service area, access, safety, weather, and pricing, and the closing instant-quote CTA, with the post-hero sections using a flatter warm-light rhythm that matches the landing area.
 
 ### Instant Quote Flow
 

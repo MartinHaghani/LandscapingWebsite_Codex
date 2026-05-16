@@ -35,17 +35,70 @@ describe('HomePage hero', () => {
   });
 });
 
+describe('HomePage mower action video section', () => {
+  it('renders the real mower video after pricing and before the mower technology section', () => {
+    const markup = renderHomePage();
+    const heroIndex = markup.indexOf('Autonomous Landscaping Service');
+    const pricingIndex = markup.indexOf('Save with Autoscape');
+    const actionIndex = markup.indexOf('Reliable. Consistent. Every Time.');
+    const mowersIndex = markup.indexOf('Meet our lawnmowers');
+    const servicesIndex = markup.indexOf('Maintenance designed for premium residential properties');
+    const actionMarkup = markup.slice(actionIndex, mowersIndex);
+
+    expect(actionIndex).toBeGreaterThan(heroIndex);
+    expect(actionIndex).toBeGreaterThan(pricingIndex);
+    expect(actionIndex).toBeLessThan(mowersIndex);
+    expect(mowersIndex).toBeLessThan(servicesIndex);
+    expect(markup).toContain('data-home-mower-action="true"');
+    expect(markup).toContain('data-home-mower-action-media="true"');
+    expect(markup).toContain('In Action');
+    expect(markup).toContain(
+      'Get the same clean cut every week, down to the centimetre. No rushed jobs, and no uneven patches, just steady and reliable maintenance that keeps your lawn looking sharp without you having to think about it.'
+    );
+    expect(markup).toContain('/videos/home/lawnmower-in-action.mp4');
+    expect(markup).toContain('/videos/home/lawnmower-in-action-poster.png');
+    expect(markup).toContain('aria-label="Autoscape autonomous mower cutting tall grass"');
+    expect(markup).toContain('autoplay=""');
+    expect(markup).toContain('muted=""');
+    expect(markup).toContain('loop=""');
+    expect(markup).toContain('playsinline=""');
+    expect(markup).toContain('preload="metadata"');
+    expect(markup).toContain('max-w-6xl');
+    expect(markup).toContain('border-y border-stroke/80 py-6');
+    expect(markup).toContain('md:grid-cols-[minmax(0,0.72fr)_minmax(0,1.28fr)]');
+    expect(markup).toContain('bg-white/70 shadow-[0_20px_44px_-40px_rgba(16,23,19,0.32)]');
+    expect(markup).toContain('origin-top-left scale-[1.025] object-cover');
+    expect(actionMarkup).not.toContain('See the cut line');
+    expect(actionMarkup).not.toContain(
+      'The mower moves through tall grass in a steady pass, leaving a clean lane behind it.'
+    );
+    expect(actionMarkup).not.toContain('A real mowing pass');
+    expect(actionMarkup).not.toContain(
+      'Watch the mower move through tall grass and leave a clean lane behind it.'
+    );
+    expect(actionMarkup).not.toContain('controls=""');
+    expect(actionMarkup).not.toContain('Visible cut path');
+    expect(actionMarkup).not.toContain('Autonomous mowing');
+    expect(actionMarkup).not.toContain('Built for weekly care');
+    expect(actionMarkup).not.toContain(
+      'A real pass through tall grass shows the mower creating an even, visible cut line before you compare pricing and map your own lawn.'
+    );
+  });
+});
+
 describe('HomePage pricing comparison', () => {
-  it('renders a tighter pricing comparison directly after the hero and before the services section', () => {
+  it('renders a tighter pricing comparison directly after the hero and before the action video', () => {
     const markup = renderHomePage();
     const heroIndex = markup.indexOf('Autonomous Landscaping Service');
     const comparisonIndex = markup.indexOf('Save with Autoscape');
+    const actionIndex = markup.indexOf('Reliable. Consistent. Every Time.');
     const servicesIndex = markup.indexOf('Maintenance designed for premium residential properties');
     const contextIndex = markup.indexOf('data-home-pricing-context="true"');
     const lawnIndex = markup.indexOf('data-home-pricing-lawn="true"');
     const panelIndex = markup.indexOf('data-home-pricing-panel="true"');
 
     expect(comparisonIndex).toBeGreaterThan(heroIndex);
+    expect(comparisonIndex).toBeLessThan(actionIndex);
     expect(comparisonIndex).toBeLessThan(servicesIndex);
     expect(markup).toContain('data-home-pricing-comparison="true"');
     expect(markup).toContain('data-home-pricing-band="true"');

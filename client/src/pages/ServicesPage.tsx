@@ -1,94 +1,72 @@
-import { lazy, Suspense } from 'react';
-import {
-  ServiceIllustration,
-  type ServiceIllustrationKey
-} from '../components/service/ServiceIllustrations';
+import { ServiceAreaSection } from '../components/service/ServiceAreaSection';
 import { Card } from '../components/ui/Card';
-import { SectionTitle } from '../components/ui/SectionTitle';
-
-const LazyServiceAreaSection = lazy(() =>
-  import('../components/service/ServiceAreaSection').then((module) => ({
-    default: module.ServiceAreaSection
-  }))
-);
 
 type ServiceCard = {
   title: string;
-  illustration: ServiceIllustrationKey;
-  decorative: boolean;
+  imageSrc: string;
+  imageAlt: string;
   description: string;
 };
 
 const serviceCards: ServiceCard[] = [
   {
     title: 'Autonomous Mowing',
-    illustration: 'autonomousMowing',
-    decorative: true,
+    imageSrc: '/images/services/autonomous-mowing.png',
+    imageAlt: 'Autonomous mower cutting a residential lawn from above.',
     description:
       'Route-planned recurring mowing designed for consistency, lower noise, and predictable property presentation.'
   },
   {
     title: 'Smart Edging',
-    illustration: 'smartEdging',
-    decorative: true,
+    imageSrc: '/images/services/smart-edging.png',
+    imageAlt: 'Clean lawn edge along a sidewalk.',
     description:
       'Perimeter detailing around paths, beds, and driveways to preserve clean boundaries and finished curb appeal.'
   },
   {
     title: 'Cleanup & Debris',
-    illustration: 'cleanupDebris',
-    decorative: true,
+    imageSrc: '/images/services/cleanup-debris.png',
+    imageAlt: 'Residential lawn with leaves and small debris before cleanup.',
     description:
       'Light debris and clipping management built into each visit to maintain a neat and client-ready finish.'
   },
   {
-    title: 'Seasonal Maintenance',
-    illustration: 'seasonalMaintenance',
-    decorative: true,
-    description:
-      'Season-aware mowing height and route adjustments tuned for spring acceleration and mid-summer stress periods.'
-  },
-  {
     title: 'Performance Reporting',
-    illustration: 'performanceReporting',
-    decorative: true,
+    imageSrc: '/images/services/performance-reporting.png',
+    imageAlt: 'Phone showing Autoscape mowing completion photos.',
     description:
-      'Quote metadata and operational records make each request traceable from initial draft through final submission.'
+      'Photo-backed service updates after each visit make completed work easy to review and keep property care traceable.'
   }
 ];
 
 export const ServicesPage = () => (
   <div className="mx-auto w-full max-w-7xl px-4 py-16 md:px-8 md:py-20">
-    <SectionTitle
-      badge="Services"
-      title="Autonomous care services for high-standard properties"
-      description="Coverage-first intake and deterministic quote logic keep planning transparent before service begins."
-    />
+    <section aria-labelledby="services-included-title">
+      <h1
+        id="services-included-title"
+        className="font-display text-3xl font-bold tracking-tight text-ink md:text-5xl"
+      >
+        Services included
+      </h1>
 
-    <Suspense
-      fallback={
-        <Card className="mt-14 bg-surface">
-          <p className="text-sm text-copy-muted">Loading service area...</p>
-        </Card>
-      }
-    >
-      <LazyServiceAreaSection />
-    </Suspense>
+      <div className="mt-10 grid gap-6 md:grid-cols-2">
+        {serviceCards.map((service) => (
+          <Card key={service.title}>
+            <div className="aspect-[8/5] w-full overflow-hidden rounded-xl border border-stroke bg-surface-muted">
+              <img
+                src={service.imageSrc}
+                alt={service.imageAlt}
+                className="h-full w-full object-cover"
+                loading="lazy"
+              />
+            </div>
+            <h2 className="mt-5 text-xl font-semibold text-ink">{service.title}</h2>
+            <p className="mt-3 text-sm text-copy-muted">{service.description}</p>
+          </Card>
+        ))}
+      </div>
+    </section>
 
-    <div className="mt-10 grid gap-6 md:grid-cols-2 xl:grid-cols-3">
-      {serviceCards.map((service) => (
-        <Card key={service.title}>
-          <div className="aspect-[8/5] w-full overflow-hidden rounded-2xl border border-stroke bg-[#f2ede2]">
-            <ServiceIllustration
-              illustration={service.illustration}
-              decorative={service.decorative}
-              className="h-full w-full"
-            />
-          </div>
-          <h3 className="mt-5 text-xl font-semibold text-ink">{service.title}</h3>
-          <p className="mt-3 text-sm text-copy-muted">{service.description}</p>
-        </Card>
-      ))}
-    </div>
+    <ServiceAreaSection />
   </div>
 );

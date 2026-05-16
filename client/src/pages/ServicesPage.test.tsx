@@ -12,23 +12,29 @@ const renderServicesPage = () =>
   );
 
 describe('ServicesPage service gallery', () => {
-  it('renders the active five-card illustrated lineup without Multi-Zone Scheduling', () => {
+  it('renders the services included image lineup before the service area', () => {
     const markup = renderServicesPage();
+    const servicesIncludedIndex = markup.indexOf('Services included');
+    const serviceAreaIndex = markup.indexOf('Service Area');
 
+    expect(servicesIncludedIndex).toBeGreaterThanOrEqual(0);
+    expect(serviceAreaIndex).toBeGreaterThanOrEqual(0);
+    expect(servicesIncludedIndex).toBeLessThan(serviceAreaIndex);
     expect(markup).toContain('Autonomous Mowing');
     expect(markup).toContain('Smart Edging');
     expect(markup).toContain('Cleanup &amp; Debris');
-    expect(markup).toContain('Seasonal Maintenance');
     expect(markup).toContain('Performance Reporting');
+    expect(markup).not.toContain('Seasonal Maintenance');
+    expect(markup).not.toContain('Autonomous care services for high-standard properties');
 
-    expect(markup).toContain('data-service-illustration="autonomousMowing"');
-    expect(markup).toContain('data-service-illustration="smartEdging"');
-    expect(markup).toContain('data-service-illustration="cleanupDebris"');
-    expect(markup).toContain('data-service-illustration="seasonalMaintenance"');
-    expect(markup).toContain('data-service-illustration="performanceReporting"');
+    expect(markup.match(/<img/g) ?? []).toHaveLength(4);
+    expect(markup).toContain('src="/images/services/autonomous-mowing.png"');
+    expect(markup).toContain('src="/images/services/smart-edging.png"');
+    expect(markup).toContain('src="/images/services/cleanup-debris.png"');
+    expect(markup).toContain('src="/images/services/performance-reporting.png"');
 
     expect(markup).not.toContain('Multi-Zone Scheduling');
-    expect(markup).not.toContain('<img');
+    expect(markup).not.toContain('data-service-illustration');
   });
 });
 

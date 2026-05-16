@@ -4,6 +4,7 @@ import { SiteLayout } from './components/layout/SiteLayout';
 
 const HomePage = lazy(() => import('./pages/HomePage').then((module) => ({ default: module.HomePage })));
 const ServicesPage = lazy(() => import('./pages/ServicesPage').then((module) => ({ default: module.ServicesPage })));
+const GalleryPage = lazy(() => import('./pages/GalleryPage').then((module) => ({ default: module.GalleryPage })));
 const ContactPage = lazy(() => import('./pages/ContactPage').then((module) => ({ default: module.ContactPage })));
 const InstantQuotePage = lazy(() =>
   import('./pages/InstantQuotePage').then((module) => ({ default: module.InstantQuotePage }))
@@ -76,6 +77,7 @@ const App = () => (
       <Route element={<SiteLayout />}>
         <Route path="/" element={<HomePage />} />
         <Route path="/services" element={<ServicesPage />} />
+        <Route path="/gallery" element={<GalleryPage />} />
         <Route path="/contact" element={<ContactPage />} />
         <Route path="/instant-quote" element={<InstantQuotePage />} />
         <Route path="/instant-quote/summary" element={<InstantQuoteSummaryPage />} />

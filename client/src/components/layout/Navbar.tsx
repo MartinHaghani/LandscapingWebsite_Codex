@@ -7,6 +7,7 @@ import { cn } from '../../lib/cn';
 const navItems = [
   { to: '/', label: 'Home' },
   { to: '/services', label: 'Services' },
+  { to: '/gallery', label: 'Gallery' },
   { to: '/contact', label: 'Contact' }
 ];
 

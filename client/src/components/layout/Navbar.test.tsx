@@ -22,7 +22,15 @@ describe('Navbar', () => {
     expect(markup).toContain('Sign Up');
     expect(markup).toContain('/images/brand/autoscape-horizontal-brand.png');
     expect(markup).toContain('aria-label="Autoscape home"');
+    expect(markup).toContain('href="/gallery"');
     expect(markup).toContain('h-4 w-px bg-stroke');
     expect(markup).not.toContain('text-copy-soft">,</span>');
+
+    const servicesIndex = markup.indexOf('href="/services"');
+    const galleryIndex = markup.indexOf('href="/gallery"');
+    const contactIndex = markup.indexOf('href="/contact"');
+
+    expect(servicesIndex).toBeLessThan(galleryIndex);
+    expect(galleryIndex).toBeLessThan(contactIndex);
   });
 });

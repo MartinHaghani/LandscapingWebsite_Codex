@@ -1,5 +1,6 @@
 import { Link } from 'react-router-dom';
 import { HomeLawnmowersSection } from '../components/home/HomeLawnmowersSection';
+import { HomeMowerActionSection } from '../components/home/HomeMowerActionSection';
 import { HomePricingComparisonSection } from '../components/home/HomePricingComparisonSection';
 import { Card } from '../components/ui/Card';
 import { SectionTitle } from '../components/ui/SectionTitle';
@@ -111,6 +112,7 @@ export const HomePage = () => (
     </section>
 
     <HomePricingComparisonSection />
+    <HomeMowerActionSection />
     <HomeLawnmowersSection />
 
     <section className="border-b border-stroke bg-[linear-gradient(180deg,rgba(247,244,238,0.76),rgba(255,255,255,0.96))]">

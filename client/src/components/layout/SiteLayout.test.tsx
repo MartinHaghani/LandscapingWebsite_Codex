@@ -24,12 +24,13 @@ describe('SiteLayout footer variants', () => {
 
   it('keeps the full footer on marketing routes', () => {
     const markup = renderToStaticMarkup(
-      <StaticRouter location="/services">
+      <StaticRouter location="/gallery">
         <SiteLayout />
       </StaticRouter>
     );
 
     expect(markup).toContain('Quick Links');
+    expect(markup).toContain('href="/gallery"');
     expect(markup).toContain('Autonomous lawn care with deterministic quote measurement');
   });
 });
