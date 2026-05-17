@@ -5,13 +5,14 @@ import { HomePricingComparisonSection } from '../components/home/HomePricingComp
 import { Card } from '../components/ui/Card';
 import { SectionTitle } from '../components/ui/SectionTitle';
 import { Button } from '../components/ui/Button';
+import { HomeHeroLawnGraphic } from '../components/home/HomeHeroLawnGraphic';
 
 const faqs = [
   {
-    question: 'How often do you mow?',
+    question: 'How often do autonomous cuts run?',
     answer: (
       <>
-        Service runs <strong className="font-semibold text-ink">weekly</strong> with around{' '}
+        Services run <strong className="font-semibold text-ink">weekly</strong> with around{' '}
         <strong className="font-semibold text-ink">20 visits</strong> from the start of May to the
         end of September.
       </>
@@ -40,14 +41,14 @@ const faqs = [
     )
   },
   {
-    question: 'Is your service safe for kids and pets?',
+    question: 'Is autonomous lawn care safe for kids and pets?',
     answer: (
       <>
         <strong className="font-semibold text-ink">Safety matters.</strong> As with any lawn
-        care work, <strong className="font-semibold text-ink">normal caution</strong> is important
-        on service days. We will review the right setup and{' '}
-        <strong className="font-semibold text-ink">best practices</strong> for your property so your
-        family and pets stay comfortable around every visit.
+        equipment, <strong className="font-semibold text-ink">normal caution</strong> is important
+        during active operation. We will review the right setup and{' '}
+        <strong className="font-semibold text-ink">best practices</strong> for your property so you
+        feel confident using the system around your home.
       </>
     )
   },
@@ -78,69 +79,33 @@ export const HomePage = () => (
   <div>
     <section className="relative overflow-hidden border-b border-stroke bg-mesh md:h-[calc(100svh-73px)]">
       <div className="mx-auto flex w-full max-w-7xl flex-col px-4 py-8 md:h-full md:px-8 md:py-3">
-        <div className="grid gap-8 md:min-h-0 md:flex-1 md:grid-cols-2 md:items-center md:gap-10">
-          <div className="fade-up flex items-center md:h-full">
-            <div className="w-full max-w-[30rem]">
-              <p className="text-xs font-semibold uppercase tracking-[0.2em] text-brand">
-                Premium Lawn Care
-              </p>
-              <h1 className="mt-4 font-display text-4xl font-bold leading-[1.08] text-ink md:text-6xl">
-                A Lawn You'll Love
+        <div className="grid gap-6 md:min-h-0 md:flex-1 md:grid-cols-2 md:items-center md:gap-6">
+          <div className="fade-up flex items-center justify-center md:h-full">
+            <div className="w-full max-w-[24rem]">
+              <h1 className="font-display text-4xl font-bold leading-tight text-ink md:text-6xl">
+                Autonomous Landscaping Service
               </h1>
               <p className="mt-6 max-w-xl text-base text-copy-muted md:text-lg">
-                Reliable weekly mowing, edging, and clean up for an affordable price
+                Precise Cuts, Lower Costs
               </p>
               <div className="mt-7 flex flex-col gap-3 min-[375px]:flex-row min-[375px]:flex-wrap min-[375px]:items-center">
                 <div className="w-full min-[375px]:w-auto">
                   <Link to="/instant-quote">
-                    <Button className="w-full min-[375px]:w-auto md:px-7 md:py-3.5 md:text-base">Get Instant Quote</Button>
+                    <Button className="w-full min-[375px]:w-auto">Get Instant Quote</Button>
                   </Link>
                 </div>
                 <Link to="/contact" className="w-full min-[375px]:w-auto">
-                  <Button variant="secondary" className="w-full min-[375px]:w-auto md:px-7 md:py-3.5 md:text-base">
-                    Call or Send a Message
+                  <Button variant="secondary" className="w-full min-[375px]:w-auto">
+                    Talk to the Team
                   </Button>
                 </Link>
               </div>
+              <p className="mt-3 text-sm font-medium text-copy-soft">No sign-up required.</p>
             </div>
           </div>
 
-          <div
-            className="fade-up flex min-h-0 items-center justify-center md:h-full [animation-delay:120ms]"
-            data-home-hero-media="true"
-          >
-            <div className="relative w-full max-w-[34rem]">
-              <div className="overflow-hidden rounded-2xl border border-stroke/80 bg-white/70 shadow-[0_30px_60px_-38px_rgba(16,23,19,0.45)]">
-                <img
-                  src="/images/gallery/gallery-08.png"
-                  alt="A Vaughan front lawn before and after a professional mowing service"
-                  className="h-full w-full object-cover"
-                  loading="eager"
-                />
-              </div>
-              <div
-                className="absolute -bottom-5 left-5 flex items-center gap-3 rounded-full border border-white/70 bg-white/90 px-4 py-2.5 shadow-[0_22px_40px_-30px_rgba(16,23,19,0.45)] backdrop-blur md:left-7"
-                data-home-hero-badge="true"
-              >
-                <span className="flex h-7 w-7 items-center justify-center rounded-full bg-brand/15 text-brand">
-                  <svg
-                    aria-hidden="true"
-                    className="h-4 w-4"
-                    fill="none"
-                    stroke="currentColor"
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    strokeWidth={1.9}
-                    viewBox="0 0 24 24"
-                  >
-                    <path d="m5 12.5 4.2 4.2L19 7" />
-                  </svg>
-                </span>
-                <span className="text-sm font-semibold text-ink">
-                  Trusted by Vaughan homeowners
-                </span>
-              </div>
-            </div>
+          <div className="fade-up flex min-h-0 items-center justify-center md:h-full [animation-delay:120ms]">
+            <HomeHeroLawnGraphic className="h-[300px] w-full sm:h-[340px] md:h-full md:-translate-y-8 lg:-translate-y-10" />
           </div>
         </div>
       </div>
@@ -155,15 +120,15 @@ export const HomePage = () => (
         <SectionTitle
           badge="Services"
           title="Maintenance designed for premium residential properties"
-          description="Dependable weekly mowing is the foundation, with finishing work and seasonal tuning for consistent quality."
+          description="Autonomous mowing is the foundation, with finishing work and seasonal tuning for consistent quality."
         />
 
         <div className="mt-10 grid gap-6 md:grid-cols-3">
           <Card className="rounded-lg bg-white/85 shadow-[0_18px_44px_-40px_rgba(16,23,19,0.3)]">
-            <h3 className="text-xl font-semibold text-ink">Weekly Mowing</h3>
+            <h3 className="text-xl font-semibold text-ink">Autonomous Mowing</h3>
             <p className="mt-3 text-sm text-copy-muted">
-              A clean, even cut on a reliable weekly schedule for uniform color and healthy
-              growth all season long.
+              Repeatable route execution for uniform cut quality and reduced noise compared to
+              conventional gas-powered schedules.
             </p>
           </Card>
           <Card className="rounded-lg bg-white/85 shadow-[0_18px_44px_-40px_rgba(16,23,19,0.3)]">

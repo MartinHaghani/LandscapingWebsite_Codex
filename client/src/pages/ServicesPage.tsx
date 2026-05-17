@@ -10,14 +10,14 @@ type ServiceCard = {
 
 const serviceCards: ServiceCard[] = [
   {
-    title: 'Autonomous Mowing',
+    title: 'Mowing',
     imageSrc: '/images/services/autonomous-mowing.png',
     imageAlt: 'Autonomous mower cutting a residential lawn from above.',
     description:
       'Route-planned recurring mowing designed for consistency, lower noise, and predictable property presentation.'
   },
   {
-    title: 'Smart Edging',
+    title: 'Edging',
     imageSrc: '/images/services/smart-edging.png',
     imageAlt: 'Clean lawn edge along a sidewalk.',
     description:

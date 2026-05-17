@@ -20,8 +20,8 @@ describe('ServicesPage service gallery', () => {
     expect(servicesIncludedIndex).toBeGreaterThanOrEqual(0);
     expect(serviceAreaIndex).toBeGreaterThanOrEqual(0);
     expect(servicesIncludedIndex).toBeLessThan(serviceAreaIndex);
-    expect(markup).toContain('Autonomous Mowing');
-    expect(markup).toContain('Smart Edging');
+    expect(markup).toContain('Mowing');
+    expect(markup).toContain('Edging');
     expect(markup).toContain('Cleanup &amp; Debris');
     expect(markup).toContain('Performance Reporting');
     expect(markup).not.toContain('Seasonal Maintenance');
