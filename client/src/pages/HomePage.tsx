@@ -78,35 +78,44 @@ export const HomePage = () => (
   <div>
     <section className="relative overflow-hidden border-b border-stroke bg-mesh md:h-[calc(100svh-73px)]">
       <div className="mx-auto flex w-full max-w-7xl flex-col px-4 py-8 md:h-full md:px-8 md:py-3">
-        <div className="grid gap-8 md:min-h-0 md:flex-1 md:grid-cols-2 md:items-center md:gap-10">
-          <div className="fade-up flex items-center md:h-full">
-            <div className="w-full max-w-[30rem]">
-              <p className="text-xs font-semibold uppercase tracking-[0.2em] text-brand">
-                Premium Lawn Care
-              </p>
-              <h1 className="mt-4 font-display text-4xl font-bold leading-[1.08] text-ink md:text-6xl">
-                A Lawn You'll Love
-              </h1>
-              <p className="mt-6 max-w-xl text-base text-copy-muted md:text-lg">
-                Reliable weekly mowing, edging, and clean up for an affordable price
-              </p>
-              <div className="mt-7 flex flex-col gap-3 min-[375px]:flex-row min-[375px]:flex-wrap min-[375px]:items-center">
-                <div className="w-full min-[375px]:w-auto">
-                  <Link to="/instant-quote">
-                    <Button className="w-full min-[375px]:w-auto md:px-7 md:py-3.5 md:text-base">Get Instant Quote</Button>
+        <div className="flex flex-col gap-7 md:grid md:min-h-0 md:flex-1 md:grid-cols-2 md:items-center md:gap-10">
+          <div className="contents md:order-1 md:flex md:h-full md:items-center">
+            <div className="contents md:block md:w-full md:max-w-[30rem]">
+              <div className="fade-up order-1 w-full max-w-[30rem] md:order-none md:max-w-none">
+                <p className="text-xs font-semibold uppercase tracking-[0.2em] text-brand">
+                  Premium Lawn Care
+                </p>
+                <h1 className="mt-4 text-balance font-display text-[2.35rem] font-bold leading-[1.08] text-ink md:text-6xl">
+                  A Lawn You'll Love
+                </h1>
+                <p className="mt-5 max-w-xl text-base text-copy-muted md:mt-6 md:text-lg">
+                  Reliable weekly mowing, edging, and clean up for an affordable price
+                </p>
+              </div>
+              <div className="fade-up order-3 w-full max-w-[30rem] md:order-none md:mt-7 md:max-w-none">
+                <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center">
+                  <div className="w-full sm:w-auto">
+                    <Link to="/instant-quote">
+                      <Button className="w-full sm:w-auto md:px-7 md:py-3.5 md:text-base">
+                        Get Instant Quote
+                      </Button>
+                    </Link>
+                  </div>
+                  <Link to="/contact" className="w-full sm:w-auto">
+                    <Button
+                      variant="secondary"
+                      className="w-full sm:w-auto md:px-7 md:py-3.5 md:text-base"
+                    >
+                      Call or Send a Message
+                    </Button>
                   </Link>
                 </div>
-                <Link to="/contact" className="w-full min-[375px]:w-auto">
-                  <Button variant="secondary" className="w-full min-[375px]:w-auto md:px-7 md:py-3.5 md:text-base">
-                    Call or Send a Message
-                  </Button>
-                </Link>
               </div>
             </div>
           </div>
 
           <div
-            className="fade-up flex min-h-0 items-center justify-center md:h-full [animation-delay:120ms]"
+            className="fade-up order-2 flex min-h-0 items-center justify-center md:order-2 md:h-full [animation-delay:120ms]"
             data-home-hero-media="true"
           >
             <div className="relative w-full max-w-[34rem]">
@@ -151,14 +160,14 @@ export const HomePage = () => (
     <HomeLawnmowersSection />
 
     <section className="border-b border-stroke bg-[linear-gradient(180deg,rgba(247,244,238,0.76),rgba(255,255,255,0.96))]">
-      <div className="mx-auto w-full max-w-7xl px-4 py-20 md:px-8">
+      <div className="mx-auto w-full max-w-7xl px-4 py-14 md:px-8 md:py-20">
         <SectionTitle
           badge="Services"
           title="Maintenance designed for premium residential properties"
           description="Dependable weekly mowing is the foundation, with finishing work and seasonal tuning for consistent quality."
         />
 
-        <div className="mt-10 grid gap-6 md:grid-cols-3">
+        <div className="mt-8 grid gap-5 md:mt-10 md:gap-6 md:grid-cols-3">
           <Card className="rounded-lg bg-white/85 shadow-[0_18px_44px_-40px_rgba(16,23,19,0.3)]">
             <h3 className="text-xl font-semibold text-ink">Weekly Mowing</h3>
             <p className="mt-3 text-sm text-copy-muted">
@@ -185,28 +194,32 @@ export const HomePage = () => (
     </section>
 
     <section className="border-b border-stroke bg-white">
-      <div className="mx-auto w-full max-w-7xl px-4 py-20 md:px-8">
+      <div className="mx-auto w-full max-w-7xl px-4 py-14 md:px-8 md:py-20">
         <SectionTitle
           badge="FAQ"
           title="Common questions"
           description="Answers to the questions most customers ask before starting instant quote."
         />
-        <div className="mt-10 divide-y divide-stroke/80 border-y border-stroke/80">
+        <div className="mt-8 divide-y divide-stroke/80 border-y border-stroke/80 md:mt-10">
           {faqs.map((faq) => (
             <div key={faq.question} className="py-5">
-              <h3 className="text-lg font-semibold text-ink">{faq.question}</h3>
-              <p className="mt-2 max-w-4xl text-base leading-7 text-copy-muted">{faq.answer}</p>
+              <h3 className="text-base font-semibold text-ink md:text-lg">{faq.question}</h3>
+              <p className="mt-2 max-w-4xl text-[0.95rem] leading-7 text-copy-muted md:text-base">
+                {faq.answer}
+              </p>
             </div>
           ))}
         </div>
 
-        <div className="mt-12 border-y border-brand/35 bg-brand/10 px-0 py-8 md:px-6">
-          <h3 className="text-2xl font-semibold text-ink">Ready to see your exact quote?</h3>
+        <div className="mt-10 rounded-2xl border border-brand/35 bg-brand/10 px-5 py-7 md:mt-12 md:rounded-none md:border-x-0 md:px-6 md:py-8">
+          <h3 className="text-xl font-semibold text-ink md:text-2xl">
+            Ready to see your exact quote?
+          </h3>
           <p className="mt-3 max-w-2xl text-sm text-copy-muted">
             Start with your address, map your property boundaries, and receive a deterministic
             estimate in minutes.
           </p>
-          <div className="mt-6 flex flex-wrap gap-3">
+          <div className="mt-6 flex flex-col gap-3 sm:flex-row sm:flex-wrap">
             <Link to="/instant-quote">
               <Button>Start Instant Quote</Button>
             </Link>

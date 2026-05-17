@@ -31,6 +31,7 @@ describe('SiteLayout footer variants', () => {
 
     expect(markup).toContain('Quick Links');
     expect(markup).toContain('href="/gallery"');
-    expect(markup).toContain('Autonomous lawn care with deterministic quote measurement');
+    expect(markup).toContain('Premium recurring lawn care with deterministic quote measurement');
+    expect(markup).not.toContain('Autonomous lawn care');
   });
 });

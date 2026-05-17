@@ -53,8 +53,8 @@ export const Footer = ({ variant = 'full' }: FooterProps) => {
           className="h-8 w-auto max-w-[10.5rem]"
         />
         <p className="mt-2 max-w-md text-sm text-copy-muted">
-          Autonomous lawn care with deterministic quote measurement, route precision, and dependable
-          recurring service.
+          Premium recurring lawn care with deterministic quote measurement, sharp finishing, and
+          dependable, on-schedule service.
         </p>
       </div>
 

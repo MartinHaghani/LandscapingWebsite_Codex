@@ -109,12 +109,27 @@ export const Navbar = () => {
           <button
             type="button"
             onClick={() => setMobileMenuOpen((current) => !current)}
-            className="inline-flex h-11 items-center justify-center rounded-lg border border-stroke px-3 text-xs font-semibold uppercase tracking-[0.08em] text-copy-muted transition-colors hover:border-brand hover:text-brand md:hidden"
+            className="inline-flex h-11 w-11 items-center justify-center rounded-xl border border-stroke text-ink transition-colors hover:border-brand hover:text-brand md:hidden"
             aria-label={mobileMenuOpen ? 'Close menu' : 'Open menu'}
             aria-expanded={mobileMenuOpen}
             aria-controls="mobile-nav-menu"
           >
-            {mobileMenuOpen ? 'Close' : 'Menu'}
+            <svg
+              aria-hidden="true"
+              className="h-5 w-5"
+              fill="none"
+              stroke="currentColor"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              strokeWidth={1.9}
+              viewBox="0 0 24 24"
+            >
+              {mobileMenuOpen ? (
+                <path d="m6 6 12 12M18 6 6 18" />
+              ) : (
+                <path d="M4 7h16M4 12h16M4 17h16" />
+              )}
+            </svg>
           </button>
         </div>
       </div>
@@ -122,42 +137,45 @@ export const Navbar = () => {
       {mobileMenuOpen ? (
         <div
           id="mobile-nav-menu"
-          className="border-t border-stroke bg-surface px-4 py-4 md:hidden"
+          className="border-t border-stroke bg-surface px-4 pb-5 pt-3 shadow-[0_26px_40px_-30px_rgba(16,23,19,0.45)] md:hidden"
         >
-          <nav className="flex flex-col gap-2">
+          <nav className="flex flex-col">
             {navItems.map((item) => (
               <NavLink
                 key={item.to}
                 to={item.to}
                 className={({ isActive }) =>
                   cn(
-                    'rounded-lg border border-transparent px-3 py-2 text-sm font-medium text-copy-muted transition-colors hover:border-stroke hover:text-ink',
-                    isActive && 'border-brand/40 bg-brand/10 text-brand'
+                    'rounded-xl px-3 py-3 text-base font-medium text-copy-muted transition-colors hover:bg-surface-muted hover:text-ink',
+                    isActive && 'bg-brand/10 text-brand'
                   )
                 }
               >
                 {item.label}
               </NavLink>
             ))}
-            <Link to="/instant-quote" className="mt-3">
+            <div className="my-3 h-px bg-stroke/80" aria-hidden="true" />
+            <Link to="/instant-quote">
               <Button className="w-full">Get Instant Quote</Button>
             </Link>
             <SignedOut>
-              <Link to="/sign-in" className="mt-2">
-                <Button variant="secondary" className="w-full">
-                  Sign In
-                </Button>
-              </Link>
-              <Link to="/sign-up" className="mt-2">
-                <Button variant="secondary" className="w-full">
-                  Sign Up
-                </Button>
-              </Link>
+              <div className="mt-3 grid grid-cols-2 gap-2">
+                <Link to="/sign-in">
+                  <Button variant="secondary" className="w-full">
+                    Sign In
+                  </Button>
+                </Link>
+                <Link to="/sign-up">
+                  <Button variant="secondary" className="w-full">
+                    Sign Up
+                  </Button>
+                </Link>
+              </div>
             </SignedOut>
             <SignedIn>
               <Link
                 to="/dashboard"
-                className="mt-3 block rounded-lg border border-stroke/90 bg-surface-muted px-4 py-3 text-center text-sm font-semibold text-copy-muted transition-colors hover:border-brand/45 hover:text-brand"
+                className="mt-3 block rounded-xl border border-stroke/90 bg-surface-muted px-4 py-3 text-center text-sm font-semibold text-copy-muted transition-colors hover:border-brand/45 hover:text-brand"
               >
                 {accountName}
               </Link>

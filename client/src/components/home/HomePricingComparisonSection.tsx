@@ -119,17 +119,17 @@ export const HomePricingComparisonSection = () => (
     className="relative overflow-hidden border-b border-stroke bg-[linear-gradient(180deg,rgba(255,255,255,0.98),rgba(247,244,238,0.72))]"
     data-home-pricing-comparison="true"
   >
-    <div className="mx-auto w-full max-w-6xl px-4 py-14 text-center md:px-8 md:py-16">
+    <div className="mx-auto w-full max-w-6xl px-4 py-12 text-center md:px-8 md:py-16">
       <p className="text-xs font-semibold uppercase tracking-[0.2em] text-brand">Price Check</p>
-      <h2 className="mx-auto mt-4 max-w-3xl font-display text-3xl font-bold leading-tight text-ink md:text-5xl">
+      <h2 className="mx-auto mt-3 max-w-3xl text-balance font-display text-[1.7rem] font-bold leading-tight text-ink md:mt-4 md:text-5xl">
         Save with Autoscape
       </h2>
-      <p className="mx-auto mt-4 max-w-2xl text-base leading-7 text-copy-muted md:text-lg">
+      <p className="mx-auto mt-3 max-w-2xl text-[0.95rem] leading-7 text-copy-muted md:mt-4 md:text-lg">
         Get a cheaper visit rate and 20% off when you choose the seasonal plan.
       </p>
 
       <div
-        className="mx-auto mt-12 grid max-w-6xl gap-4 md:grid-cols-[minmax(0,0.62fr)_minmax(0,1.38fr)] md:items-stretch md:gap-5"
+        className="mx-auto mt-8 grid max-w-6xl gap-4 md:mt-12 md:grid-cols-[minmax(0,0.62fr)_minmax(0,1.38fr)] md:items-stretch md:gap-5"
         data-home-pricing-band="true"
       >
         <div
@@ -140,7 +140,7 @@ export const HomePricingComparisonSection = () => (
             Sample lawn
           </p>
           <div
-            className="mx-auto mt-5 flex w-full max-w-[10rem] items-center justify-center sm:max-w-[11rem] md:max-w-[10.5rem]"
+            className="mx-auto mt-4 flex w-full max-w-[7.5rem] items-center justify-center sm:mt-5 sm:max-w-[9.5rem] md:max-w-[10.5rem]"
             data-home-pricing-lawn="true"
           >
             <SampleLawnGraphic />
@@ -168,39 +168,39 @@ export const HomePricingComparisonSection = () => (
           data-home-pricing-panel="true"
         >
           <div
-            className="grid flex-1 grid-cols-[minmax(6.5rem,0.72fr)_minmax(0,1fr)_minmax(0,1fr)] gap-x-2 gap-y-4 sm:grid-cols-[minmax(8rem,0.72fr)_minmax(0,1fr)_minmax(0,1fr)] sm:gap-x-4"
+            className="grid flex-1 grid-cols-[minmax(3.75rem,0.55fr)_minmax(0,1fr)_minmax(0,1fr)] gap-x-2 gap-y-4 sm:grid-cols-[minmax(8rem,0.72fr)_minmax(0,1fr)_minmax(0,1fr)] sm:gap-x-4"
             data-home-pricing-standard-grid="true"
           >
             <div className="border-b border-stroke pb-3" />
-            <p className="border-b border-stroke pb-3 text-center text-xs font-semibold uppercase tracking-[0.18em] text-brand sm:text-sm">
+            <p className="border-b border-stroke pb-3 text-center text-[0.7rem] font-semibold uppercase tracking-[0.08em] text-brand sm:text-sm sm:tracking-[0.18em]">
               Autoscape
             </p>
-            <p className="border-b border-stroke pb-3 text-center text-xs font-semibold uppercase tracking-[0.18em] text-copy-soft sm:text-sm">
+            <p className="border-b border-stroke pb-3 text-center text-[0.7rem] font-semibold uppercase tracking-[0.08em] text-copy-soft sm:text-sm sm:tracking-[0.18em]">
               Local competitors
             </p>
 
             <div className="pt-1">
-              <p className="text-base font-semibold text-ink sm:text-lg">Per visit</p>
+              <p className="text-sm font-semibold text-ink sm:text-lg">Per visit</p>
             </div>
             <div className="pt-1 text-center">
-              <p className="text-3xl font-bold tracking-tight text-brand sm:text-4xl">
+              <p className="text-[1.6rem] font-bold tracking-tight text-brand sm:text-4xl">
                 {formatDollars(autoscapePerVisit)}
               </p>
             </div>
             <div className="pt-1 text-center">
-              <p className="text-3xl font-bold tracking-tight text-copy-soft sm:text-4xl">
+              <p className="text-[1.6rem] font-bold tracking-tight text-copy-soft sm:text-4xl">
                 {formatDollars(COMPETITOR_RATE_PER_VISIT)}
               </p>
             </div>
 
             <div className="border-t border-stroke pt-4">
-              <p className="text-base font-semibold text-ink sm:text-lg">Per season</p>
+              <p className="text-sm font-semibold text-ink sm:text-lg">Per season</p>
             </div>
             <div
               className="relative border-t border-stroke pt-4 text-center"
               data-home-pricing-discount-cell="true"
             >
-              <p className="text-3xl font-bold tracking-tight text-brand sm:text-4xl">
+              <p className="text-[1.6rem] font-bold tracking-tight text-brand sm:text-4xl">
                 {formatDollars(autoscapeSeasonal.seasonalDiscountedTotal)}
               </p>
               <span
@@ -211,7 +211,7 @@ export const HomePricingComparisonSection = () => (
               </span>
             </div>
             <div className="border-t border-stroke pt-4 text-center">
-              <p className="text-3xl font-bold tracking-tight text-copy-soft sm:text-4xl">
+              <p className="text-[1.6rem] font-bold tracking-tight text-copy-soft sm:text-4xl">
                 {formatDollars(competitorSeasonTotal)}
               </p>
             </div>

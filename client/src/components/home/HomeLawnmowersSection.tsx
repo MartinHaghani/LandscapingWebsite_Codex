@@ -87,15 +87,16 @@ export const HomeLawnmowersSection = () => (
   >
     <div className="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-brand/30 to-transparent" />
     <div className="absolute inset-x-0 bottom-0 h-24 bg-gradient-to-t from-white/55 to-transparent" />
-    <div className="mx-auto grid w-full max-w-7xl gap-12 px-4 py-20 md:px-8 lg:grid-cols-[minmax(0,0.92fr)_minmax(0,1.08fr)] lg:items-center">
-      <div className="relative z-10">
-        <div className="max-w-3xl">
-          <h2 className="font-display text-3xl font-bold tracking-tight text-ink md:text-5xl">
+    <div className="mx-auto grid w-full max-w-7xl gap-10 px-4 py-14 md:gap-12 md:px-8 md:py-20 lg:grid-cols-[minmax(0,0.92fr)_minmax(0,1.08fr)] lg:items-center">
+      <div className="contents lg:relative lg:z-10 lg:order-1 lg:block">
+        <div className="order-1 max-w-3xl lg:order-none">
+          <h2 className="text-balance font-display text-[1.7rem] font-bold leading-tight tracking-tight text-ink md:text-5xl md:leading-tight">
             Why homeowners choose Autoscape
           </h2>
         </div>
 
-        <div className="mt-10 border-y border-stroke/80" data-home-why-points="true">
+        <div className="order-3 lg:order-none">
+        <div className="mt-0 border-y border-stroke/80 lg:mt-10" data-home-why-points="true">
           {valueHighlights.map((highlight) => (
             <div
               key={highlight.title}
@@ -121,10 +122,11 @@ export const HomeLawnmowersSection = () => (
           Steady weekly care, disciplined finishing, and premium curb appeal without the hassle of
           managing it yourself or chasing an unreliable crew.
         </p>
+        </div>
       </div>
 
       <div
-        className="relative flex items-center justify-center pb-4 pt-2 lg:justify-end"
+        className="relative order-2 flex items-center justify-center pb-4 pt-2 lg:order-2 lg:justify-end"
         data-home-why-artwork="true"
       >
         <div className="absolute inset-x-10 bottom-12 h-px bg-gradient-to-r from-transparent via-brand/35 to-transparent" />

@@ -8,7 +8,7 @@ export const HomeMowerActionSection = () => (
       <div className="grid gap-6 border-y border-stroke/80 py-6 md:grid-cols-[minmax(0,0.72fr)_minmax(0,1.28fr)] md:items-center md:gap-8 md:py-7">
         <div className="mx-auto max-w-xl text-center md:mx-0 md:text-left">
           <p className="text-xs font-semibold uppercase tracking-[0.2em] text-brand">Real Results</p>
-          <h2 className="mt-3 font-display text-2xl font-bold leading-tight text-ink md:text-4xl">
+          <h2 className="mt-3 text-balance font-display text-[1.55rem] font-bold leading-tight text-ink md:text-4xl">
             Reliable. Consistent. Every Time.
           </h2>
           <p className="mt-4 text-sm leading-6 text-copy-muted md:text-base md:leading-7">

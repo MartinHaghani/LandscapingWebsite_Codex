@@ -25,7 +25,7 @@ describe('HomePage hero', () => {
     expect(markup).toContain('data-home-hero-badge="true"');
     expect(markup).toContain('Trusted by Vaughan homeowners');
     expect(markup).toContain('/images/gallery/gallery-08.png');
-    expect(markup).toContain('min-[375px]:flex-row');
+    expect(markup).toContain('sm:flex-row');
 
     // No autonomous / robot mower messaging anywhere on the page.
     expect(markup).not.toContain('Autonomous');
@@ -169,7 +169,7 @@ describe('HomePage FAQ', () => {
     expect(markup).toContain('Is your service safe for kids and pets?');
     expect(markup).toContain('What happens in rain or bad weather?');
     expect(markup).toContain('How much does it cost?');
-    expect(markup).toContain('mt-2 max-w-4xl text-base leading-7 text-copy-muted');
+    expect(markup).toContain('mt-2 max-w-4xl text-[0.95rem] leading-7 text-copy-muted md:text-base');
     expect(markup).toContain('<strong class="font-semibold text-ink">weekly</strong>');
     expect(markup).toContain('<strong class="font-semibold text-ink">Vaughan area</strong>');
     expect(markup).toContain('<strong class="font-semibold text-ink">In most cases, no.</strong>');
